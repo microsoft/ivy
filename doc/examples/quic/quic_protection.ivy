@@ -69,7 +69,7 @@ module quic_protection(tls_id,tls) = {
         var new_seq := get_pnum(pnum,0,pnum_len);
         new_seq := correct_pnum(seq,new_seq,pnum_len);
         pyld := tls.encrypt_aead(c,level,pyld,new_seq,auth);
-        call show_aead(level,pyld,new_seq,auth);
+#        call show_aead(level,pyld,new_seq,auth);
 
         # Computing the sample position is a bit tricky. First we
         # assume the length of the pnum is 4, which means the offset

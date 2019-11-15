@@ -113,7 +113,7 @@ class AnalysisGraphUI(object):
         else:
             return ([("Dismiss",lambda t: None),
                      ("Recalculate",self.recalculate_edge),
-                     ("Decompose",self.decompose_edge),
+                     ("Step in",self.decompose_edge),
                      ("View Source",self.view_source_edge),])
 
 

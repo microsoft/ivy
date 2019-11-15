@@ -15,6 +15,10 @@ else:
 checks = [
     ['.',
       [
+          ['interpdef1','interpdef1.ivy: line 5: error: definition of interpreted symbol <'],
+          ['whileexists1','OK'],
+          ['whilesome1','OK'],
+          ['whilesome2','OK'],
           ['fundef1','error: Variable Y:t occurs free on right-hand side of definition'],
           ['fundef2','error: Variable X:t occurs twice on left-hand side of definition'],
           ['strat1','error: The verification condition is not in'],
@@ -39,6 +43,11 @@ checks = [
           ['frag17','OK'],
           ['frag18','OK'],
           ['frag19','OK'],
+          ['oddeven','complete=fo','OK'],
+          ['oddeven2','complete=fo','OK'],
+          ['oddeven3','OK'],
+          ['oddeven4','OK'],
+          ['learning_switch1','trace=true','learning_switch1.ivy: line 37:'],
       ]
     ],
     ['../doc/examples/testing',
@@ -57,7 +66,7 @@ checks = [
       ['arrayset2','OK'],
       ['arrayset3','OK'],
       ['arrayset','OK'],
-      ['client_server_example','client_server_example.ivy: line 24: guarantee ... FAIL'],
+      ['client_server_example','OK'],
       ['counter_example','counter_example.ivy: line 54: guarantee ... FAIL'],
       ['coveragefail','error: Some assertions are not checked'],
       ['helloworld','OK'],
@@ -67,7 +76,7 @@ checks = [
       ['interference','error: Call out to right_player.intf_ping'],
       ['leader_election_ring2','error: Some assertions are not checked'],
       ['leader_election_ring_btw','error: Some assertions are not checked'],
-      ['leader_election_ring','error: Some assertions are not checked'],
+      ['leader_election_ring','OK'],
       ['leader_election_ring_repl','OK'],
       ['leader_election_ring_udp2','OK'],
       ['leader_election_ring_udp','OK'],
@@ -88,6 +97,11 @@ checks = [
       ['indexset','OK'],
       ]
      ],
+    ['../examples/ivy',
+     [
+      ['flash3','OK'],
+     ]
+    ],
 ]
 
 tests = [
@@ -183,8 +197,8 @@ class IvyCheck(Test):
     def command(self):
         import platform
         if platform.system() == 'Windows':
-            return 'ivy_check {}.ivy'.format(self.name)
-        return 'timeout 100 ivy_check {}.ivy'.format(self.name)
+            return 'ivy_check {} {}.ivy'.format(' '.join(self.opts),self.name)
+        return 'timeout 100 ivy_check {} {}.ivy'.format(' '.join(self.opts),self.name)
 
 class IvyTest(Test):
     def command(self):

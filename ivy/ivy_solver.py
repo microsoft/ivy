@@ -29,7 +29,7 @@ import sys
 z3_to_ast_array = z3._to_ast_array if '_to_ast_array' in z3.__dict__ else z3.z3._to_ast_array
 z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to_expr_ref
 
-use_z3_enums = False
+use_z3_enums = True
 
 def set_seed(seed):
     print 'setting seed to {}'.format(seed)
@@ -222,11 +222,14 @@ def enumeratedsort(es):
 #    print "enum {} : {}".format(res,type(res))
     return res
 
+def symbol_to_z3(s):
+    return z3.Const(s.name, s.sort.to_z3()) if s.sort.dom == [] else z3.Function(s.name,s.sort.to_z3())    
+
 ivy_logic.UninterpretedSort.to_z3 = uninterpretedsort
 ivy_logic.FunctionSort.to_z3 = functionsort
 ivy_logic.EnumeratedSort.to_z3 = enumeratedsort
 ivy_logic.BooleanSort.to_z3 = lambda self: z3.BoolSort()
-ivy_logic.Symbol.to_z3 = lambda s: z3.Const(s.name, s.sort.to_z3()) if s.sort.dom == [] else z3.Function(s.name,s.sort.to_z3())
+ivy_logic.Symbol.to_z3 = symbol_to_z3
 
 
 def lookup_native(thing,table,kind):
@@ -333,7 +336,7 @@ def term_to_z3(term):
     if not term.args:
         if isinstance(term,ivy_logic.Variable):
             sorted = hasattr(term,'sort')
-            sksym = term.rep + ':' + str(term.sort) if sorted else term.rep
+            sksym = term.rep + ':' + term.sort.name if sorted else term.rep
             res = z3_constants.get(sksym)
             if res is not None: return res
 #            print str(term.sort)
@@ -349,7 +352,7 @@ def term_to_z3(term):
             res = z3.Const(sksym,sig)
             z3_constants[sksym] = res
             return res
-        res = z3_constants.get(term.rep)
+        res = z3_constants.get(str(term.rep))
         if res is None:
 #            if isinstance(term.rep,str):
 #                print "{} : {}".format(term,term.rep)
@@ -681,6 +684,9 @@ def mine_interpreted_constants(model,vocab):
             sort_values[sort].update(collect_model_values(sort,model,s))
     return dict((x,map(term_to_z3,list(y))) for x,y in sort_values.iteritems())
     
+def enumerated_range(sort):
+    res = [z3_constants[x] for x in sort.defines()]
+    return res
 
 class HerbrandModel(object):
     def __init__(self,solver,model,vocab):
@@ -731,7 +737,8 @@ class HerbrandModel(object):
         vs = list(variables_ast(fmla))
         s = self.solver
         m = self.model
-        ranges = [self.constants[x.sort] for x in vs]
+        ranges = [enumerated_range(x.sort) if isinstance(x.sort,ivy_logic.EnumeratedSort) else
+                  self.constants[x.sort] for x in vs]
         z3_fmla = literal_to_z3(fmla)
 #        print "z3_fmla = {}".format(z3_fmla)
         z3_vs = [term_to_z3(v) for v in vs]
@@ -1022,9 +1029,9 @@ def model_if_none(clauses1,implied,model):
 
 def decide(s,atoms=None):
 #    print "solving{"
-    f = open("ivy.smt2","w")
-    f.write(s.to_smt2())
-    f.close()
+#    f = open("ivy.smt2","w")
+#    f.write(s.to_smt2())
+#    f.close()
     res = s.check() if atoms == None else s.check(atoms)
     if res == z3.unknown:
         print s.to_smt2()
@@ -1069,7 +1076,9 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
             print
 
     s = z3.Solver()
-    s.add(clauses_to_z3(clauses))
+    the_fmla = clauses_to_z3(clauses)
+#    iu.dbg('the_fmla')
+    s.add(the_fmla)
     
     # res = decide(s)
     # if res == z3.unsat:
@@ -1097,7 +1106,9 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                     foo = fc.cond()
                     if opt_show_vcs.get():
                         print '\nassert: {}'.format(foo)
-                    s.add(clauses_to_z3(foo))
+                    the_fmla = clauses_to_z3(foo)
+#                    iu.dbg('the_fmla')
+                    s.add(the_fmla)
                     res = decide(s)
                     if res != z3.unsat:
                         if fc.sat():
@@ -1303,6 +1314,7 @@ def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None
 #    print "clauses_model_to_diagram clauses1 = {}".format(clauses1)
     if axioms == None:
         axioms = true_clauses()
+#    print "model = {}".format(model)
     h = model_if_none(and_clauses(clauses1,axioms),implied,model)
     ignore = ignore if ignore is not None else lambda x: False
     res = model_facts(h,(lambda x: False),clauses1,upclose=True) # why not pass axioms?
@@ -1440,16 +1452,21 @@ def encode_term(t,n,sort):
             print "{} : {} : {}".format(sort,sort.defines(),t.rep)
             exit(1)
         return binenc(m,n)
+    elif isinstance(t,ivy_logic.Variable):
+            sksym = t.rep + ':' + t.sort.name
+            res = [z3.Const(sksym + ':' + str(n-1-i),z3.BoolSort()) for i in range(n)]
+            iu.dbg('res')
+            return res
     else:
 #        return [atom_to_z3(ivy_logic.Atom(t.rep + ':' + str(n-1-i),t.args))
 #                for i in range(n)]
         args = [term_to_z3(arg) for arg in t.args]
-#        print "encode_term t={}".format(t)
+        print "encode_term t={}".format(t)
         sig = ivy_logic.RelationSort(t.rep.sort.dom).to_z3()
 
         res = [apply_z3_func(z3_function(t.rep.name + ':' + str(n-1-i),sig),args)
                for i in range(n)]
-#        print "encode_term res={}".format(res)
+        print "encode_term res={}".format(res)
         return res
 
 def encode_equality(*terms):

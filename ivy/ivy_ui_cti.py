@@ -1,13 +1,14 @@
 import ivy_ui
 import ivy_logic as il
 import logic as lg
-from ivy_interp import State,EvalContext,reverse,decompose_action_app
+from ivy_interp import State,EvalContext,reverse,decompose_action_app, universe_constraint
 import ivy_module as im
 import ivy_logic_utils as ilu
 import logic_util as lu
 import ivy_utils as iu
 import ivy_graph_ui
 import ivy_actions as ia
+import ivy_trace
 
 from concept import (get_initial_concept_domain,
                      get_diagram_concept_domain,
@@ -40,13 +41,14 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                   ("button","Exit", lambda self=self: self.ui_parent.exit()),]),
                 ("menu","Invariant",
                  [("button","Check induction",self.check_inductiveness),
+                  ("button","Bounded check",self.bmc_conjecture),
                   ("button","Diagram",self.diagram),
                   ("button","Weaken",self.weaken),
                   ])]
 
     def start(self):
         ivy_ui.AnalysisGraphUI.start(self)
-        self.node(0).clauses = ilu.false_clauses() # just to make CG empty initially
+#        self.node(0).clauses = ilu.false_clauses() # just to make CG empty initially
         self.transitive_relations = []
         self.transitive_relation_concepts = []
         self.relations_to_minimize = Thing('relations to minimize')
@@ -54,8 +56,9 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         self.view_state(self.node(0))
         with self.ui_parent.run_context():
             self.autodetect_transitive()
-        self.have_cti = False
-        
+        self.have_cti = hasattr(self.g,'is_cti')
+        if self.have_cti:
+            self.current_conjecture = self.g.is_cti
 
 
     def CGUI(self):
@@ -99,6 +102,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         if self.transitive_relations:
             self.current_concept_graph.update()
 
+
     def check_inductiveness(self, button=None):
         import ivy_transrel
         from ivy_solver import get_small_model
@@ -109,15 +113,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         
         with self.ui_parent.run_context():
 
-            ag = self.new_ag()
-
-            pre = State()
-            pre.clauses = and_clauses(*self.conjectures)
-
-            action = im.module.actions['ext']
-            with EvalContext(check=False): # don't check safety
-                post = ag.execute(action, pre, None, 'ext')
-            post.clauses = ilu.true_clauses()
+            ag,succeed,fail = ivy_trace.make_check_art(precond=self.conjectures)
 
             to_test =  [None] + list(self.conjectures)  # None = check safety
 
@@ -146,41 +142,31 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
 
                 if conj == None: # check safety
                     clauses = ilu.true_clauses()
-                    rels_to_min = [il.sig.symbols[x] for x in self.relations_to_minimize.value.split()]
+                    post = fail
                 else:
                     clauses = dual_clauses(conj, witness)
-                    history = ag.get_history(post)
-                    rels_to_min = []
-                    for x in self.relations_to_minimize.value.split():
-                        relation = il.sig.symbols[x]
-                        relation = history.maps[0].get(relation, relation)
-                        rels_to_min.append(relation)
+                    post = succeed
+                history = ag.get_history(post)
+                rels_to_min = []
+                for x in self.relations_to_minimize.value.split():
+                    relation = il.sig.symbols[x]
+                    relation = history.maps[0].get(relation, relation)
+                    rels_to_min.append(relation)
                         
-                _get_model_clauses = lambda clauses, final_cond=False: get_small_model(
-                    clauses,
-                    sorted(il.sig.sorts.values()),
-                    rels_to_min,
-                    final_cond = final_cond
-                )
-
-                if conj == None:
-                    res = ag.check_bounded_safety(post, _get_model_clauses)
-                else:
-                    res = ag.bmc(post, clauses, None, None, _get_model_clauses)
+                clauses.annot = ia.EmptyAnnotation()
+                res = ivy_trace.check_final_cond(ag,post,clauses,rels_to_min,True)
+#                    res = ag.bmc(post, clauses, None, None, _get_model_clauses)
 
                 if res is not None:
                     self.current_conjecture = conj
                     assert len(res.states) == 2
-    #                self.set_states(res.states[0], res.states[1])
-    #                self.cti = self.ui_parent.add(res)
-
                     self.g = res
                     self.rebuild()
                     self.view_state(self.g.states[0], reset=True)
                     self.show_used_relations(clauses)
                     #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
                     if conj == None:
-                        self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can decompose\nthe failing action to observe the failing execution. ')
+                        self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can step into\nthe failing action to observe the failing execution. ')
                     else:
                         self.ui_parent.text_dialog('The following conjecture is not relatively inductive:',
                                                    str(il.drop_universals(conj.to_formula())),on_cancel=None)
@@ -228,9 +214,11 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         post = ilu.dual_clauses(conj) if conj != None else ilu.true_clauses()
         pre = self.g.states[0].clauses
         axioms = im.module.background_theory()
+        uc = universe_constraint(self.g.states[0])
+        axioms_uc = ilu.and_clauses(axioms,uc)
 #        rev = ilu.and_clauses(reverse_image(post,axioms,self.g.states[1].update), axioms)
         rev = reverse_image(post,axioms,self.g.states[1].update)
-        clauses = ilu.and_clauses(ilu.and_clauses(pre,rev),axioms)
+        clauses = ilu.and_clauses(ilu.and_clauses(pre,rev),axioms_uc)
         mod = get_model_clauses(clauses)
         assert mod != None
         diag = clauses_model_to_diagram(rev,is_skolem,model=mod,axioms=axioms)
@@ -289,12 +277,91 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
 
             f.close()
 
+    def bmc_conjecture(self, button=None, bound = None, conjecture=None, verbose=False, tell_unsat=True):
+        import ivy_transrel
+        import ivy_solver
+        from proof import ProofGoal
+        from ivy_logic_utils import Clauses, and_clauses, dual_clauses
+
+        # get the bound, if not specified
+
+        if bound is None:
+            iv = self.current_bound if hasattr(self,'current_bound') else None
+            c = lambda b: self.bmc_conjecture(button=button, bound=b, conjecture=conjecture,
+                                              verbose=verbose, tell_unsat=tell_unsat)
+            self.ui_parent.int_dialog('Number of steps to check:',
+                                        command = c, minval=0, initval=iv)
+            return
+
+
+        with self.ui_parent.run_context():
+
+            step_action = ia.env_action(None)
+
+            n_steps = bound
+            self.current_bound = bound
+
+            conj = conjecture
+            if conj is None:
+                conj = and_clauses(*self.conjectures)
+            
+            assert conj.is_universal_first_order()
+            used_names = frozenset(x.name for x in il.sig.symbols.values())
+            def witness(v):
+                c = lg.Const('@' + v.name, v.sort)
+                assert c.name not in used_names
+                return c
+            clauses = dual_clauses(conj, witness)
+
+            ag = self.new_ag()
+            with ag.context as ac:
+#                post = ac.new_state(ag.init_cond)
+                ag.add_initial_state(ag.init_cond)
+                post = ag.states[0]
+            if 'initialize' in im.module.actions:
+                print "got here"
+                init_action = im.module.actions['initialize']
+                post = ag.execute(init_action, None, None, 'initialize')
+
+            for n in range(n_steps + 1):
+                res = ivy_trace.check_final_cond(ag,post,clauses,[],True)
+#                res = ag.bmc(post, clauses)
+                if verbose:
+                    if res is None:
+                        msg = 'BMC with bound {} did not find a counter-example to:\n{}'.format(
+                            n,
+                            str(conj.to_formula()),
+                        )
+                    else:
+                        msg = 'BMC with bound {} found a counter-example to:\n{}'.format(
+                            n,
+                            str(conj.to_formula()),
+                        )
+                    print '\n' + msg + '\n'
+                if res is not None:
+    #                ta.step()
+                    cmd = lambda: self.ui_parent.add(res,ui_class=ivy_ui.AnalysisGraphUI)
+                    self.ui_parent.text_dialog('BMC with bound {} found a counter-example to:'.format(n),
+                                               str(conj.to_formula()),
+                                               command = cmd,
+                                               command_label = 'View')
+                    return True
+                post = ag.execute(step_action)
+
+            if tell_unsat:
+                self.ui_parent.text_dialog('BMC with bound {} did not find a counter-example to:'.format(n_steps),
+                                       str(conj.to_formula()),
+                                       on_cancel = None)
+
+            return False
+
+
 def _write_conj(f,lab,fmla):
     fmla = il.drop_universals(fmla)
     if lab:
-        f.write("conjecture [{}] {}\n".format(lab,str(fmla)))
+        f.write("invariant [{}] {}\n".format(lab,str(fmla)))
     else:
-        f.write("conjecture {}\n".format(str(fmla)))
+        f.write("invariant {}\n".format(str(fmla)))
 
 class ConceptGraphUI(ivy_graph_ui.GraphWidget):
     def menus(self):
@@ -389,81 +456,14 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
         print self.get_selected_conjecture()
 
 
-    def bmc_conjecture(self, button=None, bound = None, conjecture=None, verbose=False, add_to_crg=True):
-        import ivy_transrel
-        import ivy_solver
-        from proof import ProofGoal
-        from ivy_logic_utils import Clauses, and_clauses, dual_clauses
+    def bmc_conjecture(self, button=None, bound = None, conjecture=None, verbose=False, add_to_crg=True, tell_unsat=True):
+        if conjecture is None:
+            conj = self.get_selected_conjecture()
+        else:
+            conj = conjecture
 
-        # get the bound, if not specified
+        self.parent.bmc_conjecture(button=button, bound = bound, conjecture=conj, verbose=verbose, tell_unsat=tell_unsat)
 
-        if bound is None:
-            iv = self.current_bound if hasattr(self,'current_bound') else None
-            c = lambda b: self.bmc_conjecture(button=button, bound=b, conjecture=conjecture,
-                                              verbose=verbose, add_to_crg=add_to_crg)
-            self.ui_parent.int_dialog('Number of steps to check:',
-                                        command = c, minval=0, initval=iv)
-            return
-
-
-        with self.ui_parent.run_context():
-
-            step_action = im.module.actions['ext']
-
-            n_steps = bound
-            self.current_bound = bound
-
-            if conjecture is None:
-                conj = self.get_selected_conjecture()
-            else:
-                conj = conjecture
-
-            assert conj.is_universal_first_order()
-            used_names = frozenset(x.name for x in il.sig.symbols.values())
-            def witness(v):
-                c = lg.Const('@' + v.name, v.sort)
-                assert c.name not in used_names
-                return c
-            clauses = dual_clauses(conj, witness)
-
-            ag = self.parent.new_ag()
-            with ag.context as ac:
-#                post = ac.new_state(ag.init_cond)
-                ag.add_initial_state(ag.init_cond)
-                post = ag.states[0]
-            if 'initialize' in im.module.actions:
-                init_action = im.module.actions['initialize']
-                post = ag.execute(init_action, None, None, 'initialize')
-
-            for n in range(n_steps + 1):
-                res = ag.bmc(post, clauses)
-                if verbose:
-                    if res is None:
-                        msg = 'BMC with bound {} did not find a counter-example to:\n{}'.format(
-                            n,
-                            str(conj.to_formula()),
-                        )
-                    else:
-                        msg = 'BMC with bound {} found a counter-example to:\n{}'.format(
-                            n,
-                            str(conj.to_formula()),
-                        )
-                    print '\n' + msg + '\n'
-                if res is not None:
-    #                ta.step()
-                    cmd = lambda: self.ui_parent.add(res,ui_class=ivy_ui.AnalysisGraphUI)
-                    self.ui_parent.text_dialog('BMC with bound {} found a counter-example to:'.format(n),
-                                               str(conj.to_formula()),
-                                               command = cmd,
-                                               command_label = 'View')
-                    return True
-                post = ag.execute(step_action, None, None, 'ext')
-
-#            self.ui_parent.text_dialog('BMC with bound {} did not find a counter-example to:'.format(n_steps),
-#                                       str(conj.to_formula()),
-#                                       on_cancel = None)
-
-            return False
 
     def minimize_conjecture(self, button=None, bound=None):
         import ivy_transrel
@@ -473,23 +473,21 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
         from ivy_solver import unsat_core
         from logic_util import free_variables, substitute
 
-        if self.bmc_conjecture(bound=bound):
+        if self.bmc_conjecture(bound=bound,tell_unsat=False):
             # found a BMC counter-example
             return
 
         with self.ui_parent.run_context():
-            step_action = im.module.actions['ext']
+            step_action = ia.env_action(None)
 
-            n_steps = self.current_bound
+            n_steps = self.parent.current_bound
 
             ag = self.parent.new_ag()
             with ag.context as ac:
-                post = ac.new_state(ag.init_cond)
-            if 'initialize' in im.module.actions:
-                init_action = im.module.actions['initialize']
-                post = ag.execute(init_action, None, None, 'initialize')
+                ag.add_initial_state(ag.init_cond)
+                post = ag.states[0]
             for n in range(n_steps):
-                post = ag.execute(step_action, None, None, 'ext')
+                post = ag.execute(step_action)
             axioms = im.module.background_theory()
             post_clauses = and_clauses(post.clauses, axioms)
 
@@ -538,10 +536,11 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
 
             pre = State()
             pre.clauses = and_clauses(conj, *self.parent.conjectures)
+            pre.clauses.annot = ia.EmptyAnnotation()
 
-            action = im.module.actions['ext']
-            post = ag.execute(action, pre, None, 'ext')
-            post.clauses = ilu.true_clauses()
+            action = ia.env_action(None)
+            post = ag.execute(action, pre)
+            post.clauses = ilu.true_clauses(annot=ia.EmptyAnnotation())
 
             assert target_conj.is_universal_first_order()
             used_names = frozenset(x.name for x in il.sig.symbols.values())
@@ -550,7 +549,8 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                 assert c.name not in used_names
                 return c
             clauses = dual_clauses(target_conj, witness)
-            res = ag.bmc(post, clauses)
+            clauses.annot = ia.EmptyAnnotation()
+            res = ivy_trace.check_final_cond(ag,post,clauses,[],True)
 
             text = '(1) ' + str(conj.to_formula()) + '\n(2) ' + str(target_conj.to_formula())
             if res is not None:
@@ -583,10 +583,11 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
 
             pre = State()
             pre.clauses = and_clauses(conj, *self.parent.conjectures)
+            pre.clauses.annot = ia.EmptyAnnotation()
 
-            action = im.module.actions['ext']
-            post = ag.execute(action, pre, None, 'ext')
-            post.clauses = ilu.true_clauses()
+            action = ia.env_action(None)
+            post = ag.execute(action, pre)
+            post.clauses = ilu.true_clauses(annot=ia.EmptyAnnotation())
 
             assert target_conj.is_universal_first_order()
             used_names = frozenset(x.name for x in il.sig.symbols.values())
@@ -595,7 +596,8 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                 assert c.name not in used_names
                 return c
             clauses = dual_clauses(target_conj, witness)
-            res = ag.bmc(post, clauses)
+            clauses.annot = ia.EmptyAnnotation()
+            res = ivy_trace.check_final_cond(ag,post,clauses,[],True)
 
             text = '(1) ' + str(conj.to_formula()) 
             if res is not None:

@@ -12,7 +12,7 @@ from __future__ import division
 from collections import deque, defaultdict
 
 import platform
-if platform.system() == 'Windows':
+if True or platform.system() == 'Windows':
     from ivy_graphviz import AGraph
 else:
     from pygraphviz import AGraph

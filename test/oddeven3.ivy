@@ -1,0 +1,49 @@
+#lang ivy1.7
+
+object num = {
+    type this
+
+    interpret this -> nat
+
+    function even(X:this) = (X / 2 * 2 = X)
+    function odd(X:this) = ~even(X)
+}
+
+object evens = {
+    var number : num
+    after init {
+        number := 0
+    }
+
+    action step = {
+        call odds.put(number + 1)
+    }
+
+    action put(n:num) = {
+        number := n;
+    }
+
+    invariant number.even
+
+}
+
+object odds = {
+    var number : num
+    after init {
+        number := 1
+    }
+
+    action step = {
+        call evens.put(number + 1)
+    }
+
+    action put(n:num) = {
+        number := n;
+    }
+
+    invariant number.odd
+
+}
+
+export evens.step
+export odds.step

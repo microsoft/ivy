@@ -4,6 +4,38 @@ include collections
 include order
 include quic_stream
 
+# The frame protocol
+# ==================
+#
+# The frame protocol is defined by a sequence of frame events.
+# This protocol is layered on the packet protocol, such that
+# each packet event contains a sub-sequence of the frame events.
+#
+# The frame events are subdivided into variants called frame types.
+# For each frame type, we define an event `handle` corresponding
+# to the generation of a frame and its transfer to the packet protocol
+# for transmission. Frame events effect the protocol state by
+# enqueueing frames to be encapsulated into packets. The effect of
+# this is that frame and packet events are interleaved, such that the
+# frames in each packet occur immediately before the packet event in
+# the same order in which they occur in the packet payload. TODO:
+# While this ordering seems sensible from a semantic point of view,
+# implementations might transmit frames out of order. Requiring
+# frame events to be in order might complicate a modular proof of the
+# implementation.
+#
+# Each frame has an encryption level (which is the same as the packet
+# type it will be encapsulated in). The enryption level determines
+# the keys used to protect to protect that packet payload. Only frames
+# of the same encryption level may be encapsulated in the same packet
+# (however, multiple packets may be concatenated in a single UDP
+# datagram). This requirement is enforced by requiring that every
+# frame queue contains only frames of the same encryption level. The
+# frame handler for each type enforces this condition.
+
+# Data structures
+# ===============
+
 object frame = {
 
     # The base type for frames
@@ -219,3 +251,975 @@ object frame = {
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        
+
+# Generic event
+# =============
+
+#
+# The generic event for frames is specialized for each
+# frame type.  Its arguments are:
+#
+# - `f`: the frame contents
+# - `scid`: the source aid
+# - `dcid`: the destination aid
+# - `e`: the encryption level
+
+
+object frame = {
+    ...
+    action handle(f:this,scid:cid,dcid:cid,e:quic_packet_type) = {
+       require false; # this generic action should never be called
+    }
+}
+
+# TODO: we assume here that a frame can only be sent at a given
+# encryption level if the keys for that level have already been
+# established.  For 1rtt frames this means that a TLS finish message
+# must have bee sent in some prior frame. This is helpful to prevent
+# the peer from dropping packets in tests, but not realistic, since
+# packet re-ordering could cause the 1rtt frame to be received before
+# the required handshake message.  In principle, we should allow this
+# case, but reduce its probability in testing.
+
+
+
+# Specification state
+# ===================
+#
+# - For each aid C,and stream id S, `stream_seen(C,S)`
+#   indicates that a stream has been opened by aid C.
+#   
+#
+# - For each aid C,and stream id S, `max_stream_data_val(C,S)`
+#   indicates the maximum number of bytes that may be sent on stream
+#   id S to C.
+#
+# - For each aid C,and stream id S, `max_stream_data_set(C,S)`
+#   indicates the maximum number of bytes that may be sent on stream
+#   id S to C has been set.
+#
+# - For each aid C, `max_data_val(C,S)` indicates the maximum total
+#   number of bytes that may be sent on all streams to C.
+#
+# - For each aid C, `max_data_set(C,S)` indicates the maximum total
+#   number of bytes that may be sent on all streams to C has been set.
+#
+# - For each aid C,and stream id S, `stream_length(C,S)`
+#   indicates the length of the stream data transmitted in QUIC
+#   packets on stream id S to cid C. The length is the
+#   least stream position greater than the position of all bytes
+#   transmitted. Note this may be less than the length of the application
+#   data, but may not be greater.
+#
+# - For aid C,and stream id S, `stream_finished(C,S)` indicates that
+#   the stream transmitted to C on stream id S is finished (that is, a
+#   FIN frame has been sent).
+#
+# - For each aid C,and stream id S, `stream_reset(C,S)` indicates that
+#   the stream transmitted to C on stream id S is reset (that is, a
+#   RESET_STREAM frame has been sent).
+#
+# - For each aid C,and stream kind K, `max_stream_set(C,K)`
+#   indicates that the maximum stream id has been declared.
+#
+# - For each aid C,and stream kind K, `max_stream(E,C,K)`
+#   indicates the declared maximum stream id.
+#
+# - The queued frames at aid `C` are
+#   represented by `queued_frames(C)` and are initially empty.
+#
+# - The relation `queued_non_probing(C)` indicates that one of the queued
+#   frames at aid `C` contains a non-probing frame. This is a frame
+#   other than path challenge, new connection id and padding.
+#
+# - The relation `queued_non_ack(C)` indicates that one or more of the queued
+#   frames at aid `C` is not an ACK frame.
+#
+# - The relation `queued_close(C)` indicates that one or more of the queued
+#   frames at aid `C` is a CONNECTION_CLOSE or APPLICATION_CLOSE frame.
+#
+# - The function num_queued_frames(C:cid) gives the number of frames
+#   queue at aid `C`.
+#
+# - The predicate `path_challenge_pending(C,D)` that a path challenge
+#   has been sent to aid C with data D, and has not yet been responded
+#   to. QUESTION: should path responses be resent, or should the client
+#   wait for a resent path challenge?
+#
+# - The function `conn_total_data(C)` represents the total number of stream
+#   bytes received by aid `C`.
+#
+
+relation stream_seen(C:cid,S:stream_id)
+function max_stream_data_val(C:cid,S:stream_id) : stream_pos
+relation max_stream_data_set(C:cid,S:stream_id)
+function max_data_val(C:cid) : stream_pos
+relation max_data_set(C:cid)
+function stream_length(C:cid,S:stream_id) : stream_pos
+relation stream_finished(C:cid,S:stream_id)
+relation stream_reset(C:cid,S:stream_id)
+relation max_stream_set(C:cid,K:stream_kind)
+function max_stream(C:cid,K:stream_kind) : stream_id
+function queued_frames(C:cid) : frame.arr
+function queued_level(C:cid) : quic_packet_type
+relation queued_non_probing(C:cid)
+relation queued_non_ack(C:cid)
+relation queued_close(C:cid)
+function num_queued_frames(C:cid) : frame.idx
+relation path_challenge_pending(C:cid,D:stream_data)
+function conn_total_data(C:cid) : stream_pos
+
+after init {
+    stream_seen(C,S) := false;
+    stream_length(C,S) := 0;
+    max_stream_data_set(C,S) := false;
+    max_data_set(C) := false;
+    stream_finished(C,S) := false;
+    stream_reset(C,S) := false;
+    queued_non_probing(C) := false;
+    queued_non_ack(C) := false;
+    queued_close(C) := false;
+    path_challenge_pending(C,D) := false;
+}
+
+
+# #### ACK event
+
+# The set of packet numbers acknowledged by an ACK frame is determined
+# by the `largest_ack` field and the `ack_blocks` field. Each ACK
+# block acknowledges packet numbers in the inclusive range `[last - gap, last -
+# gap - blocks]` where `gap` and `blocks` are the fields of the ACK
+# block and `last` is `largest_ack` minus the sum of `gap + blocks`
+# for all the previous ack blocks.
+#
+# The `gap` field for the first ack block is always zero and is not
+# present in the low-level syntax.
+
+# Requirements:
+#
+# - Every acknowledged packet must have been sent by the destination endpoint [1].
+# - Keys must be established for the given encryption level [4].
+
+# Effects:
+#
+# - The acknowledged packets are recorded in the relation `acked_pkt(C,N)`
+#   where `C` is the *source* of the acknowledged packet (not of the ACK)
+#   and `N` is the packet number [2].
+# - The greatest acked packet is also tracked in `max_acked(C,e)` [3]
+#
+# - If a packet with a connection_close frame of either type is acknowledged
+#   the sending aid enters the draining state. Note that observing the ack of
+#   a connection close frame is the only way we can detect that it was received.
+#   
+
+# TEMPORARY: use this to enforce new acks in testing. Without this,
+# too many duplicate acks would be generated.
+
+var force_new_ack : bool
+
+object frame = {
+    ...
+    object ack = {
+        ...
+        action handle(f:frame.ack,scid:cid,dcid:cid,e:quic_packet_type)
+
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.handshake -> established_handshake_keys(scid);  # [4]
+            require e = quic_packet_type.one_rtt -> established_1rtt_keys(scid);  # [4]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            var idx : frame.ack.block.idx := 0;
+            var last := f.largest_acked;
+            if max_acked(dcid,e) < last {
+                max_acked(dcid,e) := last;  # [3]
+            };
+            require f.ack_blocks.end > 0;
+            var some_new_ack := false;
+            while idx < f.ack_blocks.end {
+                var ack_block := f.ack_blocks.value(idx);
+                require idx > 0 -> ack_block.gap < last - 1;
+                var upper := last - ((ack_block.gap+2) if idx > 0 else 0);
+                require ack_block.blocks <= upper;
+                last := upper - ack_block.blocks;
+		var jdx := last;
+		while jdx <= upper {
+                    require sent_pkt(dcid,e,jdx);  # [1]
+                    if pkt_has_close(dcid,e,jdx) {
+                        conn_draining(scid) := true  # [5]
+                    };
+                    if ~acked_pkt(dcid,e,jdx) {
+                        some_new_ack := true;
+                    };
+		    acked_pkt(dcid,e,jdx) := true;
+		    jdx := jdx + 1
+		};
+#                acked_pkt(dcid,N) := (last <= N & N <= upper) | acked_pkt(dcid,N);  # [2]
+                idx := idx.next;
+            };
+            if _generating {
+                require some_new_ack;
+            }
+	    ...
+            force_new_ack := false;
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### STREAM event
+#
+# STREAM frames carry stream data. 
+#
+# Requirements:
+#
+# - The upper bound of the stream frame may not exceed the current
+#   value of `max_stream_data_val` for the given destination and cid, if
+#   it has been set [2].
+#
+# - If the stream is finished, the the frame offset plus length must
+#   not exceed the stream length [5].
+#
+# - The stream id must be less than or equal to
+#   the max stream id for the kind of the stream [6].
+#
+# - The stream must not have been reset [7].
+#
+# - The connection must not have been closed by the source endpoint [8].
+#
+# - The connection id must have been seen at the source [9]
+#   and the connection between source and destination must not be initializing [10].
+#
+# - The 1rtt keys have been established [11].
+#
+# - If the sender as reset the stream to a given length, then the
+#   end of the stream frame data must not exceed the reset length [13].
+
+# Effects:
+#
+# - If the stream has not been seen before, and if the
+#   `initial_max_stream_data` transport parameter has been set, then
+#   the `max_stream_data_val` value is set to the value of the
+#   `initial_max_stream_data` transport parameter [3].
+#
+# - The length of the stream is updated. 
+#
+# - If the fin bit is set, the stream is marked as finished.
+#
+# - The total amount of data received on the connection is
+#   updated. Note this reflects the total of the observed length of
+#   all streams, including any unreceived gaps.
+#
+
+object frame = {
+    ...
+    object stream = {
+        ...
+        action handle(f:frame.stream,scid:cid,dcid:cid,e:quic_packet_type)
+
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);  # [11]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require ~conn_closed(scid);  # [8]
+
+            var offset := f.offset if f.off else 0;
+	    require ((offset) + (f.length)) <= stream_app_data_end(dcid,f.id);
+#            call show_offset_length(offset,f.length);
+	    require f.data = stream_app_data(dcid,f.id).segment(offset,offset+f.length); 
+
+            require f.fin <-> (stream_app_data_finished(dcid,f.id)
+                               & offset+f.length = stream_app_data_end(dcid,f.id));
+
+            var kind := get_stream_kind(f.id);
+
+# Following assertion could fail because of packet
+# re-ordering. QUESTION: what can we say?  require
+# ~stream_reset(dcid,f.id); # [7]
+
+            require conn_seen(scid);  # [9]
+            require ((offset) + (f.length)) <= stream_max_data(dcid,f.id);  # [2]
+            require stream_reset(dcid,f.id) ->
+                       ((offset) + (f.length)) <= stream_length(dcid,f.id);  # [13]
+            require stream_id_allowed(dcid,f.id);  # [6]
+	    ...
+            stream_seen(scid,f.id) := true;
+            var offset := f.offset if f.off else 0;
+            var length := offset + f.length;
+            # require stream_finished(dcid,f.id) -> length <= stream_length(dcid,f.id);  # [5]
+            if stream_length(dcid,f.id) < length {
+                conn_total_data(dcid) := conn_total_data(dcid) +
+                                             (length - stream_length(dcid,f.id));  # [12]
+                stream_length(dcid,f.id) := length
+            };
+            if f.fin {
+                stream_finished(dcid,f.id) := true;
+            };
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+# #### CRYPTO event
+#
+# CRYPTO frames carry crypto handshake data, that is, TLS records.
+#
+# Requirements:
+#
+# - The connection must not have been closed by the source endpoint [1].
+# - The bytes are present in `crypto_data` [2].
+#
+# Effects:
+#
+# - The length of the crypto stream and the present bits are updated. [3]
+
+object frame = {
+    ...
+    object crypto = {
+        ...
+        action handle(f:frame.crypto,scid:cid,dcid:cid,e:quic_packet_type)
+
+	around handle {
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+#            require ~conn_closed(scid);  # [1]
+
+	    require ((f.offset) + (f.length)) <= crypto_data_end(scid,e);  # [2]
+	    require f.data = crypto_data(scid,e).segment(f.offset,f.offset+f.length);  # [2]
+
+	    ...
+            var length := f.offset + f.length;
+            if crypto_length(scid,e) < length {
+                crypto_length(scid,e) := length   # [3]
+            };
+            var idx := f.offset;
+            while idx < f.offset + f.length {
+                crypto_data_present(scid,e,idx) := true;  # [3]
+                idx := idx.next
+            };
+            call enqueue_frame(scid,f,e,false);
+
+            # TODO: is the following needed? Maybe it belongs somewhere else?
+
+            if e = quic_packet_type.handshake {
+                established_1rtt_keys(scid) := true;
+            }
+        }
+    }
+}
+
+#
+# #### RESET_STREAM events
+#
+# RESET_STREAM frames cause an identified stream to be abruptly terminated,
+# meaning the no further transmissions (or retransmissions) will be sent for
+# this stream and the receiver may ignore any data previously transmitted.
+#
+# Requirements:
+#
+# - Stream id must not exceed maximim stream id for the stream kind [4].
+# - QUESTION: Can a previously reset stream be reset?
+# - The final stream position may not be lesser than that of any previous
+#   stream frame for the same stream id [1].
+# - The connection must not have been closed by the source endpoint [5].
+# - The encryption level must be 0rtt or 1rtt [6].
+# - If stream was previously reset or finished, final offset must be same [7].
+#
+# Effects:
+#
+# - The specified stream id is marked as reset [2].
+# - The stream length is set to the given final offset [3].
+#
+# Question: Where is it written that reset stream frames cannot occur in
+# initial or handshake packets?
+
+object frame = { ...
+    object rst_stream = { ...
+        action handle(f:frame.rst_stream,scid:cid,dcid:cid,e:quic_packet_type)
+
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);  # [6]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require ~conn_closed(scid);  # [5]
+            require connected(scid) & connected_to(scid) = dcid;
+            require stream_length(dcid,f.id) <= f.final_offset;  # [1]
+            require (stream_reset(dcid,f.id) | stream_finished(dcid,f.id))
+                        -> stream_length(dcid,f.id) = f.final_offset;
+            stream_reset(dcid,f.id) := true;  # [2]
+            stream_length(dcid,f.id) := f.final_offset;  #[3]
+            require stream_id_allowed(dcid,f.id);  # [4]
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### STOP_SENDING event
+#
+# STOP_SENDING frames are sent by the receiver of s stream to indicate that stream data
+# is being ignored and it should stop sending.
+#
+# Requirements:
+#
+# - Stream id must not exceed maximim stream id for the stream kind [4].
+# - QUESTION: Can a previously reset stream be reset?
+# - The connection must not have been closed by the source endpoint [5].
+# - The encryption level must be 0rtt or 1rtt [6].
+#
+# Effects:
+#
+#   (None)
+#
+
+object frame = { ...
+    object stop_sending = { ...
+        action handle(f:frame.stop_sending,scid:cid,dcid:cid,e:quic_packet_type)
+
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);  # [6]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require ~conn_closed(scid);  # [5]
+            require connected(scid) & connected_to(scid) = dcid;
+            require stream_id_allowed(dcid,f.id);  # [4]
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### MAX_STREAM_ID event
+#
+# MAX_STREAM_ID frames cause the maximum stream id to be set. 
+# The receiver of the max stream id may use stream ids up to and including
+# the given maximum. Bit 1 of the stream id (the next-to-least significant)
+# determines whether the limit is set for unidirectional or bidirectional
+# streams. A max stream id containing a stream id lower than the current
+# maximum is allowed and ignored.
+#
+# Requirements:
+#
+# - The connection must not have been closed by the source endpoint [2].
+# - Max stream id frames may not occur in initial or handshake packets [3].
+# - The role of the stream id must equal the role of the peer in the given connection. [4]
+#   QUESTION: this requirement is not stated in the draft spec, but it is enforced
+#   by picoquic (see anomaly6). The spec should state explicitly what happens in this case.
+#
+# Effects:
+#
+# - The maximum stream id is set [1].
+#
+# QUESTION: must the stream id's be less than the max or less than or equal?
+# Picoquic seems to think less than, but the is not clear in the draft.
+
+object frame = { ...
+    object max_stream_id = { ...
+        action handle(f:frame.max_stream_id,scid:cid,dcid:cid,e:quic_packet_type)
+
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);  # [3]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require connected(scid) & connected_to(scid) = dcid;
+            require ~conn_closed(scid);  # [2]
+
+            var kind := bidir;
+            if ~ (max_stream_set(dcid,kind) & f.id < max_stream(dcid,kind)) {
+                max_stream_set(dcid,kind) := true;
+                max_stream(dcid,kind) := f.id; #  [1]
+            }
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### CONNECT_CLOSE event
+#
+# CONNECT_CLOSE frames indicate to the peer that the connection is being closed.
+# It is unclear what this means operationally, but it seems reasonable to assume that the
+# endpoint closing the connection will not send or receive any further data on the connection,
+# so it is as if all the open streams are reset by this operation.
+#
+# A connection close frame can occur at any time. 
+#
+# Questions:
+#
+# - Are Ack frames still allowed after connection close?
+# - Are retransmissions allowed after connection close?
+# - When is a connection close allowed?
+#
+# Requirements:
+#
+# - The source and destination cid's must be connected. In effect,
+#   this means that a server hello message must have been sent for
+#   this connection Therefore a client cannot send a connection close
+#   before receiving at least one handshake message from the
+#   server. QUESTION: the spec is a bit vague about this, stating
+#   "Handshake packets MAY contain CONNECTION_CLOSE frames if the
+#   handshake is unsuccessful." Does "unsuccessful" necessarily mean that
+#   some handshake has been received? Also, can an initial packet contain
+#   connection close? 
+#
+# Effects:
+#
+# - The connection state is set to closed for the source endpoint.
+#
+
+object frame = { ...
+    object connection_close = { ...
+        action handle(f:frame.connection_close,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle{
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt -> established_1rtt_keys(scid);
+            require e = quic_packet_type.handshake -> established_handshake_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require connected(scid) & connected_to(scid) = dcid;
+            require f.reason_phrase_length = f.reason_phrase.end;
+            conn_closed(scid) := true;
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### APPLICATION_CLOSE event
+#
+# APPLICATION_CLOSE frames indicate to the peer that the connection is
+# being closed.  It is unclear what this means operationally, but it
+# seems reasonable to assume that the endpoint closing the connection
+# will not send or receive any further data on the connection, so it
+# is as if all the open streams are reset by this operation. In the
+# standard, an APPLICATION_CLOSE frame is described as
+# CONNECTION_CLOSE frame with a special tag field. Here, we use a
+# distinct variant type to represent it.
+#
+# An application close frame can occur at any time. 
+#
+# Questions:
+#
+# - Are ACK frames still allowed after application close?
+# - Are retransmissions allowed after application close?
+# - When is a application close allowed?
+#
+# Requirements:
+#
+# (None)
+#
+# Effects:
+#
+# - The connection state is set to closed for the source endpoint.
+#
+
+object frame = { ...
+    object application_close = { ...
+        action handle(f:frame.application_close,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle{
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e ~= quic_packet_type.initial;
+            require e = quic_packet_type.one_rtt -> established_1rtt_keys(scid);
+            require e = quic_packet_type.handshake -> established_handshake_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require connected(scid) & connected_to(scid) = dcid;
+            require f.reason_phrase_length = f.reason_phrase.end;
+            conn_closed(scid) := true;
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### MAX_STREAM_DATA event
+#
+# MAX_STREAM_DATA frames set the limit on data bytes that the source endpoint is willing
+# to receive for a given stream.
+#
+# Requirements
+#
+# - The stream must be open for receiving at the source endpoint [1].
+#
+# Effects
+# - If the given limit is greater than any previously set limit, then
+#   the max stream data limit for the given stream is updated [2].
+#
+
+object frame = { ...
+    object max_stream_data = { ...
+        action handle(f:frame.max_stream_data,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            
+            if ~max_stream_data_set(scid,f.id) | f.pos > max_stream_data_val(scid,f.id) {
+                max_stream_data_set(scid,f.id) := true;
+                max_stream_data_val(scid,f.id) := f.pos;  # [2]
+            }
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### STREAM_BLOCKED event
+#
+# STREAM_BLOCKED frames indicate that sender wishes to send data on stream beyond current limit.
+#
+# Requirements
+#
+# - Connection must be established
+#
+# Effects
+#
+# (None)
+
+object frame = { ...
+    object stream_blocked = { ...
+        action handle(f:frame.stream_blocked,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### BLOCKED event
+#
+# BLOCKED frames indicate that sender wishes to send data beyond current total limit
+# for all streams.
+#
+# Requirements
+#
+# - Connection must be established
+#
+# Effects
+#
+# (None)
+
+object frame = { ...
+    object blocked = { ...
+        action handle(f:frame.blocked,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### STREAM_ID_BLOCKED event
+#
+# STREAM_ID_BLOCKED frames indicate that sender wishes to open a stream beyond current limit
+# on streams of a given kind.
+#
+# Requirements
+#
+# - Connection must be established
+#
+# Effects
+#
+# (None)
+
+object frame = { ...
+    object stream_id_blocked = { ...
+        action handle(f:frame.stream_id_blocked,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### MAX_DATA EVENT
+#
+# MAX_DATA frames set the limit on the total data bytes that the source endpoint is willing
+# to receive for all streams combined.
+#
+# Requirements
+#
+# (None)
+#
+# Effects
+# - If the given limit is greater than any previously set limit, then
+#   the max data limit for the connection is updated [2].
+#
+
+object frame = { ...
+    object max_data = { ...
+        action handle(f:frame.max_data,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+
+            if ~max_data_set(scid) | f.pos > max_data_val(scid) {
+                max_data_set(scid) := true;
+                max_data_val(scid) := f.pos;  # [2]
+            }
+	    ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### PING event
+#
+# PING frames contain no data and have no semantics. They can
+# be used to keep a connection alive.
+#
+
+object frame = { ...
+    object ping = { ...
+        action handle(f:frame.ping,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt -> established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### NEW_CONNECTION_ID event
+#
+# NEW_CONNECTION_ID frames are used to transmit additional cid's to the peer.
+#
+
+object frame = { ...
+    object new_connection_id = { ...
+        action handle(f:frame.new_connection_id,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            ...
+            call enqueue_frame(scid,f,e,true);
+        }
+    }
+}
+
+#
+# #### PATH_CHALLENGE event
+#
+# Path challenge frames are used to request verification of ownership
+# of an endpoint by a peer.
+#
+# A pending path challenge value me not be retransmitted [1]. That is,
+# according to quic-transport-draft-18, section 13.2:
+#
+#     PATH_CHALLENGE frames include a different payload each time they are sent.
+#
+# Notice that we do allow a PATH_CHALLENGE payload to be re-used after
+# it is responded to, on the theory that this is a new challenge and
+# not a retransmission, however, it is unclear that this is the
+# intention of the standard.
+
+object frame = { ...
+    object path_challenge = { ...
+        action handle(f:frame.path_challenge,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require f.data.end = 8;
+            require ~path_challenge_pending(dcid,f.data);
+            ...
+            path_challenge_pending(dcid,f.data) := true;
+            call enqueue_frame(scid,f,e,true);
+        }
+    }
+}
+
+#
+# #### PATH_RESPONSE event
+#
+# PATH_RESPONSE frames are used to verify ownership of an endpoint in
+# response to a path_challenge frame.
+
+object frame = { ...
+    object path_response = { ...
+        action handle(f:frame.path_response,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require f.data.end = 8;
+            require path_challenge_pending(scid,f.data);
+            ...
+            path_challenge_pending(scid,f.data) := false;
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+#
+# #### NEW_TOKEN event
+#
+# NEW_TOKEN frames are sent by the server to provide the client a
+# token for establishing a new connection.
+
+object frame = { ...
+    object new_token = { ...
+        action handle(f:frame.new_token,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require ~is_client(scid);
+            ...
+            call enqueue_frame(scid,f,e,false);
+        }
+    }
+}
+
+
+
+
+# Procedures
+# ----------
+
+# Frame events cause frames to be enqueued for transmission in a
+# packet. This action enqueues a frame.
+#
+# Effects:
+#
+# - Appends frame to the frame queue for the given source endpoint and cid.
+# - Updates auxiliary functions `num_queued_frames` and `queued_level`.
+#
+# Note: the auxilary functions contain redundant information that is useful for
+# specifying packet events. By encoding history information in this way, we make
+# it easier for constraint solvers to construct tests.
+
+action enqueue_frame(scid:cid, f:frame, e:quic_packet_type, probing:bool) = {
+    queued_frames(scid) := queued_frames(scid).append(f);
+    num_queued_frames(scid) := queued_frames(scid).end;
+    queued_level(scid) := e;
+    if ~probing {
+        queued_non_probing(scid) := true;
+    };
+    if ~(f isa frame.ack) {
+        queued_non_ack(scid) := true;
+    };
+    if (f isa frame.connection_close) | (f isa frame.application_close) {
+        queued_close(scid) := true;
+    }
+}
+
+#
+# The maximum number of bytes that may be transmitted to a give aid on a given stream is
+# computed by the following procedure. The number of bytes is the maximum of:
+#
+# - The receiver's `initial_max_stream_data_uni` transport parameter, if the stream
+#   is unidirectional.
+#
+# - The receiver's `initial_max_stream_data_bidi_local` transport parameter, if the stream
+#   is bidirectional and is initiated by the receiver.
+#
+# - The receiver's `initial_max_stream_data_bidi_remote` transport parameter, if the stream
+#   is bidirectional and is initiated by the sender.
+#
+# An alternative maximum lenght is given by the maximum total data
+# limit for the receiving aid.  That is, it can be no greater than the
+# current stream length plus the maximum total additional
+# bytes allowed on all streams.
+
+# An aid is the initiator of a stream if its protocol role (client or
+# server) matches the role of the stream id.
+
+action stream_max_data(dcid:cid,id:stream_id) returns (max:stream_pos) = {
+    var tp := trans_params(dcid);
+    max := 0;
+    if get_stream_kind(id) = unidir {
+        if initial_max_stream_data_uni.is_set(tp) {
+            max := initial_max_stream_data_uni.value(trans_params(dcid)).stream_pos_32
+        }
+    } else {
+        if is_client(dcid) <-> get_stream_role(id) = role.client {
+            if initial_max_stream_data_bidi_local.is_set(tp) {
+                max := initial_max_stream_data_bidi_local.value(trans_params(dcid)).stream_pos_32
+            }
+        } else {
+            if initial_max_stream_data_bidi_remote.is_set(tp) {
+                max := initial_max_stream_data_bidi_remote.value(trans_params(dcid)).stream_pos_32
+            }
+        }
+    };
+    if max_stream_data_set(dcid,id) {
+        var msdv := max_stream_data_val(dcid,id); 
+        max := msdv if msdv > max else max;
+    };
+    var alt_max := max_additional_data(dcid) + stream_length(dcid,id);
+    max := alt_max if alt_max < max else max;
+}
+
+#
+# Whether a given stream can be opened by a peer of a given aid is
+# computed by the following procedure. The id of a remotely initiated
+# stream must be less than the maximum of:
+#
+# - Four times the aid's `initial_max_stream_id_uni` transport
+#   parameter, if the stream is unidirectional [3].
+#
+# - Four times the aid's `initial_max_stream_id_bidi` transport
+#   parameter, if the stream is bidirectional [4].
+#
+# - The stream id parameter of any MAX_STREAM_ID frame sent by the
+#   aid, if it is of the same kind.
+
+action stream_id_allowed(dcid:cid,id:stream_id) returns (ok:bool) = {
+    ok := false;
+    var tp := trans_params(dcid);
+    var kind := get_stream_kind(id);
+    var idhi : stream_id := id / 4;
+    if ~(is_client(dcid) <-> get_stream_role(id) = role.client) {  # if stream remotely initiated
+        if kind = unidir {
+            if initial_max_stream_id_uni.is_set(tp) {
+                ok := idhi < (initial_max_stream_id_uni.value(tp).stream_id_16)  # [3]
+            }
+        } else {
+            if initial_max_stream_id_bidi.is_set(tp) {
+                ok := idhi < (initial_max_stream_id_bidi.value(tp).stream_id_16);  # [4]
+            }
+        };
+        ok := ok | max_stream_set(dcid,kind) & idhi < max_stream(dcid,kind)
+    }
+    else ok := stream_seen(dcid, id) # TODO: locally initiated streams must have been seen!
+}
+
+# The procedure computes the maximum number of additional bytes that a given
+# destination aid can receive, based on the `initial_max_data` transport parameter
+# and the highest position sent by the aid in a max data frame. This is computed as the
+# maximum of these two values, less the total data already received.
+
+action max_additional_data(dcid:cid) returns (max:stream_pos) = {
+    var tp := trans_params(dcid);
+    max := 0;
+    if initial_max_data.is_set(tp) {
+        max := initial_max_data.value(tp).stream_pos_32
+    };
+    if max_data_set(dcid) {
+        var smax := max_data_val(dcid);
+        max := smax if smax > max else max
+    };
+    max := max - conn_total_data(dcid);  # note the substraction is saturating
+}

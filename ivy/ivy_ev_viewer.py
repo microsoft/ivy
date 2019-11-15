@@ -4,6 +4,9 @@ import ivy_ev_parser as ev
 import ivy_utils as iu
 import ivy_ui_util as uu
 
+import signal
+signal.signal(signal.SIGINT,signal.SIG_DFL)
+
 Event = ev.Event
 
 class UI(object):

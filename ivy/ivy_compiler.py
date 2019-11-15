@@ -609,6 +609,10 @@ def compile_if_action(self):
 IfAction.cmpl = compile_if_action
 
 def compile_while_action(self):
+        if isinstance(self.args[0],ivy_ast.Some):
+            res = compile_if_action(self.clone(self.args[:2]))
+            invars = map(sortify_with_inference,self.args[2:])
+            return res.clone(res.args+invars)
         ctx = ExprContext(lineno = self.lineno)
         with ctx:
             cond = sortify_with_inference(self.args[0])
@@ -904,6 +908,20 @@ def compile_if_tactic(self):
     
 ivy_ast.IfTactic.compile = compile_if_tactic
 
+def compile_property_tactic(self):
+    with top_sort_as_default():
+        prop = self.args[0].compile()
+    name = self.args[1]
+    if not isinstance(name,ivy_ast.NoneAST):
+        with ivy_logic.UnsortedContext():
+            args = [arg.compile() for arg in name.args]
+        name = name.clone(args)
+    proof = self.args[2].compile()
+    return self.clone([prop,name,proof])
+        
+ivy_ast.PropertyTactic.compile = compile_property_tactic
+
+
 def resolve_alias(name): 
     if name in im.module.aliases:
         return im.module.aliases[name]
@@ -1013,6 +1031,11 @@ class IvyDomainSetup(IvyDeclInterp):
             raise IvyError(v,"A destructor must have at least one parameter")
         self.domain.destructor_sorts[sym.name] = dom[0]
         self.domain.sort_destructors[dom[0].name].append(sym)
+    def constructor(self,v):
+        sym = self.individual(v)
+        rng = sym.sort.rng
+        self.domain.constructor_sorts[sym.name] = rng
+        self.domain.sort_constructors[rng.name].append(sym)
     def add_definition(self,ldf):
         defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.labeled_props
         lhsvs = list(lu.variables_ast(ldf.formula.args[0]))
@@ -1154,6 +1177,18 @@ class IvyDomainSetup(IvyDeclInterp):
         if isinstance(rhs,ivy_ast.Range):
 #            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
             interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}".format(i) for i in range(int(rhs.lo),int(rhs.hi)+1)])
+            return
+        if isinstance(rhs,ivy_ast.EnumeratedSort):
+            if lhs not in self.domain.sig.sorts:
+                iu.dbg('type(lhs)')
+                raise IvyError(thing,"{} is not a type".format(lhs))
+            sort = ivy_logic.EnumeratedSort(lhs,[x.rep for x in rhs.args])
+            interp[lhs] = sort
+            for c in sort.defines(): # register the type's constructors
+                sym = Symbol(c,self.domain.sig.sorts[lhs])
+                self.domain.functions[sym] = 0
+                self.domain.sig.symbols[c] = sym
+                self.domain.sig.constructors.add(sym)
             return
         for x,y,z in zip([sig.sorts,sig.symbols],
                          [slv.is_solver_sort,slv.is_solver_op],
@@ -1513,6 +1548,8 @@ def check_definitions(mod):
     def checkdef(sym,lf):
         if sym in defs:
             raise IvyError(lf,'redefinition of {}\n{} from here'.format(sym,defs[sym].lineno))
+        if slv.solver_name(sym) == None:
+            raise IvyError(lf,'definition of interpreted symbol {}'.format(sym))
         defs[sym] = lf
     for ldf in mod.definitions:
         checkdef(ldf.formula.defines(),ldf)
@@ -1541,7 +1578,7 @@ def check_definitions(mod):
                         raise IvyError(side_effects[s],'immutable symbol assigned. \n{} info: symbol is used in axiom here'.format(lf.lineno))
 
         for lf in mod.definitions:
-            s = lf.formula.lhs()
+            s = lf.formula.lhs().rep
             if s in side_effects:
                 raise IvyError(side_effects[s],'immutable symbol assigned. \n{} Symbol is defined here'.format(lf.lineno))
                 
@@ -1614,13 +1651,40 @@ def create_constructor_schemata(mod):
         Y = ivy_logic.Variable('Y',sort)
         eqs = [ivy_logic.Equals(f(Y),ivy_logic.Variable('X'+str(n),f.sort.rng)) for n,f in enumerate(destrs)]
         fmla = ivy_logic.Exists([Y],ivy_logic.And(*eqs))
-        name = ivy_ast.Atom(iu.compose_names(sortname,'constructor'),[])
+        name = ivy_ast.Atom(iu.compose_names(sortname,'constr'),[])
         sch = ivy_ast.SchemaBody(fmla)
         sch.lineno = None
         sch.instances = []
         goal = ivy_ast.LabeledFormula(name,sch)
         goal.lineno = None
         mod.schemata[name.relname] = goal
+
+        for cons in mod.sort_constructors[sortname]:
+            dom = cons.sort.dom
+            if len(dom) != len(destrs):
+                raise iu.IvyError(cons,"Constructor {} has wrong number of arguments (got {}, expecting {})".format(cons,len(dom),len(destrs)))
+            for x,y in zip(dom,destrs):
+                if len(y.sort.dom) != 1:
+                    raise iu.IvyError(cons,"Cannot define constructor {} for type {} because field {} has higher type".format(cons,sortname,y))
+                if x.name != y.sort.rng.name:
+                    raise iu.IvyError(cons,"In constructor {}, argument {} has wrong type (expecting {}, got {})".format(cons,y.sort.rng,x))
+            xvars = [ivy_logic.Variable('X'+str(n),f.sort.rng) for n,f in enumerate(destrs)]
+            Y = cons(*xvars)
+            eqs = [ivy_logic.Equals(f(Y),ivy_logic.Variable('X'+str(n),f.sort.rng)) for n,f in enumerate(destrs)]
+            fmla = ivy_logic.And(*eqs)
+            name = ivy_ast.Atom(iu.compose_names(cons.name,'constr'),[])
+            sch = ivy_ast.SchemaBody(fmla)
+            sch.lineno = None
+            sch.instances = []
+            goal = ivy_ast.LabeledFormula(name,sch)
+            goal.lineno = None
+            mod.schemata[name.relname] = goal
+
+    for sortname,conss in mod.sort_constructors.iteritems():
+        for cons in conss:
+            if sortname not in mod.sort_destructors:
+                raise iu.IvyError(cons,"Cannot define constructor {} for type {} because {} is not a structure type".format(cons,sortname,sortname))
+    
         
 def apply_assert_proofs(mod,prover):
     def recur(self):

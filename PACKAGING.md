@@ -1,24 +1,37 @@
 # Packaging instructions
 
-## Linux
+Ivy is packaged as a python "wheel". 
 
-### Debian/Ubuntu
+## Building and uploading a wheel
 
-- Rename this directory to ms-ivy-X.Y where X.Y is the version number
-- Edit the files in debian/ to reflect the current version number
-- Run 'make builddeb'
-- The .deb file appears in the parent directory
+1. Install Ivy as usual (see `doc/install.md`)
 
-## Windows
+2. Set the version nummber in `setup.py`
 
-The following should work if updates to dependencies (including python
-itself) are not needed:
+3. Build a wheel like this:
 
-- Install the latest existing release in C:\
-- Run these commands:
+        $ python setup.py bdist_wheel --plat-name <platform-name>
+        
+    where `<platform-name>` is:
+    
+    - for linux: `manylinux1_x86_64`
+    - for Windows: `win_amd64`
+    - for MacOS 10.9: `macosx_10_9_x86_64`
+    
+    The distribution is created as a `.whl` file in directory `dist`. 
 
-    > c:\ivy\scripts\activate
-    > python setup.py install
+4. Upload a wheel like this:
 
-- Make an archive of c:/ivy such that the archive has a top-level directory 'ivy'.
+        $ pip install twine
+        $ twin upload dist/*
+        
+## Debian/Ubuntu
+
+It is also possible to build a debian package, though this is
+obsolete. 
+
+1. Rename this directory to ms-ivy-X.Y where X.Y is the version number
+2. Edit the files in debian/ to reflect the current version number
+3. Run 'make builddeb'
+4. The .deb file appears in the parent directory
 

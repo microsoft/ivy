@@ -186,7 +186,11 @@ module array(domain,range) = {
         }
 
         implement back {
-	    res := a.value(a.end.prev)
+            <<<
+                if ((`domain`)`a`.size() > 0)
+                    `res` = `a`.back();
+            >>>
+#	    res := a.value(a.end.prev)
 	}
 
         implement pop_back {

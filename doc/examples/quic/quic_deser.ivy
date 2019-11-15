@@ -82,13 +82,7 @@ object quic_deser = {}
                 getn(res,1);
                 long_format = (res & 0x80) ? true : false;
                 hdr_type = res & 0x7f;
-                res = long_format;
-                state = quic_s_type;
-            }
-            break;
-            case quic_s_type:
-            {
-                res = hdr_type;
+                res = long_format ? ((hdr_type & 0x30) >> 4) : 3;
                 state = quic_s_version;
             }
             break;
@@ -98,26 +92,15 @@ object quic_deser = {}
                     ivy_binary_deser::getn(res,4);
                 else
                     res = 0;
-                state = quic_s_dcil;
-            }
-            break;
-            case quic_s_dcil:
-            {
                 if (long_format) {
-                    getn(res,1);
-                    scil = res & 0xf;
-                    dcil = (res & 0xf0) >> 4;
+                    long long cil;
+                    getn(cil,1);
+                    scil = cil & 0xf;
+                    dcil = (cil & 0xf0) >> 4;
                 } else {
                     dcil = 5;
                     scil = 0; // TODO: how to determine the cid length?
                 }
-                res = dcil;
-                state = quic_s_scil;
-            }
-            break;
-            case quic_s_scil:
-            {
-		res = scil;
                 state = quic_s_dcid;
             }
             break;
@@ -130,19 +113,12 @@ object quic_deser = {}
             case quic_s_scid:
             {
 		getn(res,(scil ? (scil+3) : 0));
-                state = quic_s_retry_token_length;
-            }
-            break;
-            case quic_s_payload_length:
-            {
-                if (long_format) {
-                    get_var_int(res);
-                } else {
-                    res = 0;
-                }
-                payload_length = res;
-                res = 0; // this is meaningless to ivy
-                state = quic_s_pkt_num;
+                long long len;
+                if (long_format & ((hdr_type & 0x30) == 0x00))
+                    get_var_int(len);
+                else len = 0;
+                data_remaining = len;
+                state = quic_s_retry_token;
             }
             break;
             case quic_s_pkt_num:
@@ -307,15 +283,6 @@ object quic_deser = {}
             {
                 get_var_int(res);
                 state = quic_reset_final_offset;
-            }
-            break;
-            case quic_s_retry_token_length:
-            {
-                if (long_format & ((hdr_type & 0x30) == 0x00))
-                    get_var_int(res);
-                else res = 0;
-                data_remaining = res;
-                state = quic_s_retry_token;
             }
             break;
             case quic_new_connection_id_length:
@@ -492,7 +459,14 @@ object quic_deser = {}
                 pos += QUIC_DESER_FAKE_CHECKSUM_LENGTH; // skip the fake checksum
             }
             if (state == quic_s_retry_token) {
-                state = quic_s_payload_length;
+                long long len;
+                if (long_format) {
+                    get_var_int(len);
+                } else {
+                    len = 0;
+                }
+                payload_length = len;
+                state = quic_s_pkt_num;
             }
         }
         void close_list_elem() {}

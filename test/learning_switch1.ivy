@@ -1,0 +1,121 @@
+#lang ivy1.3
+
+################################################################################
+#
+# Module describing an acyclic partial function. The function is built by
+# calling the "set" action. This has preconditions that enforce the required
+# invariants. The function can be accessed using "dom" to query if an element is
+# in the domain of the function, and "get" to get its value. The "get" action
+# has a precondition that the given element must be in the domain.
+#
+# Because of the invariant that the relation re construct by "set" is an acyclic
+# partial function, we can represent it by its transitive closure "tc", while
+# remainin in EPR.
+#
+################################################################################
+
+module acyclic_partial_function(carrier) = {
+    relation dom(X:carrier)            # domain of the function
+    relation tc(X:carrier,Y:carrier)   # transitive closure of the function
+
+    # Conjectures that ensure that tc really describes the transitive closure
+    # of an acyclic partial function.
+    # These conjectures for part of the safety property.
+    conjecture tc(X,X)                          # Reflexivity
+    conjecture tc(X, Y) & tc(Y, Z) -> tc(X, Z)  # Transitivity
+    conjecture tc(X, Y) & tc(Y, X) -> X = Y     # Anti-symmetry
+    conjecture tc(X, Y) & tc(X, Z) -> (tc(Y, Z) | tc(Z, Y)) # Semi-linearity
+
+    init ~dom(X) & (tc(X,Y) <-> X = Y)     #initially empty
+
+    action set(x:carrier,y:carrier) = {
+       dom(x) := true;
+       tc(X, Y) := tc(X, Y) | (tc(X, x) & tc(y, Y))
+    }
+
+    action get(x:carrier) returns (y:carrier) = {
+       assume tc(x,y) & x ~= y & ((tc(x, Z) & x ~= Z) -> tc(y, Z))
+    }
+}
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+type packet = {a,b}
+type node
+
+relation pending(P:packet, S:node, T:node)  # relation for pending packets
+individual src(P:packet) : node  # function src : packet -> node
+individual dst(P:packet) : node  # function dst : packet -> node
+relation link(S:node, T:node) # relation for network topology
+instantiate route(N:node) : acyclic_partial_function(node) # routing tables
+
+axiom ~link(X, X)                          # no self-loops in links
+axiom ~link(X, Y) | link(Y, X)             # symmetric links
+
+# The initial state of the network (empty)
+
+init ~pending(P,S,T)
+
+################################################################################
+#
+# Protocol description
+#
+# Two action: new_packet and receive
+#
+################################################################################
+
+action new_packet = {
+    local p:packet {
+        # Create a new packet, by adding it to pending from the src to itself
+        pending(p, src(p), src(p)) := true
+    }
+}
+
+action receive = {
+    local p:packet, sw0:node, sw1:node, sw2:node {
+        # receive a pending packet from sw0 to sw1 and process it
+
+        ########################################
+        # The action's guard.
+        assume pending(p, sw0, sw1);
+
+        ########################################
+        # Abstract the number of times that the same packet recieved
+        pending(p, sw0, sw1) := *;
+
+        ########################################
+        # learn: if no route from receiving switch back to source...
+        if (~route(src(p)).dom(sw1) & src(p) ~= sw1) {
+            call route(src(p)).set(sw1, sw0)   # create new route from sw1 to sw0
+        };
+
+        ########################################
+        # forward the packet if destination is not self
+        if dst(p) ~= sw1 {
+            if ~route(dst(p)).dom(sw1) { # if no route from sw1 to to dst(p)...
+                pending(p, sw1, Y) := link(sw1, Y) & Y ~= sw0  # flood
+            } else {
+                sw2 := route(dst(p)).get(sw1); # get the routing table entry
+                pending(p, sw1, sw2) := true   # route the packet there
+            }
+        }
+    }
+}
+
+export new_packet
+export receive
+
+# The safety property is given by the conjectures of the
+# acyclic_partial_function module, that state that the routing tables
+# do not create cycles.
+
+# obtained interactively via CTI's
+conjecture ~(route.tc(N1,N1,N0) & N1 ~= N0)
+conjecture ~(route.tc(N2,N0,N2) & N0 ~= N2 & ~route.dom(N2,N0))  # this is actually not needed
+conjecture ~(route.tc(N0,N2,N1) & N1 ~= N2 & ~route.dom(N0,N2))
+conjecture ~(route.tc(N2,N1,N0) & N0 ~= N2 & N1 ~= N0 & ~route.dom(N2,N0))
+# conjecture ~(pending(P0,N1,N0) & N1 ~= src(P0) & ~route.dom(src(P0),N1))

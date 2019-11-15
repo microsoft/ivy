@@ -38,14 +38,6 @@ include file
 #   rather than using the dot notation.
 
 
-# The wire specification monitors this action (TODO: shouldn't be declared here).
-
-action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
-
-# This is a ghost action representing a TLS send event.
-
-action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data,
-                      pos:stream_pos,e:encryption_level) = {}
 
 # create an UDP network instance to communicate to server with
 # Note: because of packet coalescing, a single UDP datagram contains
@@ -354,11 +346,12 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.ar
             call show_stream(res.data);
             if res.ok {
                 var pkt := pkt_serdes.from_bytes(res.data);
+                pkt.seq_num := prot.correct_packet_number(rnum,pkt.seq_num,get_pnum_len(res,0));
 	        call show_packet(src,dst,pkt);
 	        call infer_tls_events(src,dst,pkt);   # infer any TLS events on client side
 	        call packet_event(src,dst,pkt);
                 if bvand(ppkt.value(0),0xf0) = 0xc0 & ~cid_dst_to_src_set(the_cid) {
-                    call open_connection(dst,src,the_cid,pkt.hdr_cid);  # [1]
+                    call app_server_open_event(dst,src,the_cid,pkt.hdr_cid);  # [1]
                 }
             }
             else {

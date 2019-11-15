@@ -1,0 +1,275 @@
+#lang ivy1.7
+
+include quic_connection
+include tls_msg
+include serdes
+include quic_deser
+include quic_ser
+include quic_protection
+
+# The QUIC test shim
+# ------------------
+
+# This shim translates between the randomized mirror process generated
+# by Ivy for the QUIC specification, and the test locale. The test
+# locale contains a server or client implementation under test (as a
+# separate process), the network, and one instance of TLS for each
+# client or server process that communcates with the process under
+# test.
+#
+# The shim makes this connection by two methods:
+#
+# - It uses a *implements* clause to attach code to actions.
+# - It implements call-back actions of the processes in the locale
+#
+# In particular, the implementations of protocol actions can send
+# messages by UDP to the client/server under test. Reception of messages
+# can in turn trigger inferred protocol actions.
+#
+
+# The test shim uses an instance of the QUIC protection module
+# to protect packts (see comment below). This module in turn uses the services
+# of TLS.
+
+instance prot : quic_protection(tls_api.id,tls_api.upper)
+
+include quic_locale
+
+# Packet event shim
+# -----------------
+#
+# When a packet even is generated, we encode the packet contents and
+# route it to the network. The encoding involves serializing the packet
+# to its byte-level representation, and then applying protection.
+#
+# TODO: We do not actually generate protection layer events. Instead,
+# whenever a generated packet event occurs, we deterministically
+# serialize and encrypt the packet for transmission. This is not quite sound,
+# since in fact there are a few choices to be made in the encoding (such
+# as the number of bytes in the sequence number encoding) and these choices
+# should in principle be randomized. We have not done this, however, since we
+# are more interested in the higher-layer aspects of the protocol.
+#
+# TODO: We don't coalesce multiple packets into a datagram. To do
+# this, we could enqueue packets (as frames are enqueued) and then
+# randomly choose the moment to encode them.
+#
+# Note: To encode the packet, we need a reference sequence number,
+# which is the sequence number of the most recently transmitted packet
+# on the same connection. This information is obtained from the protocol
+# state by the procedure `reference_pkt_num`.
+#
+# Note: We assume the each endpoint the tester can transmit on has been
+# mapped to an open socket. This map is provided by `endpoint_to_socket`.
+#
+
+
+after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    if _generating {
+        var spkt := pkt_serdes.to_bytes(pkt);
+        var rnum := reference_pkt_num(spkt);
+        var ppkt := prot.encrypt(client.tls_id,rnum,spkt);
+        var pkts := prot.arr.empty;
+        pkts := pkts.append(ppkt);
+        call net.send(endpoint_to_pid(src),endpoint_to_socket(src),dst,pkts);
+    }
+}
+
+# UDP receive event shim
+# ----------------------
+#
+# When a UDP datagram arrives, decrypt it, deserialize it, then
+# generate a `packet_event`.
+#
+# Note: the net API deserializes the datagram into a sequence of
+# packets.  Thus, we have to iterate over the packets. If a packet
+# is undecryptable, we call the action `undecryptable_packet_event`.
+# This is not necessarily a protocol error, as an undecryptable
+# packet may be a stateless reset.
+
+
+implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.arr) {
+    var dst := socket_endpoint(host,s);  # because net API doesn't tell us the dst
+    var idx := pkts.begin;
+    while idx < pkts.end {
+        var ppkt := pkts.value(idx);
+        var rnum := reference_pkt_num(ppkt);
+        var res := prot.decrypt(client.tls_id,rnum,ppkt);
+        if res.ok {
+            var pkt := pkt_serdes.from_bytes(res.data);
+            pkt.seq_num := prot.correct_pnum(rnum,pkt.seq_num,prot.get_pnum_len(res.data,0));
+            call recv_packet(src,dst,pkt);
+            call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
+            call packet_event(src,dst,pkt); # also an inferred event
+        }
+        else {
+            call undecryptable_packet_event(src,dst,ppkt);
+        };
+        idx := idx.next;
+    }
+}
+
+# For logging purposes. This logs the decoded packets received from the network, before
+# event inference. 
+
+import action recv_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
+
+# This received packets that are undecryptable
+
+import action undecryptable_packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:stream_data)
+
+# Security event shims
+# --------------------
+
+# Here, we connect protocol events at the security layer to API calls of the
+# TLS 1.3 service (a part of the test locale). 
+#
+#
+# TLS send event shim
+# ===================
+#
+# When a TLS instance in the locale sends message data, we generate a
+# `tls_send_event`. This causes the data to be recorded in the
+# appropriate abstract crypto stream, and later to be transmitted via
+# a generated crypto frame event.
+
+implement tls_api.lower.send(tls_id:tls_api.id, bytes:stream_data, lev:tls_api.lower.level) {
+    var e := quic_packet_type.initial if lev = 0
+             else (quic_packet_type.handshake if lev = 2 else quic_packet_type.zero_rtt);
+    var scid := tls_id_to_cid(tls_id);
+    call tls_send_event(tls_id_to_src(tls_id), tls_id_to_dst(tls_id), scid,
+                        0, bytes,crypto_data_end(scid,e),e);
+}
+
+# The following is just for debugging purposes.
+
+after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data,
+                     pos:stream_pos, e:quic_packet_type) {
+#    call show_tls_send_event(src,dst,scid,dcid,data,pos,e);
+}
+
+# TLS keys established event shim
+# ===============================
+#
+# This occurs when a TLS instance establishes the encryption keys for an encryption
+# level. This is translated into a `tls_keys_established_event` at the security layer.
+
+implement tls_api.upper.keys_established(tls_id:tls_api.id,lev:tls_api.upper.level) {
+    var e := quic_packet_type.handshake if lev = 2 else quic_packet_type.zero_rtt;
+    call tls_keys_established_event(tls_id_to_cid(tls_id),e);
+}
+
+# TLS handshake data event shim
+# =============================
+#
+# When TLS handshake data is conceputally generated by the peer, we
+# feed it to the real TLS.
+#
+# TODO: We do it at this point because we may need it to generate the
+# keys for the next packet to be decrypted. This should really happen
+# on a `tls_recv_event`, but that would be too late. Of course, this could
+# happen in reality. That is, a 1-rtt packet could arrive before the
+# handshake that establishes the keys. The trouble is this will happen too
+# frequently if we delay the TLS reception event. Perhaps the solution to
+# this is to infer a TLC reception event after an incoming packet if there
+# were any crypto frames.
+
+after tls.handshake_data_event(src : ip.endpoint, dst : ip.endpoint, data:stream_data) {
+    if dst_is_generated(dst) {
+        call tls_api.lower.recv(dst_tls_id(dst),data,0); # TODO: fill in the encryption level
+    }
+}
+
+# TLS client initial request shim
+# ===============================
+#
+
+# This event corresponds to the client creating a new connection. We
+# set up the initial keys based on the nonce cid, which is used as
+# initial key material. Note, the "salt" is specified in the QUIC-TLS
+# document.
+#
+# TODO: this assumes the cid length is 8 bytes. Also, the ikm and salt
+# should really be computed in the protection layer and passed to
+# TLS here in the shim.
+
+after tls_client_initial_request(src:ip.endpoint,dst:ip.endpoint,nonce:cid) {
+    var ikm := cid_to_bytes(nonce,8);
+    var salt : stream_data := stream_data.empty;
+
+    salt := salt.append(0xef);
+    salt := salt.append(0x4f);
+    salt := salt.append(0xb0);
+    salt := salt.append(0xab);
+    salt := salt.append(0xb4);
+    salt := salt.append(0x74);
+    salt := salt.append(0x70);
+    salt := salt.append(0xc4);
+    salt := salt.append(0x1b);
+    salt := salt.append(0xef);
+    salt := salt.append(0xcf);
+    salt := salt.append(0x80);
+    salt := salt.append(0x31);
+    salt := salt.append(0x33);
+    salt := salt.append(0x4f);
+    salt := salt.append(0xae);
+    salt := salt.append(0x48);
+    salt := salt.append(0x5e);
+    salt := salt.append(0x09);
+    salt := salt.append(0xa0);
+    call tls_api.upper.set_initial_keys(0,salt,ikm);
+}
+
+
+
+# Procedures
+# ----------
+
+# To estimate the sequence number of packets, we have to know the encryption level.
+# This action gets the encryption level from the packet header.
+
+action packet_encryption_level(h:prot.header_info) returns (e:quic_packet_type) = {
+    e := quic_packet_type.zero_rtt if ~h.hdr_long
+            else (quic_packet_type.initial if h.hdr_type = 0x7f
+                  else quic_packet_type.handshake);
+}
+
+# To get the reference packet number for a packet, we need to know the source connection
+# id, which is not present in short packets. Here we get it from history.
+
+action packet_scid(h:prot.header_info) returns (scid:cid) = {
+    if h.hdr_long {
+        scid := h.scid;
+    } else {
+        scid := connected_to(h.dcid);
+    }
+}
+
+# To encrypt and decrypt packets we need to know the true packet number, which
+# must be inferred from truncated number in the packet and the packet number history.
+# As a workaround, we use `last_pkt_num(scid,e)` where `e` is the
+# encryption level. We infer the encryption level from the packet type.
+
+action reference_pkt_num(spkt:stream_data) returns (pnum:pkt_num) = {
+    var h := prot.get_header_info(spkt);
+    var e := packet_encryption_level(h);
+    var scid := packet_scid(h);
+    pnum := last_pkt_num(scid,e);
+}
+
+# To send and receive packets, we need to serialize and deserialize them.
+# This object allows that.
+
+instance pkt_serdes : serdes(quic_packet,stream_data,quic_ser,quic_deser)
+
+# Convert a CID to bytes. TODO: This doesn't belong here and it shouldn't
+# be written in C++!
+
+action cid_to_bytes(c:cid,len:cid_length) returns(res:stream_data) = {
+    <<<
+    res.resize(len);
+    for (unsigned i = 0; i < len; i++) {
+        res[len-i-1] = 0xff & (c.val >> (i * 8));
+    }
+    >>>
+}

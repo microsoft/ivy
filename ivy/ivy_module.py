@@ -57,6 +57,8 @@ class Module(object):
         self.mixord = [] # list of mixin order relations
         self.destructor_sorts = {}
         self.sort_destructors = defaultdict(list)
+        self.constructor_sorts = {}
+        self.sort_constructors = defaultdict(list)
         self.privates = set() # set of string (names of private actions)
         self.interps = defaultdict(list) # maps type names to lists of labeled interpretions
         self.natives = [] # list of NativeDef

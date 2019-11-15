@@ -19,15 +19,17 @@ if platform.system() == 'Windows':
 else:
     spawn = pexpect.spawn
 
+scdir = os.environ.get('QUIC_IMPL_DIR',os.environ.get('HOME','') + '/projects')
+    
 servers = [
-    ['picoquic',['/home/mcmillan/projects/picoquic','./picoquicdemo']],
-    ['quant',['..','/home/mcmillan/projects/quant/Debug/bin/server -d . -c leaf_cert.pem -k leaf_cert.key -p 4443 -t 3600']],
+    ['picoquic',[scdir+'/picoquic','./picoquicdemo']],
+    ['quant',['..',scdir + '/quant/Debug/bin/server -d . -c leaf_cert.pem -k leaf_cert.key -p 4443 -t 3600']],
     ['winquic',['..','true']],
 ]
 
 clients = [
-    ['picoquic',['/home/mcmillan/projects/picoquic','./picoquicdemo -v ff000012 localhost 4443']],
-    ['quant',['..','/home/mcmillan/projects/quant/Debug/bin/client -d . -c leaf_cert.pem -k leaf_cert.key -p 4443 -t 3600']],
+    ['picoquic',[scdir + '/picoquic','./picoquicdemo -v ff000012 localhost 4443']],
+    ['quant',['..',scdir + '/quant/Debug/bin/client -d . -c leaf_cert.pem -k leaf_cert.key -p 4443 -t 3600']],
     ['winquic',['..','true']],
 ]
 

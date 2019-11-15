@@ -137,6 +137,10 @@ module bounded_sequence(interp) = {
 
 }
 
+module bit_vector(length) = {
+    instantiate bounded_sequence(bv[length])
+}
+
 module order_iterator(range) = {
     type t = struct {
 	is_end : bool,

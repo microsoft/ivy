@@ -2,7 +2,11 @@ import codecs
 import os
 
 from setuptools import setup, find_packages
+import platform
 
+so_ext = "so"
+if platform.system() == 'Darwin':
+    so_ext = "dylib"
 
 # Get the long description from the README file
 here = os.path.abspath(os.path.dirname(__file__))
@@ -14,7 +18,7 @@ except:
   long_description = None
 
 setup(name='ms_ivy',
-      version='0.1',
+      version='0.3',
       description='IVy verification tool',
       long_description=long_description,
       url='https://github.com/microsoft/ivy',
@@ -22,7 +26,7 @@ setup(name='ms_ivy',
       author_email='nomail@example.com',
       license='MIT',
       packages=find_packages(),
-      package_data={'ivy':['include/*/*.ivy','include/*/*.h']},
+      package_data={'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.{}','lib/*.a','z3/*.{}'.format(so_ext,so_ext)]},
       install_requires=[
           'ply',
           'tarjan'

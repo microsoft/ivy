@@ -2,22 +2,30 @@
 
 include quic_types
 include quic_frame
+include quic_transport_parameters
+include ip
 
+# The packet protocol
+#
+# The packet protocol has several funcitons including establishing
+# connections and loss detection. Packets carry frames whihc implement
+# many other funcition of QUIC.
+#
 # QUIC Packets
 # ------------
 
 # This section defines the QUIC packet datatype. Packets are the basic
-# unit of communication between endpoints. A packet has a *type*,
-# associated cid, an optional protocol version, and a packet
-# number. The *payload* of the packet consists of a sequence of
-# *frames* (see frame.ivy). A packet may be encoded in either *long*
-# or *short* format.
-# 
+# unit of communication between endpoints. A packet may be encoded in
+# either the long or the short format. There are packet types:
+# `initial`, `handshake`, `zero_rtt` and `one_rtt`. The `zero_rtt`
+# type is encoded in the short format, while others are encoded in the
+# long format.  Packets have associated source cid (long format only)
+# and destination cid, protocol version (long format only), and a
+# packet sequence number. An initial packet also has a *retry token*, which
+# is a (possibly empty) sequence of bytes.  The *payload* of the
+# packet consists of a sequence of *frames* (see frame.ivy).
 
-# TODO: not needed?
-# object quic_long_type = {
-#    type this = {initial,retry,handshake,zero_rtt_protected}
-# }
+# TODO: retry and one_rtt packet types
 
 # ### Packet
 
@@ -25,31 +33,509 @@ include quic_frame
 
 # The fields are:
 #
-# - *hdr_long*: true if the packet has long format [1]
-# - *hdr_type*: the packet type bits [2]
-# - *hdr_cid*: the associated cid [3]
-# - *hdr_version*: the protocol version, or zero for short format
-# - *hdr_pkt_num*: the packet number
-# - *hdr_token_length*: the retry token length (see section 4.4.1)
-# - *hdr_token*: the retry token  (see section 4.4.1)
-# - *payload*: the payload, a sequence of frames
+# - *ptype*: the packet type [2]
+# - *pversion*: the protocol version, if long format, else 0 [3]
+# - *dst_cid*: the destination cid [4]
+# - *src_cid*: the source cid, if long format, else 0  [5]
+# - *token*: the retry token (see section 4.4.1)  [6]
+# - *seq_num*: the packet sequence number  [7]
+# - *payload*: the payload, a sequence of frames  [8]
 
 object quic_packet = {
     type this = struct {
-        hdr_long : bool, # [1]
-        hdr_type : type_bits, # [2]
-        hdr_version : version, # [4]
-        dcid : cid_length, 
-        scid : cid_length, 
-        dst_cid : cid,
-        hdr_cid : cid, # [3]
-        hdr_token_length : stream_pos,
-        hdr_token : stream_data,
-        payload_length : stream_pos,
-        hdr_pkt_num : pkt_num, # [5]
-        payload : frame.arr # [6]
+        ptype : quic_packet_type, # [2]
+        pversion : version, # [3]
+        dst_cid : cid, # [4]
+        src_cid : cid, # [5]
+        token : stream_data, # [6]
+        seq_num : pkt_num, # [7]
+        payload : frame.arr # [8]
     }
 
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
+
+    action long(pkt:this) returns(res:bool) = {
+        res := pkt.ptype ~= quic_packet_type.one_rtt;
+    }
+
 }
+
+# Packet protocol events
+# -----------------------
+
+# The packet event
+# ================
+#
+# This event corresponds to transmission of a QUIC packet.
+#
+# Parameters
+# ----------
+#
+# - `src`: the source endpoint
+# - `dst`: the destination endpoint
+# - `pkt` : the packet contents
+
+action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
+
+# Packet protocol state
+# ---------------------
+
+# This section defines the history variables that track the state of
+# the packet protocol. Some of these variables are shared between
+# protocol layers, so that the allowed interleavings of events at
+# different layers can be specified.
+#
+
+# Packet protocol state
+# ---------------------
+
+# - For each cid C, `conn_seen(C)` is true if a packet with
+#   source cid C has been transmitted.
+#
+# - For each aid C, `conn_closed(C)` is true if C is in the closed state.
+#
+# - For each aid C, `conn_draining(C)` is true if C is in the draining state.
+#
+# - For each aid C, `draining_pkt_sent(C)` is true if the single
+#   packet allowed to be sent in transition to the draining state has been sent.
+#   This one packet must contain a connection_close frame with error code 0.
+#   TODO: we don't check the error code.
+#
+# - For each endpoint aid C, last_pkt_num(C,L) represents the
+#   number of the latest packet sent by C in encryption level L.
+#
+# - For each aid C, sent_pkt(C,L,N) is true if
+#   a packet numbered N has been sent by C in encryption level L.
+#
+# - For each aid C, acked_pkt(C,L,N) is true if
+#   a packet numbered N sent by C in encryption level L has been
+#   acknowledged. 
+#
+# - For each aid C, max_acked(C,L) is the greatest
+#   packet number N such that acked_pkt(C,L,N), or zero if
+#   forall N. ~acked(C,L,N).
+#
+# - For each aid C, ack_credit(E,C) is the number
+#   of non-ack-only packets sent to C, less the number of
+#   ack-only packets sent from C.
+#
+# - For each aid C, `trans_params_set(C)`
+#   is true if C has declared transport parameters.
+#
+# - For each aid C, function `trans_params(C)`
+#   gives the transport parameters declared by C.
+#
+# - The predicate `connected(C)` indicates that the peer of
+#   aid `C` has been determined.  This occurs conceptually when a
+#   server produces a server hello frame.
+#
+# - The function `connected(C)` maps the aid `C` to its peer, if
+#   the peer has been determined.
+#
+# - The function `nonce_cid(C)` maps the client aid `C` to the nonce
+#   cid it has chosen for its initial packet.
+#
+# - The predicate `is_client(C)` indicates that aid 'C' is taking
+#   the client role.
+#
+# - The predicate `conn_requested(S,D,C)` indicates that a client
+#   and endpoint S has requested to open a connection with a server
+#   at endpoint D, using cid C. 
+#
+# - The function `hi_non_probing(C)` indicates the highest packet number
+#   of a non-probing packet sent by aid `C`. 
+# 
+# - The relation `hi_non_probing_endpoint(C,E)` that the highest-numbered
+#   non-probing packet of aid `C` was at some time sent from endpopint `E`.
+#
+# - The relation `pkt_has_close(C,L,N)` is true if packet number `N` sent 
+#   by aid `C` contained a CONNECTION_CLOSE frame.
+#
+
+relation conn_seen(C:cid)
+relation conn_closed(C:cid)
+relation conn_draining(C:cid)
+relation draining_pkt_sent(C:cid)
+function last_pkt_num(C:cid,L:quic_packet_type) : pkt_num
+relation sent_pkt(C:cid,L:quic_packet_type,N:pkt_num)
+relation acked_pkt(C:cid,L:quic_packet_type,N:pkt_num)
+function max_acked(C:cid,L:quic_packet_type) : pkt_num
+function ack_credit(C:cid) : pkt_num
+relation trans_params_set(C:cid)
+function trans_params(C:cid) : trans_params_struct
+relation connected(C:cid)
+function connected_to(C:cid) : cid
+function nonce_cid(C:cid) : cid
+relation is_client(C:cid)
+relation conn_requested(S:ip.endpoint,D:ip.endpoint,C:cid)
+function hi_non_probing(C:cid) : pkt_num
+relation hi_non_probing_endpoint(C:cid,E:ip.endpoint)
+relation pkt_has_close(C:cid,L:quic_packet_type,N:pkt_num)
+
+
+# Initial state
+# -------------
+
+# The history variables are initialized as follows.  Initially, no
+# connections have been seen and no packets have been sent or
+# acknowledged.
+
+after init {
+    conn_seen(C) := false;
+    last_pkt_num(C,L) := 0;
+    conn_closed(C) := false;
+    conn_draining(C) := false;
+    draining_pkt_sent(C) := false;
+    sent_pkt(C,L,N) := false;
+    acked_pkt(C,L,N) := false;
+    pkt_has_close(C,L,N) := false;
+    max_acked(C,L) := 0;
+    ack_credit(C) := 0;
+    trans_params_set(C:cid) := false;
+    is_client(C) := false;
+    conn_requested(S,D,C) := false;
+    hi_non_probing(C) := 0;
+    hi_non_probing_endpoint(C,E) := false;
+}
+
+# Packet event specification
+# --------------------------
+
+# A packet event represents the transmision of a QUIC packet `pkt`
+# from source endpoint `src` to a QUIC destination endpoint `dst`
+# containing a sequence of queued frames.
+#
+# ### Requirements
+#
+# - The packet payload may not be empty [7].
+#
+# - A sender may not re-use a packet number on a given connection [4].
+#
+# - A packet containing only ack frames and padding is *ack-only*.
+#   For a given cid, the number of ack-only packets sent from src to dst
+#   must not be greater than the number of non-ack-only packets sent
+#   from dst to src [5].
+#
+# - For a given connection, a server must only send packets to an
+#   address that at one time in the past sent the as packet with
+#   the highest packet numer thus far received. See notes below on
+#   migration and path challenge. [10]
+
+# ### Effects
+#
+# - The `conn_seen` and `sent_pkt` relations are updated to reflect
+#   the observed packet [1].
+# - The `last_pkt_num` function is updated to indicate the observed
+#   packets as most recent for the packet's source and cid.
+#   
+#
+# ### Notes
+#
+# - In the low-level packet encoding, the packet number may be encoded using
+#   a small number of bytes, in a way that loses information.
+#   At this layer of the protocol, however, the packets contain the original full
+#   packet number.
+#
+# - On seeing a packet form a new address with the highest packect
+#   number see thus far, the server detects migration of the
+#   client. It begins sending packets to this address and initiates
+#   path validation for this address. Until path validation succeeds,
+#   the server limits data sent to the new address. Currently we
+#   cannot specify this limit because we don't know the byte size of
+#   packets or the timings of packets. 
+
+around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    
+    require pkt.token.end ~= 0 -> (pkt.ptype = quic_packet_type.initial);
+
+    # TEMPORARY: Do not allow zero_rtt packets
+
+    require pkt.ptype ~= quic_packet_type.zero_rtt;
+    
+    # Extract the source and destination cid's and packet number from the packet.
+
+    var dcid := pkt.dst_cid;
+    var scid := pkt.src_cid;
+
+    # The destination cid must represent an existing connection,
+    # except in the case of a client initial packet, when the
+    # destination cid may be the nonce cid chosen by the client for
+    # the given source cid. TODO: The standard says that on receiving
+    # the the server's cid, the clint must switch to it. However, we
+    # can't know when that server's cid has actually been received by
+    # the client. As an example, after the server sends its first
+    # initial packet, the client might still retransmit its initial
+    # packet using the nonce cid. In some cases, we can infer that the
+    # client has in fact seen the server's cid (for example, if it
+    # packet contains an ACK frame, or a CRYPTO frame that is
+    # reponsive to a server FRAME. This is trick to check, however,
+    # and the actual servers do not seem to check it.
+
+    require connected(dcid) |
+        pkt.ptype = quic_packet_type.initial
+        & is_client(scid)
+        & dcid = nonce_cid(scid);
+
+    # On long headers, both cids are given. If the destination cid is
+    # connected, it must be connected to the source cid (otherwise it
+    # must be a nonce generated by a client). 
+    # On short headers (meaning one_rtt) the scid is not given, so we
+    # use the recorded value.
+
+    if pkt.long {
+        require connected(dcid) -> connected_to(dcid) = scid;
+    }
+    else {
+        scid := connected_to(dcid);
+    };
+
+    # The packet type must match the encryption level of the queued
+    # frames at the source. 
+
+    require pkt.ptype = queued_level(scid);
+
+    # TEMPORARY: prevent big packet number jumps (work around minquic bug)
+    require pkt.seq_num <= last_pkt_num(scid,pkt.ptype) + 0x15;
+
+#    call show_pstats(scid,e,pkt.seq_num);
+
+    require ~sent_pkt(scid,pkt.ptype,pkt.seq_num);  # [4]
+    sent_pkt(scid,pkt.ptype,pkt.seq_num) := true;  # [1]
+
+    # The payload may not be empty
+
+    require num_queued_frames(scid) > 0;  # [7]
+
+    # The payload must exactly match the queued frames.
+
+    require pkt.payload = queued_frames(scid);
+
+    # TEMPORARY: don't allow client migration during handshake
+
+    require conn_seen(scid) & pkt.long & is_client(scid) -> conn_requested(src,dst,scid);
+
+    # Packet must be sent to the endpoint from which the highest numbered
+    # packet has been received.
+
+    require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);  # [10]
+
+
+    # TEMPORARY: do not apply ack-only rule to generated packets
+    # This can be removed when we have a frame queue per encryption level
+
+    require ~_generating & ~queued_non_ack(scid) -> ack_credit(scid) > 0;  # [5]
+
+    # QUESTION: THis sentence is from draft-18 section 13.1: "An
+    #   endpoint MUST NOT send a packet containing only an ACK frame
+    #   in response to a packet containing only ACK or PADDING frames,
+    #   even if there are packet gaps which precede the received
+    #   packet." Do we interpret this to mean that an ack-only packet
+    #   cannot ack *only* ack-only packets?  Or that an ack-only
+    #   packet cannot ack *any* ack-only packets?
+    
+    # If the sender is in the draining state, this is the draining packet.
+    # Make sure that a draining packet has not previously been sent and
+    # that the packet contains a connection_close frame;
+
+    if conn_draining(scid) {
+        require ~draining_pkt_sent(scid) & queued_close(scid);
+    };
+
+    ...
+
+    # Here, we have the updates to the packet protocol state.
+
+    # TEMPORARY: The following are repeated because currently locals defined in
+    # the "before" section cannot be accessed in the "after" section.
+
+    var dcid := pkt.dst_cid;
+    var scid := pkt.src_cid if pkt.long else connected_to(dcid);
+
+    # Record the packet number as latest seen
+
+    last_pkt_num(scid,pkt.ptype) := pkt.seq_num;
+ 
+    # TODO: the following should not be here
+
+    if pkt.ptype = quic_packet_type.initial {
+        # An initial packet with an unseen destination cid is a connection request.
+        if ~conn_seen(dcid) {
+            call tls_client_initial_request(src,dst,dcid);
+            conn_requested(src,dst,scid) := true;
+        };
+    
+    };
+
+    conn_seen(scid) := true;  # [1]
+
+    # Update the ack credits. A non-ack packet sent to a destination
+    # increases the destination's ack creait. An ack packet decreases
+    # the sender's ack credit.
+
+    if queued_non_ack(scid) {
+	ack_credit(dcid) := ack_credit(dcid) + 1;
+    } else {
+	ack_credit(scid) := ack_credit(scid) - 1;
+    };
+
+    # If this is a non-probing packet, update the highest non-probing
+    # packet number seen on from this aid.
+    # QUESTION: what if two differenht paths send the same packet number?
+    # QUESTION: how do you compare packet numbers with different encryption levels?
+
+    if queued_non_probing(scid) {
+        if pkt.ptype = quic_packet_type.one_rtt {
+            if pkt.seq_num >= hi_non_probing(scid) {
+                hi_non_probing(scid) := pkt.seq_num;
+                hi_non_probing_endpoint(scid,src) := true;
+            }
+        } else {
+            hi_non_probing_endpoint(scid,src) := true;
+        }
+    };
+
+    # If the packet contains a close frame, then set `pkt_has_close`
+
+    if queued_close(scid) {
+        pkt_has_close(scid,pkt.ptype,pkt.seq_num) := true;
+    };
+
+    # If the sender is in the draining state, this is the draining packet.
+
+    if conn_draining(scid) {
+        draining_pkt_sent(scid) := true
+    };
+
+    # The queued frames are deleted
+    
+    queued_frames(scid) := frame.arr.empty;
+    queued_non_probing(scid) := false;
+    queued_non_ack(scid) := false;
+    queued_close(scid) := false;
+    num_queued_frames(scid) := 0;
+}
+
+# Procedures
+# ==========    
+
+# TLS extensions are used in the client hello and server hello
+# messages to carry the QUIC transport parameters, via special TLS
+# extension type `quic_transport_parameters`. This type is defined in
+# the reference `quic_transport_parameters`. Here we have procedures
+# that infer the transport parameters events from the TLS handshake
+# messages that transmit the parameters.
+#
+# TODO: This inference is not really needed. It should be possible
+# to obtain the parameters directly from the TLS API. We infer the
+# parameters here only for historical reasons. 
+#
+# The `handle_tls_handshake` rules apply to each `client_hello`,
+# `server_hello` or `encrypted extensions` message, in order of
+# occurrence in the crypto data.  The last parameter,
+# `is_client_hello`, is true for a `client_hello` message (see below).
+#
+
+action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs:tls.handshake) = {
+
+    if some(ch:tls.client_hello) hs *> ch {
+        is_client(scid) := true;
+        call handle_tls_extensions(src,dst,scid,ch.extensions,true);
+    }
+    else if some(sh:tls.server_hello) hs *> sh {
+#        call map_cids(src,scid,dcid);    # [1]
+#        call map_cids(dst,dcid,scid);
+        call handle_tls_extensions(src,dst,scid,sh.extensions,false);
+    }
+    else if some(ee:tls.encrypted_extensions) hs *> ee {
+        call handle_tls_extensions(src,dst,scid,ee.extensions,false);
+    }
+}
+
+#
+# The rules in `handle_client_transport_parameters` apply to each
+# `quic_transport_parameters` extension instance in order of
+# occurrence.
+#
+
+action handle_tls_extensions
+    (src:ip.endpoint,
+     dst:ip.endpoint,
+     scid:cid,
+     exts:vector[tls.extension],
+     is_client_hello:bool) =
+{
+
+    # We process the extensions in a message in order.
+
+    var idx := exts.begin;
+    while idx < exts.end {
+        var ext := exts.value(idx);
+            
+        # For every `quic_transport_parameters` extension...
+
+        if some (tps:quic_transport_parameters) ext *> tps {
+            call handle_client_transport_parameters(src,dst,scid,tps,is_client_hello);
+            trans_params_set(scid) := true;
+            
+        };
+        idx := idx.next
+    };
+}
+
+
+# The rules in `handle_transport_parameter` apply to each
+# `transport_parameter` instance a `quic_transport_parameters`
+# extension, in order of occurrence.
+
+# Requirements:
+#
+# - The endpoint must issue an `initial_max_stream_data` value [1].
+# - The endpoint must issue an `initial_max_data` value [2].
+# - The endpoint must issue an `idle_timeout` value [3].
+# - A client must not issue an `stateless_reset_token` value [4].
+#
+# Note:
+#
+# - Setting a transport parameter requires that the parameter is not
+#   previously set.
+
+action handle_client_transport_parameters(src:ip.endpoint,dst:ip.endpoint,scid:cid,
+                                          tps:quic_transport_parameters,
+                                          is_client_hello : bool) =
+{
+#    call client_transport_parameters_event(src,dst,scid,tps);
+    var idx := tps.transport_parameters.begin;
+    while idx < tps.transport_parameters.end {
+        trans_params(scid) := tps.transport_parameters.value(idx).set(trans_params(scid));
+        idx := idx.next
+    };
+    require initial_max_stream_data_bidi_local.is_set(trans_params(scid));  # [1]
+    require initial_max_data.is_set(trans_params(scid));  # [2]
+    require idle_timeout.is_set(trans_params(scid));  # [3]
+    require initial_max_stream_data_bidi_remote.is_set(trans_params(scid));  # [1]
+    require initial_max_stream_data_uni.is_set(trans_params(scid));  # [1]
+    if is_client_hello {
+        require ~stateless_reset_token.is_set(trans_params(scid));  # [4]
+    }
+}
+
+
+
+
+
+
+# action client_transport_parameters_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,
+#                                          tps:quic_transport_parameters)
+
+# import client_transport_parameters_event
+
+# action show_enc_level(e:quic_packet_type)
+
+# import show_enc_level
+
+# import action show_offset_length(offset:stream_pos,length:stream_pos)
+
+# import action show_pstats(scid:cid,e:quic_packet_type,pnum:pkt_num)
+
+# import action show_tls_keys_established_event(scid:cid, e:quic_packet_type)

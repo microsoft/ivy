@@ -58,7 +58,6 @@ class FileBrowser(Frame):
         self.filename = None
         self.lineno = None
     def set(self,filename,lineno):
-        print "set: {} {}".format(filename,lineno)
         if filename != self.filename:
             f = open(filename,'rU')
             if not f:

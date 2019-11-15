@@ -415,7 +415,8 @@ def gather_referenced_symbols(expr,res,ignore=[]):
             res.add(sym)
             if sym in is_derived:
                 ldf = is_derived[sym]
-                gather_referenced_symbols(ldf.formula.args[1],res,ldf.formula.args[0].args)
+                if ldf is not True:
+                    gather_referenced_symbols(ldf.formula.args[1],res,ldf.formula.args[0].args)
                 
 skip_z3 = False
 
@@ -441,8 +442,11 @@ def make_thunk(impl,vs,expr):
         declare_symbol(impl,sym,classname=the_classname)
     for fun in funs:
         ldf = is_derived[fun]
-        with ivy_ast.ASTContext(ldf):
-            emit_derived(None,impl,ldf.formula,the_classname,inline=True)
+        if ldf is True:
+            emit_constructor(None,impl,fun,the_classname,inline=True)
+        else:
+            with ivy_ast.ASTContext(ldf):
+                emit_derived(None,impl,ldf.formula,the_classname,inline=True)
     envnames = [varname(sym) for sym in env]
     open_scope(impl,line='{}({}) {} {}'.format(name,','.join(sym_decl(sym,classname=the_classname) for sym in env)
                                              ,':' if envnames else ''
@@ -508,6 +512,9 @@ def emit_cpp_sorts(header):
             header.append("    };\n");
         elif isinstance(il.sig.sorts[name],il.EnumeratedSort):
             sort = il.sig.sorts[name]
+            header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
+        elif name in il.sig.interp and isinstance(il.sig.interp[name],il.EnumeratedSort):
+            sort = il.sig.interp[name]
             header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
         elif name in im.module.variants:
             sort = il.sig.sorts[name]
@@ -879,6 +886,8 @@ def collect_used_definitions(pre,inpdefs,ssyms):
     
 
 def emit_defined_inputs(pre,inpdefs,code,classname,ssyms,fsyms):
+    global delegate_enums_to
+    delegate_enums_to = classname
     udefs,usyms = collect_used_definitions(pre,inpdefs,ssyms)
     global is_derived
     for sym in usyms:
@@ -899,6 +908,7 @@ def emit_defined_inputs(pre,inpdefs,code,classname,ssyms,fsyms):
         delegate_methods_to = 'obj.'
         code_line(code,code_eval(code,lhs) + ' = ' + code_eval(code,rhs))
         delegate_methods_to = ''
+    delegate_enums_to = ''
     
 def minimal_field_references(fmla,inputs):
     inpset = set(inputs)
@@ -1142,6 +1152,19 @@ def emit_derived(header,impl,df,classname,inline=False):
     mp = dict(zip(vs,ps))
     rhs = ilu.substitute_ast(df.args[1],mp)
     action = ia.AssignAction(retval,rhs)
+    action.formal_params = ps
+    action.formal_returns = [retval]
+    emit_some_action(header,impl,name,action,classname,inline)
+
+def emit_constructor(header,impl,cons,classname,inline=False):
+    name = cons.name
+    sort = cons.sort.rng
+    retval = il.Symbol("ret:val",sort)
+    vs = [il.Variable('X{}'.format(idx),s) for idx,s in enumerate(cons.sort.dom)]
+    ps = [ilu.var_to_skolem('fml:',v) for v in vs]
+    destrs = im.module.sort_destructors[sort.name]
+    asgns = [ia.AssignAction(d(retval),p) for idx,(d,p) in enumerate(zip(destrs,ps))]
+    action = ia.Sequence(*asgns);
     action.formal_params = ps
     action.formal_returns = [retval]
     emit_some_action(header,impl,name,action,classname,inline)
@@ -1643,6 +1666,9 @@ def module_to_cpp_class(classname,basename):
     is_derived = dict()
     for ldf in im.module.definitions + im.module.native_definitions:
         is_derived[ldf.formula.defines()] = ldf
+    for sortname, conss in im.module.sort_constructors.iteritems():
+        for cons in conss:
+            is_derived[cons] = True
     global cpptypes
     cpptypes = []
     global sort_to_cpptype
@@ -1785,6 +1811,10 @@ def module_to_cpp_class(classname,basename):
 #include <string.h>
 #include <stdio.h>
 #include <string>
+#if __cplusplus < 201103L
+#else
+#include <cstdint>
+#endif
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
     impl.append("std::ofstream __ivy_out;\n")
@@ -2009,6 +2039,7 @@ struct deser_err {
 struct ivy_ser {
     virtual void  set(long long) = 0;
     virtual void  set(bool) = 0;
+    virtual void  setn(long long inp, int len) = 0;
     virtual void  set(const std::string &) = 0;
     virtual void  open_list(int len) = 0;
     virtual void  close_list() = 0;
@@ -2058,6 +2089,7 @@ struct ivy_binary_ser : public ivy_ser {
 struct ivy_deser {
     virtual void  get(long long&) = 0;
     virtual void  get(std::string &) = 0;
+    virtual void  getn(long long &res, int bytes) = 0;
     virtual void  open_list() = 0;
     virtual void  close_list() = 0;
     virtual bool  open_list_elem() = 0;
@@ -2546,7 +2578,9 @@ class z3_thunk : public thunk<D,R> {
     for ldf in im.module.definitions + im.module.native_definitions:
         with ivy_ast.ASTContext(ldf):
             emit_derived(header,impl,ldf.formula,classname)
-
+    for sortname, conss in im.module.sort_constructors.iteritems():
+        for cons in conss:
+            emit_constructor(header,impl,cons,classname)
     for native in im.module.natives:
         tag = native_type(native)
         if tag.startswith('encode'):
@@ -2558,7 +2592,7 @@ class z3_thunk : public thunk<D,R> {
                 raise iu.IvyError(native,"duplicate encoding for sort {}".format(tag))
             encoded_sorts.add(tag)
             continue
-        if tag not in ["member","init","header","impl"]:
+        if tag not in ["member","init","header","impl","inline"]:
             raise iu.IvyError(native,"syntax error at token {}".format(tag))
         if tag == "member":
             emit_native(header,impl,native,classname)
@@ -2626,6 +2660,17 @@ class z3_thunk : public thunk<D,R> {
     __unlock();
 }
 """.replace('CLASSNAME',classname))
+
+    for native in im.module.natives:
+        tag = native_type(native)
+        if tag == "inline":
+            native_classname = classname
+            code = native_to_str(native)
+            native_classname = None
+            if code not in once_memo:
+                once_memo.add(code)
+                header.append(code)
+
 
     ivy_cpp.context.globals.code.extend(header)
     ivy_cpp.context.members.code = []
@@ -3196,6 +3241,9 @@ def emit_constant(self,header,code):
         if self.sort in sort_to_cpptype: 
             code.append(sort_to_cpptype[self.sort].literal(self.name))
             return
+    if isinstance(self,il.Symbol) and self in il.sig.constructors:
+        if delegate_enums_to:
+            code.append(delegate_enums_to+'::')
     code.append(varname(self.name))
     if self in is_derived:
         code.append('()')
@@ -3275,6 +3323,7 @@ def capture_emit(a,header,code,capture_args):
         a.emit(header,code)
 
 delegate_methods_to = ''
+delegate_enums_to = ''
 
 def emit_app(self,header,code,capture_args=None):
     # handle macros
@@ -3944,9 +3993,27 @@ ia.IfAction.emit = emit_if
 def emit_while(self,header):
     global indent_level
     code = []
-    open_scope(header,line='while('+code_eval(header,self.args[0])+')')
-    self.args[1].emit(header)
-    close_scope(header)
+    if isinstance(self.args[0],ivy_ast.Some):
+        local_start(header,self.args[0].params())
+
+    cond = code_eval(code,self.args[0])
+    if len(code) == 0:
+        open_scope(header,line='while('+cond+')')
+        self.args[1].emit(header)
+        close_scope(header)
+    else:
+        open_scope(header,line='while(true)')
+        header.extend(code);
+        open_scope(header,line='if('+cond+')')
+        self.args[1].emit(header)
+        close_scope(header)
+        open_scope(header,line='else')
+        code_line(header,'break')
+        close_scope(header)
+        close_scope(header)
+    if isinstance(self.args[0],ivy_ast.Some):
+        local_end(header)
+        
 
 
 ia.WhileAction.emit = emit_while
@@ -4723,7 +4790,7 @@ public:
         return apply(decl_name,a);
     }
 
-    z3::expr int_to_z3(const z3::sort &range, __int64 value) {
+    z3::expr int_to_z3(const z3::sort &range, int64_t value) {
         if (range.is_bool())
             return ctx.bool_val((bool)value);
         if (range.is_bv())
@@ -5149,7 +5216,7 @@ def main_int(is_ivyc):
                                 paths = '-I $Z3DIR/include -L $Z3DIR/lib -Wl,-rpath=$Z3DIR/lib' 
                             else:
                                 _dir = os.path.dirname(os.path.abspath(__file__))
-                                paths = '-I {} -L {} -Wl,-rpath={}'.format(_dir,_dir,_dir)
+                                paths = '-I {} -L {} -Wl,-rpath={}'.format(os.path.join(_dir,'include'),os.path.join(_dir,'lib'),os.path.join(_dir,'lib'))
                         else:
                             paths = ''
                         for lib in libs:
@@ -5209,6 +5276,8 @@ hash_h = """
   class "hash" should be made in this namespace.
 
   --*/
+
+#pragma once
 
 #ifndef HASH_H
 #define HASH_H

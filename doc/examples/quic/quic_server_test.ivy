@@ -1,19 +1,14 @@
 #lang ivy1.7
 
 include order
-include quic_packet
 include quic_connection
-include quic_deser
-include quic_ser
 include quic_infer
-include tls_msg
-include udp_impl
-include serdes
-include quic_protection
 include file
+include quic_shim
+include quic_locale
 
-# This is a simple tester for quic servers. We assume the server is located on localhost at port 4433.
-# The tester plays the role of a single client.
+# This is a simple tester for quic servers. The tester plays the role of a
+# single client, which may use multiple UDP ports.
 #
 # Compile the tester like this:
 #
@@ -34,37 +29,15 @@ include file
 #     client_port_alt:int     the alternate client port (for migration) (default 4988)
 #     max_stream_data:int     the initial max stream data (0x2000)
 #
-
-# Notes:
 #
-# - If `send_fin` is true, the client will send each HTTp request on a different stream. Othereise,
-#   all HTTP request use the same stream.
+# Notes:
 #
 # - All IP addresses are IPv4 and are given as single 32-bit numbers,
 #   rather than using the dot notation.
+#
+#
 
-
-# The wire specification monitors this action.
-
-action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
-
-# This is a ghost action representing a TLS send event.
-
-action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data,
-                      pos:stream_pos,e:encryption_level) = {}
-
-# create an UDP network instance to communicate to server with
-# Note: because of packet coalescing, a single UDP datagram contains
-# an array of UIC packets.
-
-# Our test network has three endpoints: two belonging to the client (allowing for
-# migration) and one belonging to the server
-
-object endpoint_id = {
-    type this = {client, client_alt, server}
-}
-
-# The parameters
+# The command-line parameters, with their defaults
 
 parameter the_cid : cid = 0xd
 parameter client_addr : ip.addr = 0x7f000001
@@ -75,19 +48,164 @@ parameter client_port : ip.port = 4987
 parameter client_port_alt : ip.port = 4988
 parameter max_stream_data : stream_pos = 0x2000
 
-# read a data file to send to server
+# Network setup
+# -------------
+#
+# To test the server over the OS sockets layer, we need some setup. We must
+# establish which interface and which ports the tester will use. 
+#
+
+# We use this type as a host id. There are two client host ids so we
+# can model migration.
+
+object endpoint_id = {
+    type this = {client, client_alt, server}
+}
+
+action endpoint_id_addr(ep_id : endpoint_id) returns (ep:ip.endpoint) = {
+    ep.protocol := ip.udp;
+    ep.addr := server_addr if ep_id = endpoint_id.server else client_addr;   # the loop-back addr
+    ep.port := client_port if ep_id = endpoint_id.client
+               else (client_port_alt if ep_id = endpoint_id.client_alt
+               else server_port);
+}    
+
+module quic_endpoint(ep_id) = {
+    var ep : ip.endpoint
+    var tls_id : tls_api.id
+    var enc_level : quic_packet_type
+    after init {
+	ep := endpoint_id_addr(ep_id);
+        enc_level := quic_packet_type.initial;
+    }
+}
+    
+# create a client and server. the client has an instance of TLS
+
+instance client : quic_endpoint(endpoint_id.client)
+instance server : quic_endpoint(endpoint_id.server)
+
+# An ip endpoint for the client to migrate to.
+
+var client_alt : ip.endpoint
+
+after init {
+    client_alt := endpoint_id_addr(endpoint_id.client_alt)
+}
+
+# We create sockets and bind them to the addresses that the client can use.
+
+var sock : net.socket
+var sock_alt : net.socket
+
+instance tls_extensions : vector(tls.extension)
+
+# This creates the sockets and also a TLS instance to be used by `the_cid`.
+# TODO: the TLS isntance should be created dynamically when the application
+# layer creates a connection. 
+
+after init {
+    sock := net.open(endpoint_id.client,client.ep);
+    sock_alt := net.open(endpoint_id.client_alt,client_alt);
+    client.tls_id := 0;
+    server.tls_id := 1;
+    var extns := tls_extensions.empty;
+    extns := extns.append(make_transport_parameters);
+    call tls_api.upper.create(0,false,extns);  # false means this instance of tls is not a server
+}
+
+# Here we have a bunch of conversions that map between cid's, IP
+# endpoints, TLS instances and host ids. TODO: This is a mess and
+# should be done in a more systematic way.
+
+# Get the host id associated to an ip endpoint. 
+
+action endpoint_to_pid(src:ip.endpoint) returns (pid:endpoint_id) = {
+    if src = client.ep {
+        pid := endpoint_id.client;
+    } else if src = client_alt {
+        pid:= endpoint_id.client_alt;
+    } 
+}
+
+# Get the IP endpoint associated to a host id and socket number.
+
+action socket_endpoint(host:endpoint_id,s:net.socket) returns (src:ip.endpoint) = {
+    src := client.ep if host = endpoint_id.client else client_alt
+}
+    
+# Get the socket number associated to an IP endpoint.
+
+action endpoint_to_socket(src:ip.endpoint) returns (socket:net.socket) = {
+    if src = client.ep {
+        socket := sock;
+    } else if src = client_alt {
+        socket := sock_alt;
+    } 
+}
+
+# Get the source IP endpoint associated to a TLS instance
+# TODO: this shouldn't be needed.
+
+action tls_id_to_src(tls_id:tls_api.id) returns (src:ip.endpoint) = {
+    src := client.ep if tls_id = client.tls_id else server.ep;
+}
+
+# Get the destination IP endpoint associated to a TLS instance
+# TODO: this shouldn't be needed.
+
+action tls_id_to_dst(tls_id:tls_api.id) returns (dst:ip.endpoint) = {
+    dst := server.ep if tls_id = client.tls_id else client.ep;
+}
+
+# Get cid associated to a TLS instance
+
+action tls_id_to_cid(tls_id:tls_api.id) returns (scid:cid) = {
+    scid := the_cid;
+}
+
+# Returns true if an IP endpoint is controlled by the generator.
+# TODO: shouldn't be needed.
+
+action dst_is_generated(dst:ip.endpoint) returns (res:bool) = {
+    res := dst = client.ep | dst = client_alt
+}
+
+# Returns the TLS instance associated to a destination IP endppoint.
+# TODO: shouldn't be needed.
+
+action dst_tls_id(dst:ip.endpoint) returns (tls_id:tls_api.id) = {
+    tls_id := client.tls_id
+}
+
+#
+# Client HTTP request
+# ===================
+#
+# Since we are testing an HTTP server, we need to make a sensible HTTP
+# request, rather than just sendin random bytes, in order to get a response.
+# Here, we read the HTTP request from a file:
+#
 
 var http_request : stream_data
 instance http_request_file : binary_input_file(stream_data,cid)
 
+# This reads the file on initialization
 
 after init {
     http_request := http_request_file.read;
 }
 
-instance tls_extensions : vector(tls.extension)
+# This selects the client's nonce CID
 
-# HACK: we fix the initial client transport parameters here
+after init {
+    nonce_cid(the_cid) := server_cid;
+}
+
+#
+# We fix the initial transport parameters here. TODO: In principle these
+# parameters should be selected randomly by some event.
+#
 
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
     tp.initial_version := 0xff000012;
@@ -108,451 +226,148 @@ action make_transport_parameters returns (tp:quic_transport_parameters) = {
     tp.transport_parameters := tp.transport_parameters.append(imsdu);
 }
 
-object botan = {
-    instance id : unbounded_sequence
-    instance lower : tls_lower_intf(id,stream_data)
-    instance upper : tls_intf(id,stream_pos,stream_data,lower,tls_extensions,tls_ser,pkt_num)
-}    
-
-instance prot : quic_protection(botan.id,botan.upper)
-
-instance net : udp_impl(endpoint_id,prot.arr,quic_prot_ser,quic_prot_deser)
-
-# Map test endpoint ids to the ip endpoints
-
-# parameter server_addr: ip.addr
-
-# server_addr=0xc0a80101 client_addr=0xc0a80102
-
-action endpoint_id_addr(ep_id : endpoint_id) returns (ep:ip.endpoint) = {
-    ep.protocol := ip.udp;
-    ep.addr := server_addr if ep_id = endpoint_id.server else client_addr;   # the loop-back addr
-    ep.port := client_port if ep_id = endpoint_id.client
-               else (client_port_alt if ep_id = endpoint_id.client_alt
-               else server_port);
-}    
-
-module quic_endpoint(ep_id) = {
-    var ep : ip.endpoint
-    var tls_id : botan.id
-    var enc_level : encryption_level
-    after init {
-	ep := endpoint_id_addr(ep_id);
-        enc_level := encryption_level.initial;
-    }
-}
-    
-# create a client and server. the client has an instance of TLS
-
-instance client : quic_endpoint(endpoint_id.client)
-instance server : quic_endpoint(endpoint_id.server)
-
-# An ip endpoint for the client to migrate to.
-
-var client_alt : ip.endpoint
-
-after init {
-    client_alt := endpoint_id_addr(endpoint_id.client_alt)
-}
-
-# sockets for the client and client_alt addresses
-
-var sock : net.socket
-var sock_alt : net.socket
-
-after init {
-    sock := net.open(endpoint_id.client,client.ep);
-    sock_alt := net.open(endpoint_id.client_alt,client_alt);
-    client.tls_id := 0;
-    server.tls_id := 1;
-    var extns := tls_extensions.empty;
-    extns := extns.append(make_transport_parameters);
-    call botan.upper.create(0,false,extns);  # false means this instance of tls is not a server
-}
-
-# Hook up tls to quic
-
-# When the local TLS sends message data, we generate a `tls_send_event`. This causes
-# the data to be recorded in the appropriate abstract crypto stream, and later to be
-# transmitted via a generated crypto frame event. 
-
-implement botan.lower.send(tls_id:botan.id,bytes:stream_data,lev:botan.lower.level) {
-    var e := encryption_level.initial if lev = 0 else (encryption_level.handshake if lev = 2 else encryption_level.other);
-    if tls_id = client.tls_id {
-        call tls_send_event(client.ep, server.ep, the_cid, 0, bytes,
-                            crypto_data_end(the_cid,client.enc_level),e);
-#        client.enc_level := client.enc_level.next;
-    };
-    if tls_id = server.tls_id {
-        call tls_send_event(server.ep, client.ep, the_cid, 0, bytes,
-                             crypto_data_end(the_cid,server.enc_level), e);
-        server.enc_level := server.enc_level.next;
-    }
-}
-
-after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data,
-                     pos:stream_pos, e:encryption_level) {
-    call show_tls_send_event(src,dst,scid,dcid,data,pos,e);
-}
-
-
-implement botan.upper.keys_established(tls_id:botan.id,lev:botan.upper.level) {
-    var e := encryption_level.handshake if lev = 2 else encryption_level.other;
-    if tls_id = client.tls_id {
-        call tls_keys_established_event(the_cid,e);
-        if e = encryption_level.handshake | e = encryption_level.other {
-            client.enc_level := encryption_level.handshake
-        }
-    }
-}
-
-after tls.handshake_data_event(src : ip.endpoint, dst : ip.endpoint, data:stream_data) {
-    # When TLS handshake data is conceputally transferred from the server to the client,
-    # we feed it to the real TLS. We do it at this point because we may need it to generate the
-    # keys for the next packet to be decrypted. Perhaps this should
-    # happen on a `tls_recv_event`, but that would be too late.
-    if dst = client.ep | dst = client_alt {
-        
-        call botan.lower.recv(client.tls_id,data,0); # TODO: fill in the encryption level
-    }
-}
-
-# Assume that initial packets are sent only to the server under test
+#
+# Restrict generation to packets from the designated client endpoints
+# to the server endpoint.
+#
 
 before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
-#    if pkt.hdr_type = 0x7f {
-#        require dst = server.ep
-#    };
-    # TEMPORARY: all packets to server!
     if _generating {
         require src = client.ep | src = client_alt;
         require dst = server.ep;
-        require pkt.hdr_long -> pkt.dcid = 5 & pkt.scid = 5;
-        require pkt.hdr_token_length = 0 & pkt.hdr_token.end = 0; 
-        if pkt.hdr_long {
-            require ~cid_dst_to_src_set(pkt.hdr_cid) -> pkt.dst_cid = server_cid
-        }
+        require pkt.token.end = 0; 
     };
-    require pkt.hdr_long -> pkt.hdr_version = 0xff000012
+    require pkt.long -> pkt.pversion = 0xff000012
 }
 
-# Hook up to the remote server
-
-# If this is an initial client request, we set up the initial keys
-# based on the destination cid (which in principle is a random sequence
-# of bytes. Note, the "salt" is specified in QUIC-TLS version 15, and is
-# unchanged in version 16.
-
-after client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
-    var ikm := cid_to_bytes(pkt.dst_cid,pkt.dcid + 3 if pkt.dcid > 0 else 0);
-    var salt : stream_data := stream_data.empty;
-
-    salt := salt.append(0xef);
-    salt := salt.append(0x4f);
-    salt := salt.append(0xb0);
-    salt := salt.append(0xab);
-    salt := salt.append(0xb4);
-    salt := salt.append(0x74);
-    salt := salt.append(0x70);
-    salt := salt.append(0xc4);
-    salt := salt.append(0x1b);
-    salt := salt.append(0xef);
-    salt := salt.append(0xcf);
-    salt := salt.append(0x80);
-    salt := salt.append(0x31);
-    salt := salt.append(0x33);
-    salt := salt.append(0x4f);
-    salt := salt.append(0xae);
-    salt := salt.append(0x48);
-    salt := salt.append(0x5e);
-    salt := salt.append(0x09);
-    salt := salt.append(0xa0);
-
-    # salt := salt.append(0xef);
-    # salt := salt.append(0x4f);
-    # salt := salt.append(0xb0);
-    # salt := salt.append(0xab);
-    # salt := salt.append(0xb4);
-    # salt := salt.append(0x74);
-    # salt := salt.append(0x70);
-    # salt := salt.append(0xc4);
-    # salt := salt.append(0x1b);
-    # salt := salt.append(0xef);
-    # salt := salt.append(0xcf);
-    # salt := salt.append(0x80);
-    # salt := salt.append(0x31);
-    # salt := salt.append(0x33);
-    # salt := salt.append(0x4f);
-    # salt := salt.append(0xae);
-    # salt := salt.append(0x48);
-    # salt := salt.append(0x5e);
-    # salt := salt.append(0x09);
-    # salt := salt.append(0xa0);
-    call botan.upper.set_initial_keys(0,salt,ikm);
-}
-
-action cid_to_bytes(c:cid,len:cid_length) returns(res:stream_data) = {
-    <<<
-    res.resize(len);
-    for (unsigned i = 0; i < len; i++) {
-        res[len-i-1] = 0xff & (c.val >> (i * 8));
-    }
-    >>>
-}
-
-# To estimate the sequence number of packets, we have to know the encryption level.
-# This action gets the encryption level from the packet header.
-
-action packet_encryption_level(h:prot.header_info) returns (e:encryption_level) = {
-    e := encryption_level.other if ~h.hdr_long
-            else (encryption_level.initial if h.hdr_type = 0x7f
-                  else encryption_level.handshake);
-}
-
-# To get the reference packet number for a packet, we need to know the source connection
-# id, which is not present in short packets. Here we get it from history.
-
-action packet_scid(h:prot.header_info) returns (scid:cid) = {
-    if h.hdr_long {
-        scid := h.scid;
-    } else {
-        scid := cid_dst_to_src(h.dcid);
-    }
-}
-
-# To encrypt and decrypt packets we need to know the true packet number, which
-# must be inferred from truncated number in the packet and the packet number history.
-# As a workaround, we use `last_pkt_num(scid,e)` where `e` is the
-# encryption level. We infer the encryption level from the packet type.
-
-action reference_pkt_num(spkt:stream_data) returns (pnum:pkt_num) = {
-    var h := prot.get_header_info(spkt);
-    var e := packet_encryption_level(h);
-    var scid := packet_scid(h);
-    pnum := last_pkt_num(scid,e);
-}
-
-# To send and receive packets, we need to serialize and deserialize them.
-# This object allows that.
-
-instance pkt_serdes : serdes(quic_packet,stream_data,quic_ser,quic_deser)
-
-# When the client sends a packet, route it to the server on the socket
-# corresponding to the ip endpoint, after first serializing it, then
-# encrypting it. TODO: coalesce packets. As of now, we send only one
-# QUIC packet per UDP datagram.
-
-after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
-    if src = client.ep | src = client_alt {
-        var spkt := pkt_serdes.to_bytes(pkt);
-        var rnum := reference_pkt_num(spkt);
-        call clear_packet(rnum,spkt);
-        var ppkt := prot.encrypt(client.tls_id,rnum,spkt);
-        call cipher_packet(ppkt);
-        var pkts := prot.arr.empty;
-        pkts := pkts.append(ppkt);
-        if src = client.ep {
-            call net.send(endpoint_id.client,sock,dst,pkts);
-        } else if src = client_alt {
-            call net.send(endpoint_id.client_alt,sock_alt,dst,pkts);
-        } 
-    }
-}
-
-# When an packet arrives at the client endpoint, decrypt it, deserialize it,
-# then generate a `packet_event`.
-
-implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.arr) {
-    if host ~= endpoint_id.server {
-	var dst := client.ep if host = endpoint_id.client else client_alt; 
-        var idx := pkts.begin;
-        while idx < pkts.end {
-            var ppkt := pkts.value(idx);
-            var rnum := reference_pkt_num(ppkt);
-            call show_stream(ppkt);
-            var res := prot.decrypt(client.tls_id,rnum,ppkt);
-            call show_stream(res.data);
-            if res.ok {
-                var pkt := pkt_serdes.from_bytes(res.data);
-	        call show_packet(src,dst,pkt);
-	        call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
-	        call packet_event(src,dst,pkt);
-            }
-            else {
-                call undecryptable_packet_event(src,dst,ppkt);
-#                assert false;
-            };
-            idx := idx.next;
-        }
-    }
-}
-
-# TLS receive event handling
+# The protocol specification describes all the events occurring the
+# system at all protocol layers. When constructing the test mirror,
+# however, we need to generate only events that are outputs of the
+# environment. Ivy doesn't have any built-in mechanism to do this,
+# so we have to add a constraint to every generated action. 
 #
-# When TLS data is received, at the client, we route it to the client's instance of TLS.
+# We also add other pre-conditions to the actions to try to restrict
+# them to relevant parameter values. 
 #
-# Also, we require that all of the received data (from stream_pos up
-# to stream_length) is transferred to TLS, otherwise, the data will be
-# dribbled one byte at a time, which gets boring.
+# To restrict the generated events, we use the built-in predicate
+# "_generating" that is true if this is a generated event.
 #
-
-
-around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:encryption_level, lo : stream_pos, hi : stream_pos ) {
-    require src = server.ep & dst = client.ep;
-    require hi = crypto_length(scid,e);
-    require e = encryption_level.handshake -> crypto_pos(dcid,encryption_level.initial) = crypto_length(scid,encryption_level.initial);
-    require e = encryption_level.other -> crypto_pos(dcid,encryption_level.initial) = crypto_length(scid,encryption_level.initial);
-    require e = encryption_level.other -> crypto_pos(dcid,encryption_level.handshake) = crypto_length(scid,encryption_level.handshake);
-    require dcid = the_cid;
-    ...
-    var tls_id := client.tls_id if dst = client.ep else server.tls_id;
-    var data := stream_data.empty;
-    # Fill in the message bytes
-    var idx := lo;
-    while idx < hi {
-	data := data.append(crypto_data(scid,e).value(idx));
-	idx := idx.next
-    };
-#    call botan.lower.recv(tls_id,data)
-}
-    
-action hi_byte_pos(x:stream_pos) returns (res:byte) = {
-    <<< res = (x >> 8) & 0xff; >>>
-}
-
-action lo_byte_pos(x:stream_pos) returns (res:byte) = {
-    <<< res = x  & 0xff; >>>
-}
-
-# The protocol specification describes all the events occurring the system
-# at all protocol layers. When we test, however, we need to divide the system
-# into the part simulated by the tester and the part executed by the real code
-# under test. In this case to onyl want the tester to play the role of a client
-# at a particular network address.
+# This is the mirror constraint for the stream frame protocol. We add
+# some requirements to make the tests more interesting. In particular,
+# we don't want the tester to produce lots of tiny frames (or empty
+# ones) so we require that a stream frame send all of the available
+# stream data. 
 #
-# To accomplish this we add a precondition to the protocol events that
-# restricts the parameter values in case we are running on behalf of
-# the tester. We can determine this using the built-in predicate
-# "_generating".
+# TODO: We reuquire tje `off` and `len` bits to be true. Maybe these should
+# determined in the low-level packet encoding stage.
 
-# This is the tester constraint for the stream frame protocol. We add some requirements
-# to make the tests more interesting. In particular, we don't want the tester to
-# produce lots of tiny frames (or empty ones) so we require that a stream frame
-# send all of the available stream data. We never allow the fin bt to be set, since
-# we don't really have good rules for this yet.
-
-before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
+before frame.stream.handle(f:frame.stream,scid:cid,dcid:cid,e:quic_packet_type) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
-        require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
-        require f.len & f.off; # TODO: when can f.off be false? We make len true here, since len=false implies last fram of packet.
-#        require ~f.fin; # TEMPORARY
+        require connected(the_cid) & dcid = connected_to(the_cid);
+        require f.len & f.off; 
         require f.length > 0;
-        call show_level_offset_length(e,f.offset,stream_length(dcid,f.id));
         require f.offset = stream_length(dcid,f.id);
         require f.length = (stream_app_data_end(dcid,f.id)) - f.offset;
-        # require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
     }
 }
 
 # We have something similar for crypto frames
 
-before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
+before frame.crypto.handle(f:frame.crypto,scid:cid,dcid:cid,e:quic_packet_type) {
     if _generating {
-        require src = client.ep & dst = server.ep; 
         require scid = the_cid;
         require f.length > 0;
-#        call show_level_offset_length(e,crypto_length(scid,e),crypto_data_end(src,scid,e))
         require f.offset = crypto_length(scid,e);
         require f.length = (crypto_data_end(scid,e)) - f.offset;
     }
 }
 
-# Generate ack frames only for the client.
+# Generate ack frames only for the client. HACK: to avoid generating
+# blizzards of ACK's, we set the bit `force_new_ack` which forces
+# ACK's to have at least on previously unacked sequenc number. There
+# should be a better way to do this.
 
-before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.ack.handle(f:frame.ack,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         force_new_ack := true;
     }
 }
 
-# Generate rst_stream frames only for the client.
+# Generate rst_stream frames only for the environment process(es).
 
-before frame.rst_stream.handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.rst_stream.handle(f:frame.rst_stream,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         require f.id = 4;
     }
 }
 
-# Generate stop_sending frames only for the client.
+# Generate stop_sending frames only for the environment process(es).
 
-before frame.stop_sending.handle(f:frame.stop_sending,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.stop_sending.handle(f:frame.stop_sending,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         require f.id = 4;
     }
 }
 
-# Generate max_stream_id frames only for the client.
+# Generate max_stream_id frames only for the environment process(es).
 
-before frame.max_stream_id.handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.max_stream_id.handle(f:frame.max_stream_id,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
     }
 }
 
-# Generate connection_close frames only for the client.
+# Generate connection_close frames only for the environment process(es).
+#
+# Note: requiring the `err_code` is zero on non-generated frames means that
+# we stop the test if the peer reports a protocol error. 
 
-before frame.connection_close.handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.connection_close.handle(f:frame.connection_close,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
     } else {
         require f.err_code = 0
     }
 }
 
-# Generate connection_close frames only for the client.
+# Generate connection_close frames only for the environment process(es).
 
-before frame.application_close.handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.application_close.handle(f:frame.application_close,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
     }
 }
 
-# Generate max_stream_id frames only for the client.
+# Generate max_stream_data frames only for the environment process(es), and only for
+# a restricted range of frames (so we don't throttle all of the data).
 
-before frame.max_stream_data.handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.max_stream_data.handle(f:frame.max_stream_data,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         require 4 <= f.id & f.id <= 16;
     }
 }
 
-# Generate max_stream_id frames only for the client.
+# Generate stream_blocked frames only for the environment process(es).
+# We restrict the frame id.
 
-before frame.stream_blocked.handle(f:frame.stream_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.stream_blocked.handle(f:frame.stream_blocked,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         require f.id = 4;
     }
 }
 
-# Generate max_data frames only for the client.
+# Generate max_data frames only for the environment process(es). Here, for
+# non-generated frames, we check that the max_data value doesn't decrease.
+# This is not forbidden, but it seems like a good thing to check.
 
-before frame.max_data.handle(f:frame.max_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.max_data.handle(f:frame.max_data,scid:cid,dcid:cid) {
     if _generating {
-        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
     }
     else {
@@ -565,11 +380,12 @@ before frame.max_data.handle(f:frame.max_data,src:ip.endpoint,dst:ip.endpoint,sc
     }
 }
 
-# We allow generating application data at the client end only if the previous data have
-# not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
-# for stream id 0x4. TEMPORARY: we only send the http request data read from the input file.
-# We always read up to a newline or the end-of-file, since some servers can't seem to handle partial
-# lines.
+# This is where we restrict the client to send only a specific HTTP
+# request.  We allow generating application data at the client end
+# only if the previous data have not been sent. This is to avoid
+# building up a long queue. We only send the http request data read
+# from the input file, up to the first newline. We restrict the client
+# to use stream id's from 4 to 60 in increments of 4.
 
 action client_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, end : stream_pos)
 
@@ -579,12 +395,11 @@ after init {
     current_stream := 4
 }
 
-    
 around client_send_event {
     require s = current_stream;
     require (src = client.ep | src = client_alt);
     require dst = server.ep;
-    require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
+    require connected(the_cid) & dcid = connected_to(the_cid);
     require stream_length(dcid,s) = stream_app_data_end(dcid,s);
     require stream_length(dcid,s) < end & end <= http_request.end;
     require current_stream < 60;
@@ -601,10 +416,10 @@ around client_send_event {
     current_stream := current_stream + 4;
 }
 
-# Note, we don't need a tester precondition for packet protocol
-# events, since the frame queue for the server end will always be
-# empty. This is because server frames are only inferred in response to
-# a server packet event, which immediately dequeues them.
+# The actions listed below will be generated by the mirror.
+#
+# Note: some of these are commented out. They are added in other files
+# that include this one.
 
 export frame.ack.handle
 export frame.stream.handle
@@ -615,7 +430,7 @@ export client_send_event
 export tls_recv_event
 #export frame.rst_stream.handle
 #export frame.max_stream_id.handle
-# export frame.connection_close.handle
+#export frame.connection_close.handle
 #export frame.max_stream_data.handle
 
 # Final check
@@ -629,13 +444,21 @@ export action _finalize = {
     require conn_total_data(the_cid) > 0;
 }
 
-attribute radix=16       # print in hex
+# This causes the log of events to be printed using hex numbers.
+
+attribute radix=16
+
+# This gives the interpretation of some of the basic data types.
+# Some of these interpretations are chosen to make solving more efficient.
+# Notably, the `intbv` type can be used to represent large numbers with
+# small bit vector enodings.
 
 interpret cid -> intbv[1][13][2]
 interpret version -> bv[32]
 interpret pkt_num -> bv[32]
 interpret error_code -> bv[16]
 interpret stream_id -> bv[16]
+
 attribute frame.idx.cardinality = 1
 attribute frame.ack.block.idx.cardinality = 1
 attribute pkt_num.cardinality = 1
@@ -643,25 +466,19 @@ attribute stream_pos.cardinality = 4
 #attribute ip.addr.override = bv[1]
 #attribute ip.port.override = bv[1]
 
-action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data:stream_data,
-                           pos:stream_pos, e:encryption_level) = {}
+# The following are some imported actions that can be used to put
+# "debugging" information in the logs. They have no other effect.
 
-import show_tls_send_event
+import action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid,
+                                  data:stream_data, pos:stream_pos, e:quic_packet_type)
 
-# Print a packet on stdout. In the compiled tester importing `show_packet`
-# causes calls to be logged to stdout.
-
-action show_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
-import show_packet
-
-action undecryptable_packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:stream_data)
-import undecryptable_packet_event
-
-import action show_level_offset_length(e:encryption_level,offset:stream_pos,length:stream_pos)
+import action show_level_offset_length(e:quic_packet_type,offset:stream_pos,length:stream_pos)
 
 import action clear_packet(rnum:pkt_num,pkt:stream_data)
+
 import action cipher_packet(pkt:stream_data)
 
 import action show_stream(pkt:stream_data)
 
-import action show_aead(level:botan.upper.level,pyld:stream_data,seq:pkt_num,auth:stream_data)
+import action show_aead(level:tls_api.upper.level,pyld:stream_data,seq:pkt_num,auth:stream_data)
+

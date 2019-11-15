@@ -93,13 +93,20 @@ def fix_parsed_graph(g):
 def fix_attrs(t):
     t['attributes'] = dict((x,y.strip('"').replace('\\\n','')) for x,y in t['attributes'].iteritems())
 
+# Work around pydot printing bug by putting quotes around labels
+
+def fix_labels(kwargs):
+    if 'label' in kwargs:
+        kwargs['label'] = '"' + kwargs['label'] + '"'
+    return kwargs
+
 class AGraph(object):
     def __init__(self,**kwargs):
         self.g = pydot.Dot(**kwargs)
     def add_node(self,name,**kwargs):
-        return self.g.add_node(pydot.Node(name,**kwargs))
+        return self.g.add_node(pydot.Node(name,**fix_labels(kwargs)))
     def add_edge(self,src,dst,id,**kwargs):
-        e = pydot.Edge(src,dst,id=id,**kwargs)
+        e = pydot.Edge(src,dst,id=id,**fix_labels(kwargs))
         return self.g.add_edge(e)
     def add_subgraph(self,nbunch=None,name=None,**kwargs):
         res = pydot.Subgraph(graph_name=name)
@@ -126,7 +133,6 @@ class AGraph(object):
         txt,_ = process.communicate()
         exit_code = process.wait()
 #        txt = self.g.create(prog=prog,format='dot')
-#        print txt
         self.g =  pydot.dot_parser.parse_dot_data(txt)[0]
         fix_parsed_graph(self.g)
     def nodes(self):

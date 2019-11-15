@@ -729,6 +729,11 @@ def p_symdecl_destructor_tterms(p):
     'symdecl : DESTRUCTOR tterms'
     p[0] = DestructorDecl(*p[2])
 
+if not(iu.get_numeric_version() <= [1,6]):
+    def p_symdecl_constructor_tterms(p):
+        'symdecl : CONSTRUCTOR tterms'
+        p[0] = ConstructorDecl(*p[2])
+
 def p_constantdecl_constant_tterms(p):
     'constantdecl : INDIV tterms'
     p[0] = ConstantDecl(*p[2])
@@ -862,6 +867,13 @@ else:
         p[0] = AssumeTactic(a,p[3])
         p[0].lineno = get_lineno(p,1)
 
+    def p_proofstep_instantiate(p):
+        'proofstep : INSTANTIATE atype optrenaming'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(a,p[3])
+        p[0].lineno = get_lineno(p,1)
+
     def p_proofstep_showgoals(p):
         'proofstep : SHOWGOALS'
         p[0] = ShowGoalsTactic()
@@ -879,6 +891,15 @@ else:
         p[0] = SpoilTactic(a)
         p[0].lineno = get_lineno(p,1)
     
+    def p_proofstep_property(p):
+        'proofstep : opttemporal PROPERTY labeledfmla optskolem optproofgroup'
+        lf = addlabel(p[3],'prop')
+        prop = addtemporal(lf) if p[1] else check_non_temporal(lf)
+        name = p[4] if p[4] else NoneAST()
+        proof = p[5] if p[5] else NoneAST()
+        p[0] = PropertyTactic(prop,name,proof)
+        p[0].lineno = get_lineno(p,2)
+
 def p_match_defn(p):
     'match : defn'
     p[0] = p[1]
@@ -948,6 +969,13 @@ else:
         p[0] = AssumeTactic(*([a,p[3]]+p[5]))
         p[0].lineno = get_lineno(p,1)
 
+    def p_proofstep_instantiate_with_defns(p):
+        'proofstep : INSTANTIATE atype optrenaming WITH matches'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(*([a,p[3]]+p[5]))
+        p[0].lineno = get_lineno(p,1)
+
     def p_pflet_var_eq_fmla(p):
         'pflet : var EQ fmla'
         p[0] = Definition(p[1],check_non_temporal(p[3]))
@@ -1001,6 +1029,14 @@ def p_optproof(p):
 
 def p_optproof_symbol(p):
     'optproof : PROOF proofstep'
+    p[0] = p[2]
+    
+def p_optproofgroup(p):
+    'optproofgroup :'
+    p[0] = None
+
+def p_optproofgroup_symbol(p):
+    'optproofgroup : PROOF proofgroup'
     p[0] = p[2]
     
 if iu.get_numeric_version() <= [1,6]:
@@ -1625,6 +1661,24 @@ def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
 
+def p_moresymbols(p):
+    'moresymbols : '
+    p[0] = []
+    
+def p_moresymbols_more_symbols_comma_symbol(p):
+    'moresymbols : moresymbols COMMA SYMBOL'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_top_interpret_symbol_arrow_lcb_symbol_moresymbols_rcb(p):
+    'top : top INTERPRET oper ARROW LCB SYMBOL moresymbols RCB'
+    p[0] = p[1]
+    imp = Implies(p[3],EnumeratedSort(*[Atom(n) for n in ([p[6]]+p[7])]))
+    imp.lineno = get_lineno(p,4)
+    thing = InterpretDecl(addlabel(mk_lf(imp),'interp'))
+    thing.lineno = get_lineno(p,4)
+    p[0].declare(thing)
+
 def parse_nativequote(p,n):
     string = p[n][3:-3] # drop the quotation marks
     fields = string.split('`')
@@ -2011,9 +2065,9 @@ else:
         'decreases : '
         p[0] = []
 
-    def p_action_while_fmla_invariants_decreases_lcb_action_rcb(p):
-        'action : WHILE fmla invariants decreases sequence'
-        p[0] = WhileAction(*([check_non_temporal(p[2]), p[5]] + p[3] + p[4]))
+    def p_action_while_somefmla_invariants_decreases_lcb_action_rcb(p):
+        'action : WHILE somefmla invariants decreases sequence'
+        p[0] = WhileAction(*([check_non_temporal(p[2]), fix_if_part(p[2],p[5])] + p[3] + p[4]))
         p[0].lineno = get_lineno(p,1)
 
 def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
