@@ -350,7 +350,11 @@ object frame = {
 # - The function `conn_total_data(C)` represents the total number of stream
 #   bytes received by aid `C`.
 #
-
+#Hamid
+# - The relation `queued_ack_eliciting(C)` indicates that one or more of the queued
+#   frames at aid `C` is an ACK eliciting frame, i.e. according to draft 24, frames other than ACK, PADDING, CONNECTION_CLOSE
+#Hamid
+ 
 relation stream_seen(C:cid,S:stream_id)
 function max_stream_data_val(C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(C:cid,S:stream_id)
@@ -369,6 +373,9 @@ relation queued_close(C:cid)
 function num_queued_frames(C:cid) : frame.idx
 relation path_challenge_pending(C:cid,D:stream_data)
 function conn_total_data(C:cid) : stream_pos
+#Hamid
+relation queued_ack_eliciting(C:cid)
+#Hamid
 
 after init {
     stream_seen(C,S) := false;
@@ -381,6 +388,9 @@ after init {
     queued_non_ack(C) := false;
     queued_close(C) := false;
     path_challenge_pending(C,D) := false;
+#Hamid
+    queued_ack_eliciting(C) := false;
+#Hamid
 }
 
 
@@ -1123,7 +1133,12 @@ action enqueue_frame(scid:cid, f:frame, e:quic_packet_type, probing:bool) = {
     };
     if (f isa frame.connection_close) | (f isa frame.application_close) {
         queued_close(scid) := true;
-    }
+    };
+#Hamid
+    if ~(f isa frame.ack) & ~(f isa frame.connection_close) {
+	queued_ack_eliciting(scid) := true;
+    };
+#Hamid
 }
 
 #

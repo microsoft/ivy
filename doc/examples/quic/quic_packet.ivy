@@ -326,6 +326,10 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     require ~_generating & ~queued_non_ack(scid) -> ack_credit(scid) > 0;  # [5]
 
+#Hamid
+    require ~_generating & ~queued_ack_eliciting(scid) -> ack_credit(scid) > 0;
+#Hamid
+
     # QUESTION: THis sentence is from draft-18 section 13.1: "An
     #   endpoint MUST NOT send a packet containing only an ACK frame
     #   in response to a packet containing only ACK or PADDING frames,
@@ -373,11 +377,21 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # increases the destination's ack creait. An ack packet decreases
     # the sender's ack credit.
 
-    if queued_non_ack(scid) {
-	ack_credit(dcid) := ack_credit(dcid) + 1;
+#Hamid
+
+#    if queued_non_ack(scid) {
+#	ack_credit(dcid) := ack_credit(dcid) + 1;
+#    } else {
+#	ack_credit(scid) := ack_credit(scid) - 1;
+#    };
+
+    if queued_non_ack(scid) | queued_ack_eliciting(scid) {
+       ack_credit(dcid) := ack_credit(dcid) + 1;
     } else {
-	ack_credit(scid) := ack_credit(scid) - 1;
+       ack_credit(scid) := ack_credit(scid) - 1;
     };
+
+#Hamid
 
     # If this is a non-probing packet, update the highest non-probing
     # packet number seen on from this aid.
@@ -414,6 +428,9 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     queued_non_ack(scid) := false;
     queued_close(scid) := false;
     num_queued_frames(scid) := 0;
+#Hamid
+    queued_ack_eliciting(scid) := false;
+#Hamid
 }
 
 # Procedures
