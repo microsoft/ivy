@@ -249,6 +249,16 @@ object frame = {
         }
     }
 
+    object retire_connection_id = {
+        
+        # Retire connection id frames are a variant of frame.
+
+        variant this of frame = struct {
+            seq_num                : cid_seq     # the sequence number of the new cid
+        }
+        
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        
