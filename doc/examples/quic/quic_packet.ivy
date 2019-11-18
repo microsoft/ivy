@@ -327,7 +327,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     require ~_generating & ~queued_non_ack(scid) -> ack_credit(scid) > 0;  # [5]
 
 #Hamid
-    require ~_generating & ~queued_ack_eliciting(scid) -> ack_credit(scid) > 0;
+#    require ~_generating & ~queued_ack_eliciting(scid) -> ack_credit(scid) > 0;
 #Hamid
 
     # QUESTION: THis sentence is from draft-18 section 13.1: "An
