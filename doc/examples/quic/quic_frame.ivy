@@ -338,6 +338,12 @@ object frame = {
 #
 # - The queued frames at aid `C` are
 #   represented by `queued_frames(C)` and are initially empty.
+# 
+# - The function queued_level(C) gives the packet type associated with the 
+#   currently queued frames for aid C
+#
+#   TODO: Currently we can only queue frames of the same packet type,
+#   We should have a separate frame queue for each packet type. 
 #
 # - The relation `queued_non_probing(C)` indicates that one of the queued
 #   frames at aid `C` contains a non-probing frame. This is a frame
@@ -1032,12 +1038,39 @@ object frame = { ...
 	around handle {
             require connected(dcid) & connected_to(dcid) = scid;
             require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
-            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid); #Will change with implementing TODO
             ...
-            call enqueue_frame(scid,f,e,true);
+	    cid_mapped(f.scid) := true;
+	    cid_to_aid(f.scid) := scid;
+            seqnum_to_cid(scid,f.seq_num) := f.scid; 
+	    call enqueue_frame(scid,f,e,true);
         }
     }
 }
+#
+# #### RETIRE_CONNECTION_ID event
+#
+# RETIRE_CONNECTION_ID frames are used to tell the sender of the new connection id that the connection id will no longer be used.
+#
+
+object frame = { ...
+    object retire_connection_id = { ...
+        action handle(f:frame.retire_connection_id,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid); #Will change with implementing TODO
+            # TODO remember the highest sequence number that was sent
+            # TODO specify that you cannot retire the connection id of the current packet
+            #
+	    ...
+	    
+	    cid_mapped(seqnum_to_cid(dcid, f.seq_num)) := false;
+	    call enqueue_frame(scid,f,e,true);
+        }
+    }
+}
+
 
 #
 # #### PATH_CHALLENGE event
@@ -1130,7 +1163,9 @@ object frame = { ...
 # Note: the auxilary functions contain redundant information that is useful for
 # specifying packet events. By encoding history information in this way, we make
 # it easier for constraint solvers to construct tests.
-
+# 
+# The argument probing indicates that the frame is a probing frame, according to [9.1]
+# of the transport document( as of draft 23)
 action enqueue_frame(scid:cid, f:frame, e:quic_packet_type, probing:bool) = {
     queued_frames(scid) := queued_frames(scid).append(f);
     num_queued_frames(scid) := queued_frames(scid).end;
@@ -1145,7 +1180,7 @@ action enqueue_frame(scid:cid, f:frame, e:quic_packet_type, probing:bool) = {
         queued_close(scid) := true;
     };
 #Hamid
-    if ~(f isa frame.ack) & ~(f isa frame.connection_close) {
+    if ~(f isa frame.ack) & ~(f isa frame.connection_close) & ~(f isa frame.application_close){
 	queued_ack_eliciting(scid) := true;
     };
 #Hamid

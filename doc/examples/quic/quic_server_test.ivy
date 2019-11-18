@@ -321,6 +321,20 @@ before frame.max_stream_id.handle(f:frame.max_stream_id,scid:cid,dcid:cid) {
     }
 }
 
+before frame.new_connection_id.handle(f:frame.new_connection_id,scid:cid,dcid:cid) {
+    if _generating {
+        require scid = the_cid;
+    }
+}
+
+
+before frame.retire_connection_id.handle(f:frame.retire_connection_id,scid:cid,dcid:cid) {
+    if _generating {
+        require scid = the_cid;
+    }
+}
+
+
 # Generate connection_close frames only for the environment process(es).
 #
 # Note: requiring the `err_code` is zero on non-generated frames means that
@@ -428,6 +442,8 @@ export frame.path_response.handle
 export packet_event
 export client_send_event
 export tls_recv_event
+#export frame.new_connection_id.handle
+export frame.retire_connection_id.handle
 #export frame.rst_stream.handle
 #export frame.max_stream_id.handle
 #export frame.connection_close.handle
