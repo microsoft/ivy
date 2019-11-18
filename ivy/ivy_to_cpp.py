@@ -4709,9 +4709,9 @@ public:
         if (range.is_bool())
             return ctx.bool_val((bool)value);
         if (range.is_bv())
-            return ctx.bv_val(value,range.bv_size());
+            return ctx.bv_val((int)value,range.bv_size());
         if (range.is_int())
-            return ctx.int_val(value);
+            return ctx.int_val((int)value);
         return enum_values.find(range)->second[(int)value]();
     }
 
