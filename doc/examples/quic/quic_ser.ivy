@@ -51,6 +51,12 @@ object quic_ser = {}
               quic_application_close_err_code,
               quic_max_stream_data_id,
               quic_path_challenge_data,
+              quic_new_connection_id_length,
+              quic_new_connection_id_seq_num,
+              quic_new_connection_id_retire_prior_to,
+              quic_new_connection_id_scid,
+              quic_new_connection_id_token,
+              quic_retire_connection_id_seq_num,
               quic_s_done} state;
         bool long_format;
         char hdr_type;
@@ -256,6 +262,40 @@ object quic_ser = {}
                 state = quic_reset_final_offset;
             }
             break;
+            case quic_new_connection_id_length:
+            {
+                setn(res,1);
+                scil = res;
+                state = quic_new_connection_id_scid;
+            }
+            break;
+            case quic_new_connection_id_seq_num:
+            {
+                set_var_int(res);
+                state = quic_new_connection_id_retire_prior_to;
+            }
+            break;
+            case quic_new_connection_id_retire_prior_to:
+            {
+                set_var_int(res);
+                state = quic_new_connection_id_length;
+            }
+            break;
+            case quic_new_connection_id_scid:
+            {
+                setn(res,scil);
+                state = quic_new_connection_id_token;
+            }
+            break;
+            case quic_new_connection_id_token:
+            {
+                setn(res,16);
+            }
+            break;
+            case quic_retire_connection_id_seq_num:
+            {
+                set_var_int(res);
+            }
             default:
             throw deser_err();
             }
@@ -317,10 +357,10 @@ object quic_ser = {}
                     frame_type = 0x1d;
                     state = quic_application_close_err_code;
                 }
-//                else if (tag == 10) {
-//                    frame_type = 0x18;
-//                    state = quic_new_connection_id_length;
-//                }
+                else if (tag == 10) {
+                    frame_type = 0x18;
+                    state = quic_new_connection_id_seq_num;
+                }
                 else if (tag == 11) {
                     frame_type = 0x1a;
                     state = quic_path_challenge_data;
@@ -348,6 +388,10 @@ object quic_ser = {}
                 else if (tag == 17) {
                     state = quic_reset_final_offset;
                     frame_type = 0x14;
+                }
+                else if (tag == 18) {
+                    state = quic_retire_connection_id_seq_num;
+                    frame_type = 0x19;
                 }
 	        else {
                     std::cerr << "saw frame tag " << tag << std::endl;  
