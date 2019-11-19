@@ -339,7 +339,8 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     require ~_generating & ~queued_non_ack(scid) -> ack_credit(scid) > 0;  # [5]
 
-#Hamid
+#Hamid - This is wrong, because if there is no ack credits, it prevents from sending a packet 
+#        containing only a CONNECTION_CLOSE frame but we want to stop packets that contain only ACKs 
 #    require ~_generating & ~queued_ack_eliciting(scid) -> ack_credit(scid) > 0;
 #Hamid
 
@@ -402,9 +403,10 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 #	ack_credit(scid) := ack_credit(scid) - 1;
 #    };
 
-    if queued_non_ack(scid) | queued_ack_eliciting(scid) {
+    if queued_ack_eliciting(scid) {
        ack_credit(dcid) := ack_credit(dcid) + 1;
-    } else {
+    };
+    if ~queued_non_ack(scid) {
        ack_credit(scid) := ack_credit(scid) - 1;
     };
 
