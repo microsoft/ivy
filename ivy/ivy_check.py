@@ -306,6 +306,7 @@ def check_fcs_in_state(mod,ag,post,fcs):
     if opt_trace.get() or diagnose.get():
         clauses = history.post
         clauses = lut.and_clauses(clauses,axioms)
+        iu.dbg('clauses.annot')
         ffcs = filter_fcs(fcs)
         model = itr.small_model_clauses(clauses,ffcs,shrink=True)
         if model is not None:
@@ -313,11 +314,12 @@ def check_fcs_in_state(mod,ag,post,fcs):
             failed = [c for c in ffcs if c.failed]
             mclauses = lut.and_clauses(*([clauses] + [c.cond() for c in failed]))
             vocab = lut.used_symbols_clauses(mclauses)
-            handler = MatchHandler(mclauses,model,vocab) if opt_trace.get() else ivy_trace.Trace(mclauses,model,vocab)
+#            handler = MatchHandler(mclauses,model,vocab) if opt_trace.get() else ivy_trace.Trace(mclauses,model,vocab)
+            handler = ivy_trace.Trace(mclauses,model,vocab)
             assert all(x is not None for x in history.actions)
             # work around a bug in ivy_interp
             actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
-#            iu.dbg('actions')
+            iu.dbg('map(str,actions)')
             action = act.Sequence(*actions)
             act.match_annotation(action,clauses.annot,handler)
             handler.end()
@@ -326,6 +328,8 @@ def check_fcs_in_state(mod,ag,post,fcs):
                               else None)
             if not opt_trace.get():
                 gui_art(handler)
+            else:
+                print str(handler)
             exit(0)
     else:
         res = history.satisfy(axioms,gmc,filter_fcs(fcs))

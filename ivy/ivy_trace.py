@@ -98,6 +98,34 @@ class Trace(art.AnalysisGraph):
             self.add(state,expr)
         else:
             self.add(state)
+
+    def label_from_action(self,action):
+        if hasattr(action,'label'):
+            return action.label + '\n'
+        lineno = str(action.lineno) if hasattr(action,'lineno') else ''
+        return lineno + iu.pretty(str(action),max_lines=4)
+
+    def to_lines(self,lines,indent):
+        for state in self.states:
+            if hasattr(state,'expr') and state.expr is not None:
+                expr = state.expr
+                newlines = [indent * '    ' + x + '\n' for x in self.label_from_action(expr.rep).split('\n')]
+                lines.extend(newlines)
+                if hasattr(expr,'subgraph'):
+                    lines.append(indent * '    ' + '{\n')
+                    expr.subgraph.to_lines(lines,indent+1)
+                    lines.append(indent * '    ' + '}\n')
+                lines.append('\n')
+            lines.append(indent * '    ' + '[\n')
+            for c in state.clauses.fmlas:
+                lines.append((indent+1) * '    ' + str(c) + '\n')
+            lines.append(indent * '    ' + ']\n')
+        
+    def __str__(self):
+        lines = []
+        self.to_lines(lines,0)
+        return ''.join(lines)
+
                 
 
     def handle(self,action,env):
