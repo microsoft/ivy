@@ -426,12 +426,12 @@ class Encoder(object):
         if cy is None:
             cy = self.sub.false()
         for i in range(len(x)-1,-1,-1):
-            cy = self.sub.orl(self.sub.andl(x[i],y[i]),self.sub.andl(self.sub.iff(x[i],y[i]),cy))
-        return cy
+            cy = self.sub.orl(self.sub.andl(self.sub.notl(x[i]),y[i]),self.sub.andl(self.sub.iff(x[i],y[i]),cy))
+        return [cy]
             
     def encode_le(self,sort,x,y):
-        return encode_lt(self,sort,x,y,cy=self.sub.true())
-
+        return self.encode_lt(sort,x,y,cy=self.sub.true())
+        
     def encode_div(self,sort,x,y):
         thing = [self.sub.false() for _ in x]
         res = []
@@ -872,6 +872,8 @@ def uncompose_annot(annot):
     return res
     
 def unite_annot(annot):
+    if isinstance(annot,ia.RenameAnnotation):
+        return [(annot.map.get(x,x),ia.RenameAnnotation(y,annot.map)) for (x,y) in unite_annot(annot.arg)]
     if not isinstance(annot,ia.IteAnnotation):
         return []
     res = unite_annot(annot.elseb)
@@ -923,8 +925,9 @@ def match_annotation(action,annot,handler):
                 cond = handler.eval(rncond)
             except KeyError:
                 print '{}skipping conditional'.format(action.lineno)
-                iu.dbg('str_map(env)')
-                iu.dbg('env.get(annot.cond,annot.cond)')
+#                exit(1)
+#                iu.dbg('str_map(env)')
+#                iu.dbg('env.get(annot.cond,annot.cond)')
                 return
             if cond:
                 recur(action.args[1],annot.thenb,env)
@@ -934,6 +937,7 @@ def match_annotation(action,annot,handler):
             return
         if isinstance(action,ia.ChoiceAction):
             assert isinstance(annot,ia.IteAnnotation)
+            
             annots = unite_annot(annot)
             assert len(annots) == len(action.args)
             for act,(cond,ann) in reversed(zip(action.args,annots)):
@@ -943,11 +947,17 @@ def match_annotation(action,annot,handler):
             assert False,'problem in match_annotation'
         if isinstance(action,ia.CallAction):
             callee = im.module.actions[action.args[0].rep]
-            seq = ia.Sequence(*([ia.Sequence() for x in callee.formal_params]
-                             + [callee] 
-                             + [ia.Sequence() for x in callee.formal_returns]))
+            seq = ia.Sequence(ia.IgnoreAction(),callee,ia.ReturnAction())
+#            seq = ia.Sequence(*([ia.Sequence() for x in callee.formal_params]
+#                             + [callee] 
+#                             + [ia.Sequence() for x in callee.formal_returns]))
             recur(seq,annot,env)
             return
+        if isinstance(action,ia.ReturnAction):
+            handler.do_return(action,env)
+            return
+        if isinstance(action,ia.IgnoreAction):
+                return
         if isinstance(action,ia.LocalAction):
             recur(action.args[-1],annot,env)
             return
@@ -1096,6 +1106,7 @@ def to_aiger(mod,ext_act):
     # compute the transition relation
 
     stvars,trans,error = action.update(mod,None)
+#    iu.dbg('trans')
     
 
 #    print 'action : {}'.format(action)
@@ -1362,7 +1373,10 @@ class AigerMatchHandler(object):
             res = il.is_true(self.aiger.get_sym(cond))
 #        print 'eval: {} = {}'.format(cond,res)
         return res
-        
+
+    def do_return(self,action,env):
+        pass
+
     def handle(self,action,env):
 
         def my_is_skolem(x):
@@ -1372,11 +1386,12 @@ class AigerMatchHandler(object):
             if all(x in inv_env or not my_is_skolem(x) and
                    not tr.is_new(x) and x not in env for x in ilu.used_symbols_ast(decd)):
                 expr = ilu.rename_ast(decd,inv_env)
-                if il.is_constant(expr) and expr in il.sig.constructors:
-                    return
-                if not (expr in self.current and self.current[expr] == val):
-                    print '        {} = {}'.format(expr,val)
-                    self.current[expr] = val
+                if not tr.is_new(expr.rep):
+                    if il.is_constant(expr) and expr in il.sig.constructors:
+                        return
+                    if not (expr in self.current and self.current[expr] == val):
+                        print '        {} = {}'.format(expr,val)
+                        self.current[expr] = val
 
         if hasattr(action,'lineno'):
 #            print '        env: {}'.format('{'+','.join('{}:{}'.format(x,y) for x,y in env.iteritems())+'}')

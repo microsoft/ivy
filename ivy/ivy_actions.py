@@ -738,9 +738,13 @@ class EnvAction(ChoiceAction):
             ite = IfAction(cond,self.args[0],self.args[1])
             return ite.update(domain,pvars)
         result = [], false_clauses(annot=EmptyAnnotation()), false_clauses(annot=EmptyAnnotation())
+#        print 'env action:'
         for a in self.args:
             foo = a.update(domain, pvars)
+#            print 'sub vars = {}'.format([str(x) for x in used_symbols_clauses(foo[1])])
             result = join_action(result, foo, domain.relations)
+#            print 'join vars = {}'.format([str(x) for x in used_symbols_clauses(result[1])])
+#            print 'annot = {}'.format(result[1].annot)
         return result
     def __str__(self):
         if all(hasattr(a,'label') for a in self.args):
@@ -807,7 +811,12 @@ class IfAction(Action):
                 raise IvyError(self,'condition must be boolean') 
             branches = [self.args[1],self.args[2] if len(self.args) >= 3 else Sequence()]
             upds = [a.int_update(domain,pvars) for a in branches]
+#            if hasattr(self,'lineno'):
+#                print 'ite at {}'.format(self.lineno)
+#            print 'if vars = {}'.format([str(x) for x in used_symbols_clauses(upds[0][1])])
+#            print 'else vars = {}'.format([str(x) for x in used_symbols_clauses(upds[1][1])])
             res =  ite_action(self.args[0],upds[0],upds[1],domain.relations)
+#            print 'join vars = {}'.format([str(x) for x in used_symbols_clauses(res[1])])
             return res
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
 
@@ -1357,6 +1366,8 @@ def ite_annot(self,cond,other):
 Annotation.ite = ite_annot
 
 def unite_annot(annot):
+    if isinstance(annot,RenameAnnotation):
+        return [(annot.map.get(x,x),RenameAnnotation(y,annot.map)) for (x,y) in unite_annot(annot.arg)]
     if not isinstance(annot,IteAnnotation):
         return []
     res = unite_annot(annot.elseb)

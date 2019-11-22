@@ -1146,16 +1146,19 @@ def or_clauses(*args):
     else:
         used = set(chain(*[arg.symbols() for arg in args]))
         rn = UniqueRenamer('__ts0',used)
-        res,vs = or_clauses_int(rn,args)
+        res,vs,args = or_clauses_int(rn,args)
     fixed_vs = []
+    fixed_args = []
     idx = 0
     for a in orig_args:
         if a.is_false():
             fixed_vs.append(Or())
+            fixed_args.append(a)
         else:
             fixed_vs.append(vs[idx])
+            fixed_args.append(args[idx])
             idx += 1
-    return fix_or_annot(res,fixed_vs,orig_args)
+    return fix_or_annot(res,fixed_vs,fixed_args)
 
 
 def ite_clauses(cond,args):
@@ -1213,7 +1216,7 @@ def or_clauses_int(rn,args):
     defs = [d for n,d in defidx.iteritems()] # TODO: hash traversal dependency
     res = Clauses(fmlas,defs)
     #    print "or_clauses_int res = {}".format(res)
-    return res,vs
+    return res,vs,args
 
 def debug_clauses_list(cl):
     for clauses in cl:
@@ -1262,7 +1265,7 @@ def tagged_or_clauses(prefix,*args):
     predicate symbols begin with "prefix". See find_true_disjunct.
     """
     args = coerce_args_to_clauses(args)
-    res,vs = or_clauses_int(UniqueRenamer('__to0',dict()),args)
+    res,vs,args = or_clauses_int(UniqueRenamer('__to0',dict()),args)
     return fix_or_annot(res,vs,args)
 
 def find_true_disjunct(clauses,eval_fun):
