@@ -738,13 +738,13 @@ class EnvAction(ChoiceAction):
             ite = IfAction(cond,self.args[0],self.args[1])
             return ite.update(domain,pvars)
         result = [], false_clauses(annot=EmptyAnnotation()), false_clauses(annot=EmptyAnnotation())
-        print 'env action:'
+#        print 'env action:'
         for a in self.args:
             foo = a.update(domain, pvars)
-            print 'sub vars = {}'.format([str(x) for x in used_symbols_clauses(foo[1])])
+#            print 'sub vars = {}'.format([str(x) for x in used_symbols_clauses(foo[1])])
             result = join_action(result, foo, domain.relations)
-            print 'join vars = {}'.format([str(x) for x in used_symbols_clauses(result[1])])
-            print 'annot = {}'.format(result[1].annot)
+#            print 'join vars = {}'.format([str(x) for x in used_symbols_clauses(result[1])])
+#            print 'annot = {}'.format(result[1].annot)
         return result
     def __str__(self):
         if all(hasattr(a,'label') for a in self.args):
@@ -901,8 +901,6 @@ class WhileAction(Action):
             return self.unroll(context.card).int_update(domain,pvars)
         exp = self.expand(domain,pvars)
         res = exp.int_update(domain,pvars)
-        iu.dbg('exp')
-        iu.dbg('res[2].annot')
         return res
     def decompose(self,pre,post,fail=False):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
@@ -1419,12 +1417,12 @@ def match_annotation(action,annot,handler):
                     rncond = env.get(annot.cond,annot.cond)
                     cond = handler.eval(rncond)
                     if cond:
-                        print 'entering then branch {}'.format(pos)
+#                        print 'entering then branch {}'.format(pos)
                         recur(action,annot.thenb,env,pos)
                         return
 #                        annot = annot.thenb
                     else:
-                        print 'entering else branch {}'.format(pos)
+#                        print 'entering else branch {}'.format(pos)
                         recur(action,annot.elseb,env,pos=pos-1)
                         return
                 if not isinstance(annot,ComposeAnnotation):
@@ -1482,8 +1480,6 @@ def match_annotation(action,annot,handler):
                 return
             if isinstance(action,WhileAction):
                 expanded = action.expand(ivy_module.module,[])
-                iu.dbg('expanded')
-                iu.dbg('annot')
                 recur(expanded,annot,env)
                 return
             if hasattr(action,'failed_action'):

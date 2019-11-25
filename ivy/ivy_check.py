@@ -306,7 +306,6 @@ def check_fcs_in_state(mod,ag,post,fcs):
     if opt_trace.get() or diagnose.get():
         clauses = history.post
         clauses = lut.and_clauses(clauses,axioms)
-        iu.dbg('clauses.annot')
         ffcs = filter_fcs(fcs)
         model = itr.small_model_clauses(clauses,ffcs,shrink=True)
         if model is not None:
@@ -319,7 +318,6 @@ def check_fcs_in_state(mod,ag,post,fcs):
             assert all(x is not None for x in history.actions)
             # work around a bug in ivy_interp
             actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
-            iu.dbg('map(str,actions)')
             action = act.Sequence(*actions)
             act.match_annotation(action,clauses.annot,handler)
             handler.end()
