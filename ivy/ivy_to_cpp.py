@@ -1328,6 +1328,9 @@ def may_alias(x,y):
 
 def emit_param_decls(header,name,params,extra=[],classname=None,ptypes=None):
     header.append(funname(name) + '(')
+    for p in params:
+        if il.is_function_sort(p.sort):
+            raise(iu.IvyError(None,'Cannot compile parameter {} with function sort'.format(p)))
     header.append(', '.join(extra + [ctype(p.sort,classname=classname,ptype = ptypes[idx] if ptypes else None) + ' ' + varname(p.name) for idx,p in enumerate(params)]))
     header.append(')')
 
