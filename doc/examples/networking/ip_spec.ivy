@@ -82,7 +82,7 @@ object ip = {
     # describe the actual layout of the datagram at the byte
     # level. Instead, this structure gives a more high-level
     # description of the datagram's content. We will worry later about
-    # the byte-level representation later. In particular, our high-level
+    # the byte-level representation. In particular, our high-level
     # struct is missing some fields of the byte-level IP header, because
     # these fields depend on the byte-level structure of the header. For this reasom,
     # our high-level struct has no fields for the header length, the total length
@@ -115,7 +115,7 @@ object ip = {
     type host
 
     # Our internet and the IP protocol have state. In Ivy, state
-    # infomration is stored in relations, which you can think of as
+    # information is stored in relations, which you can think of as
     # database tables (there are also functions, which we will deal
     # with later).
     #
@@ -251,7 +251,7 @@ object ip = {
 
 export ip.transmit
 
-# Notice that since we our now outside the scope `ip`, we need to
+# Notice that since we are now outside the scope `ip`, we need to
 # refer to `transmit` using its full name, which includes the object
 # `ip`.
 #
