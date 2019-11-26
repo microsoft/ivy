@@ -55,6 +55,10 @@ object quic_packet = {
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 
+    #Hamid
+    instance retired_cids : array(idx, cid_seq)
+    #Hamid
+
     action long(pkt:this) returns(res:bool) = {
         res := pkt.ptype ~= quic_packet_type.one_rtt;
     }
@@ -174,6 +178,9 @@ relation connected(C:cid)
 function cid_to_aid(C:cid) : cid 
 relation cid_mapped(C : cid)
 function seqnum_to_cid (D : cid,S : cid_seq) : cid
+#Hamid
+function max_seq_num(C:cid) : cid_seq
+#Hamid
 function connected_to(C:cid) : cid
 function nonce_cid(C:cid) : cid
 relation is_client(C:cid)
@@ -207,6 +214,9 @@ after init {
     hi_non_probing(C) := 0;
     hi_non_probing_endpoint(C,E) := false;
     cid_mapped(C) := false;
+    #Hamid
+    max_seq_num(C) := 0;
+    #Hamid
 }
 
 # Packet event specification
@@ -268,11 +278,10 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var dcid := pkt.dst_cid;
     var scid := pkt.src_cid;
     if cid_mapped(dcid) {
-	dcid := cid_to_aid(dcid);
+	    dcid := cid_to_aid(dcid);
     };
     # The destination cid must represent an existing connection,
-    
-# except in the case of a client initial packet, when the
+    # except in the case of a client initial packet, when the
     # destination cid may be the nonce cid chosen by the client for
     # the given source cid. TODO: The standard says that on receiving
     # the the server's cid, the clint must switch to it. However, we
@@ -371,7 +380,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var scid := pkt.src_cid if pkt.long else connected_to(dcid);
 
     if cid_mapped(dcid) {
-	cid_to_aid(dcid) := dcid;
+	    dcid := cid_to_aid(dcid);
     };
 
     # Record the packet number as latest seen

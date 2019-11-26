@@ -1040,10 +1040,15 @@ object frame = { ...
             require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid); #Will change with implementing TODO
             ...
-	    cid_mapped(f.scid) := true;
-	    cid_to_aid(f.scid) := scid;
-            seqnum_to_cid(scid,f.seq_num) := f.scid; 
-	    call enqueue_frame(scid,f,e,true);
+	        cid_mapped(f.scid) := true;
+	        cid_to_aid(f.scid) := scid;
+            seqnum_to_cid(scid,f.seq_num) := f.scid;
+            #Hamid
+            if (f.seq_num > max_seq_num(scid)) {
+                max_seq_num(scid) := f.seq_num;
+            };
+            #Hamid 
+	        call enqueue_frame(scid,f,e,true);
         }
     }
 }
@@ -1061,12 +1066,17 @@ object frame = { ...
             require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid); #Will change with implementing TODO
             # TODO remember the highest sequence number that was sent
+            #Hamid
+            require f.seq_num <= max_seq_num(dcid);
+            #Hamid 
             # TODO specify that you cannot retire the connection id of the current packet
             #
-	    ...
-	    
-	    cid_mapped(seqnum_to_cid(dcid, f.seq_num)) := false;
-	    call enqueue_frame(scid,f,e,true);
+	        ... 
+	        cid_mapped(seqnum_to_cid(dcid, f.seq_num)) := false;
+            #Hamid
+            # the connection id seqnum_to_cid is being retired, append it to an array and iterate over the array in packet
+            #Hamid
+	        call enqueue_frame(scid,f,e,true);
         }
     }
 }
@@ -1181,7 +1191,7 @@ action enqueue_frame(scid:cid, f:frame, e:quic_packet_type, probing:bool) = {
     };
 #Hamid
     if ~(f isa frame.ack) & ~(f isa frame.connection_close) & ~(f isa frame.application_close){
-	queued_ack_eliciting(scid) := true;
+	    queued_ack_eliciting(scid) := true;
     };
 #Hamid
 }
