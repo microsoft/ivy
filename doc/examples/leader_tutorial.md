@@ -410,53 +410,63 @@ the OS is hard to verify, we can prove nothing about the physical
 configuration of the hardware). We can *test* that the actual system
 conforms to this specification, but formally it remains an assumption.
 
-We create an instance of the `udp_simple` service for our leader
-election protocol like this:
-
-    instantiate net : udp_simple(node,id)
-    
-That is, our endpoints are nodes and our messages are pids. We also
-use a timer service to call us periodically. Here is its interface:
+We also use a system timer service to call us periodically. Here is its
+interface:
 
     module timeout_sec = {
         action timeout
     }
 
+This interface doesn't actually specify any formally about the timer service.
+The service calls action `timeout` once per second, but Ivuy doesn't provide a way
+to specify real time properties and our protocol doesn't depend on them.
+
 Using these system services, here is the implementation of `leader`:
 
-isolate leader = {
+    isolate leader = { ...
 
-    action tick(self:node)                 # called when a timer expires
-    action elect(v:node)                 # called when v is elected leader
+        implementation {
 
-    specification {
-	before elect {
-	    ensure v.pid >= node.pid(X)    # only the max pid can be elected
-	}
-    }
+            instantiate net : udp_simple(node,id)
+            instantiate timer(N:node) : timeout_sec
 
-    implementation {
-        implement tick(self:node) {
-            call abstract_protocol.send(self);              # ghost
-	    call trans.send(self.get_next,self.pid);
-        }
-        
-        implement trans.recv(self:node,v:id) {
-            if v = self.pid {  # Found a leader
-                call abstract_protocol.elect(self);
-                call elect(self);
+            var highest(N:node) : id
+
+            after init {
+                highest(N) := pid(N);
             }
-	    else if v > self.pid  { # pass message to next node
-                call abstract_protocol.pass(self,v);
-	        call trans.send(self.get_next,v);
+
+            implement timer.timeout(self:node) {
+                call abstract_model.send(self,highest(self));              # ghost
+            call net.send(self,self.get_next,highest(self));
+            }
+
+            implement net.recv(self:node,v:id) {
+                if v = pid(self) {  # Found a leader
+                    call abstract_model.elect(self);
+                    call elect(self);
+                }
+            else if v > highest(self)  { # pass message to next node
+                    highest(self) := v;
+                }
             }
         }
-    }
 
-    private {
-        invariant trans.sent(V,N) -> abstract_protocol.sent(V,N)
-    }
-} with node, id, trans, abstract_protocol
+    } with node, id, trans, abstract_protocol
+
+Our implementation of `leader` contains an instance of `udp_simple`,
+with `node` as the address type and `id` as the packet type. It also
+contains a parameterized collecion of instance of the `timeout_sec`
+service. That is, there is one instance of `timeout_sec` for each node.
+
+The state of the node is capture by one state variable, `highest`,
+representing the highes pid seen byu the node. Notice that this
+variable is also parameterized, since there is one instance of it per node.
+Initially, we set the value of `highest(N)` to be the pid of node `N`.
+This is another example of a parameterized assignment. In this case, the
+assigned value depends on the parameter `N`. 
+
+Now we implement two actions. THe first is `timer.timeout`. 
 
 
 
