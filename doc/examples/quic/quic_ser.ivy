@@ -296,6 +296,7 @@ object quic_ser = {}
             {
                 set_var_int(res);
             }
+            break;
             default:
             throw deser_err();
             }
