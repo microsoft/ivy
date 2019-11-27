@@ -58,6 +58,7 @@ object node = { ...
 }
 
 parameter pid(N:node) : id
+axiom [pid_injective] pid(N) = pid(M) -> N = M
 
 ################################################################################
 #
@@ -87,20 +88,20 @@ isolate abstract_model = {
 
         before elect {
             require sent(pid(n),n);
-        }
-
-        after elect {
             ensure forall N:node. pid(N) <= pid(n);
         }
     }
         
     private {
         invariant ~(pid(N) < pid(P) & sent(pid(N),N))
-        invariant ~(pid(P) < pid(Q) & N:node < P & P < Q & sent(pid(P),N))
-        invariant ~(pid(N) < pid(P) & N < P & P < Q & sent(pid(N),Q))
-        invariant ~(pid(Q) < pid(N) & N < P & P < Q & sent(pid(Q),P))
+        # invariant ~(pid(P) < pid(Q) & N:node < P & P < Q & sent(pid(P),N))
+        # invariant ~(pid(N) < pid(P) & N < P & P < Q & sent(pid(N),Q))
+        # invariant ~(pid(Q) < pid(N) & N < P & P < Q & sent(pid(Q),P))
+        invariant ~(L < M & M < N & pid(L) < pid(M) & sent(pid(L),N))
+        invariant ~(L < M & M < N & pid(M) < pid(N) & sent(pid(M),L))
+        invariant ~(L < M & M < N & pid(N) < pid(L) & sent(pid(N),M))
     }
-} with node, id
+} with node, id, pid_injective
 
 
 ################################################################################
@@ -152,7 +153,7 @@ isolate leader = {
         invariant highest(N) >= pid(N)
         invariant highest(N) = pid(N) | abstract_model.sent(highest(N),N)
     }
-} with node, id, net, timer, abstract_model
+} with node, id, abstract_model
 
 import leader.elect
 
