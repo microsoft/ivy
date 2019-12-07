@@ -669,7 +669,8 @@ def get_default_ui_module():
 #        return sys.modules[__name__]
     else:
         defui = 'ivy_ui_' + defui
-    return __import__('ivy.'+defui).__dict__[defui]
+    import importlib
+    return importlib.import_module(defui, 'ivy')
     
 def get_default_ui_class():
     mod = get_default_ui_module()

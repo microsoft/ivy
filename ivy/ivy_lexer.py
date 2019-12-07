@@ -149,7 +149,6 @@ reserved = all_reserved = {
 tokens += tuple(all_reserved.values())
 
 
-t_TILDA    = r'\~'
 t_COMMA    = r'\,'
 t_PLUS    = r'\+'
 t_TIMES   = r'\*'
@@ -162,17 +161,11 @@ t_GE      = r'\>='
 t_PTO      = r'\*>'
 t_LPAREN  = r'\('
 t_RPAREN  = r'\)'
-t_OR = r'\|'
-t_AND = r'\&'
 t_EQ = r'\='
-t_TILDAEQ = r'\~='
 t_SEMI = r'\;'
-t_ASSIGN = r'\:='
 t_DOT = r'\.'
 t_LCB  = r'\{'
 t_RCB  = r'\}'
-t_ARROW = r'\->'
-t_IFF = r'\<->'
 t_COLON = r':'
 t_DOTS = r'\.\.'
 t_DOTDOTDOT = r'\.\.\.'
@@ -215,7 +208,71 @@ def t_error(t):
     raise iu.IvyError(TokenErrorNode(t),"illegal character '{}'".format(t.value[0]))
     print "Illegal character '%s'" % t.value[0]
 
-lexer = lex.lex(errorlog=lex.NullLogger())
+# unicode characters are detected from `globals()`, where their name
+# start with 't_' and their type is `unicode`. note that this is used 
+# in all versions.
+
+# unicode characters that overlap reserved words.
+t_FORALL     = u'\u2200'
+t_EXISTS     = u'\u2203'
+t_GLOBALLY   = u'\u25a1'
+t_EVENTUALLY = u'\u25c7'
+
+# unicode characters that overlap regexes. the original regexes must be 
+# commented out. we assume the pattern 'a|(b)' where any backslash in the 
+# pattern should just be removed (i.e., we do not expect \n, etc.).
+import re
+unicode_regex_matcher = re.compile(r'^(.*)\|\((.*)\)').match
+t_ARROW    = u'\u2192|(->)'
+t_IFF      = u'\u2194|(<->)'
+t_TILDA    = u'\u00AC|(~)'
+t_AND      = u'\u2227|(\\&)'
+t_OR       = u'\u2228|(\\|)'
+t_TILDAEQ  = u'\u2260|(\\~=)'
+t_ASSIGN   = u'\u2254|(\\:=)'
+
+
+lexer_inner = lex.lex(errorlog=lex.NullLogger())
+class IvyUnicodeLexer(object):
+    unicode_tokens = dict(
+        (
+            # extract the first subpattern, assuming the said pattern.
+            key if val else unicode_regex_matcher(key).group(1),
+            # extract the second subpattern, assuming the said pattern.
+            val or unicode_regex_matcher(key).group(2).replace('\\', '').encode('ascii')
+        ) 
+        for key, val in
+        (
+            (
+                # variable value
+                globals()[var_name],
+                # variable from `all_reserved`, or none otherwise
+                next((word for word, token in all_reserved.items() if token == var_name[len('t_'):]), None) 
+            )
+            # collect the appropriate global variables 
+            for var_name in globals() if 
+            var_name.startswith('t_') and
+            isinstance(globals()[var_name], unicode)
+        )
+    )
+
+    @staticmethod
+    def input(val):
+        return lexer_inner.input(unicode(val, "utf-8"))
+
+    @staticmethod
+    def token():
+        t = lexer_inner.token()
+        if t is not None and isinstance(t.value, unicode):
+            if t.value in IvyUnicodeLexer.unicode_tokens:
+                t.value = IvyUnicodeLexer.unicode_tokens[t.value]
+            else:
+                # a var name may not contain unicode characters. if so, an 
+                # exception will be raised.
+                t.value = t.value.encode('ascii')
+        
+        return t
+lexer = IvyUnicodeLexer()
 
 class LexerVersion(object):
     """ Context Manager that sets the lexer based on the given language version
