@@ -980,7 +980,7 @@ else:
 
     def p_tacticwithelem_invariant(p):
         'tacticwithelem : INVARIANT labeledfmla'
-        p[0] = p[2]
+        p[0] = addlabel(p[2],'invar')
         
     def p_tactwithlist_tacticwithelem(p):
         'tacticwithlist : tacticwithelem'

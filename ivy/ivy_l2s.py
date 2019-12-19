@@ -110,8 +110,8 @@ def l2s_tactic(prover,goals,proof):
     l2s_saved = lg.Const('l2s_saved', lg.Boolean)
     l2s_d = lambda sort: lg.Const('l2s_d',lg.FunctionSort(sort,lg.Boolean))
     l2s_a = lambda sort: lg.Const('l2s_a',lg.FunctionSort(sort,lg.Boolean))
-    l2s_w = lambda vs, t: lg.NamedBinder('l2s_w', vs, None, t)
-    l2s_s = lambda vs, t: lg.NamedBinder('l2s_s', vs, None, t)
+    l2s_w = lambda vs, t: lg.NamedBinder('l2s_w', vs, proof_label, t)
+    l2s_s = lambda vs, t: lg.NamedBinder('l2s_s', vs, proof_label, t)
     l2s_g = lambda vs, t, environ: lg.NamedBinder('l2s_g', vs, environ, t)
     old_l2s_g = lambda vs, t, environ: lg.NamedBinder('_old_l2s_g', vs, environ, t)
 
@@ -155,7 +155,7 @@ def l2s_tactic(prover,goals,proof):
     add_consts_to_d = [
         AssignAction(l2s_d(s)(c), lg.true).set_lineno(lineno)
         for s in uninterpreted_sorts
-        for c in mod.sig.symbols.values() if c.sort == s
+        for c in ilg.sig.symbols.values() if c.sort == s
     ]
     # TODO: maybe add all ground terms, not just consts (if stratified)
     # TODO: add conjectures that constants are in d and a
@@ -196,7 +196,7 @@ def l2s_tactic(prover,goals,proof):
     update_w = [
         AssignAction(
             l2s_w(vs,t)(*vs),
-            lg.And(l2s_w(vs,t)(*vs), lg.Not(t), replace_temporals_by_l2s_g(lg.Not(lg.Globally(lg.Not(t)))))
+            lg.And(l2s_w(vs,t)(*vs), lg.Not(t), replace_temporals_by_l2s_g(lg.Not(lg.Globally(proof_label,lg.Not(t)))))
             # TODO check this and make sure its correct
             # note this adds to l2s_gs
         ).set_lineno(lineno)
