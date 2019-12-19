@@ -254,12 +254,12 @@ def l2s_tactic(prover,goals,proof):
             [AssumeAction(x).set_lineno(lineno) for x in done_waiting] +
             reset_a
         )).set_lineno(lineno),
-        # # frozen -> saved
-        # Sequence(*(
-        #     monitor_edge(l2s_frozen, l2s_saved) +
-        #     save_state +
-        #     reset_w
-        # )),
+        # frozen -> saved
+        Sequence(*(
+            monitor_edge(l2s_frozen, l2s_saved) +
+            save_state +
+            reset_w
+        )),
         # stay in same state (self edge)
         Sequence().set_lineno(lineno),
     ).set_lineno(lineno)]
@@ -315,10 +315,10 @@ def l2s_tactic(prover,goals,proof):
     if debug.get():
         print "public_actions:", model.calls
 
-
-    # Get all the implicit globally properties from the proof
-    # environment. Each temporal operator has an 'environment'. The
-    # operator applies to states *not* in actions labeled with this
+    # Tableau construction
+    #
+    # Each temporal operator has an 'environment'. The operator
+    # applies to states *not* in actions labeled with this
     # environment. This has several consequences:
     #
     # 1) The operator's semantic constraint is an assumed invariant (i.e.,
@@ -330,31 +330,12 @@ def l2s_tactic(prover,goals,proof):
     # occurring in it's body is mutated.
     #
     # 3) At any event for the operator, we update its truth value and
-    # and re-establish its senatic constraint.
+    # and re-establish its semantic constraint.
     #
-    #
-    # The following procedure instruments a statement with operator events for
-    # both the property to be proved and the invariant assumptions (all G properties here).
-    # This depends on the statement's environment, that is, current set of environment
-    # labels.
-    #
-    # Currently, the environment labels of a statement have to be
-    # statically determined, but this could change, i.e., the labels
-    # could be represented by boolean variables. 
-    #
-    # TODO: there is something a bit inelegant here, because when we return from
-    # an exported action to the external environment, we need to update the operator
-    # states, however, we do *not* want to do this when returning to in internal caller.
-    # The best solution currently for this is to duplication the actions so there
-    # is one version for internal callers and one for external callers. This issue doesn't
-    # affect this simple invariance tactic, because it doesn't need to update the truth
-    # values of the operators.
-    
-    # TODO
-    # gproplines = [x.lineno for x in assumed_gprops]
-    
 
-    # Here, we update the tableau state for G subformulas
+    # This procedure generates code for an event corresponding to a
+    # list of operators. The tableau state is updated and the
+    # semantics applied.
     
     def prop_events(gprops):
         res = []
@@ -372,7 +353,17 @@ def l2s_tactic(prover,goals,proof):
         return res
             
 
-    # Make some memo tables
+    # The following procedure instruments a statement with operator
+    # events for all of the temporal operators.  This depends on the
+    # statement's environment, that is, current set of environment
+    # labels.
+    #
+    # Currently, the environment labels of a statement have to be
+    # statically determined, but this could change, i.e., the labels
+    # could be represented by boolean variables. 
+    #
+    
+    # First, make some memo tables
 
     envprops = defaultdict(list)
     symprops = defaultdict(list)
@@ -419,17 +410,24 @@ def l2s_tactic(prover,goals,proof):
         stmt.copy_formals(res) # HACK: This shouldn't be needed
         return res
 
-    # Add property events to all of the actions:
+    # Instrument all the actions
 
     model.bindings = [b.clone([b.action.clone([instr_stmt(b.action.stmt,b.action.labels)])])
                       for b in model.bindings]
     
-    # TODO: this includes the succ action (for the ticket example of
-    # test/test_liveness.ivy). seems to be a bug, and this causes
-    # wrong behavior for the monitor, since a call to succ from within
-    # another action lets it take a step
-
-    calls = set(model.calls)
+    # Now, for every exported action, we add the l2s construction. On
+    # exit of each external procedure, we add a tableau event for all
+    # the operators whose scope is being exited.
+    #
+    # TODO: This is wrong in the case of an exported procedure that is
+    # also internally called.  We do *not* want to update the tableau
+    # in the case of an internal call, since the scope of the
+    # operators os not exited. One solution to this is to create to
+    # duplicate the actions so there is one version for internal
+    # callers and one for external callers. It is possible that this
+    # is already done by ivy_isolate, but this needs to be verified.
+    
+    calls = set(model.calls) # the exports
     for b in model.bindings:
         if b.name in calls:
             add_params_to_d = [
