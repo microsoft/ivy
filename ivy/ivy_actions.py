@@ -245,6 +245,9 @@ class Action(AST):
         return [(pre,[self],post)]
     def modifies(self):
         return []
+    def set_lineno(self,lineno):
+        self.lineno = lineno
+        return self
         
 
 class AssumeAction(Action):

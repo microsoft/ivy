@@ -264,7 +264,7 @@ for cls in [lg.Globally, lg.Eventually]:
     cls.args = property(lambda self: [ a for a in self])
     cls.clone = lambda self,args: type(self)(self.environ,*args)
 
-lg.NamedBinder.clone = lambda self,args: lg.NamedBinder(self.name, self.variables, *args)
+lg.NamedBinder.clone = lambda self,args: lg.NamedBinder(self.name, self.variables, self.environ, *args)
 lg.NamedBinder.rep = property(lambda self: self)
 
 lg.Apply.clone = lambda self,args: type(self)(self.func, *args)
@@ -602,7 +602,7 @@ def is_binder(term):
 for b in [lg.ForAll,lg.Exists,lg.Lambda]:
     b.clone_binder = lambda self, variables, body, b = b: b(variables,body)
 
-lg.NamedBinder.clone_binder = lambda self, variables, body: lg.NamedBinder(self.name,variables,body)
+lg.NamedBinder.clone_binder = lambda self, variables, body: lg.NamedBinder(self.name,variables,self.enrivon,body)
 
 def is_named_binder(term):
     return isinstance(term, lg.NamedBinder)
@@ -1340,6 +1340,7 @@ for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
 lg.NamedBinder.drop_annotations = lambda self,inferred_sort,annotated_vars: lg.NamedBinder(
     self.name,
     [v.drop_annotations(False,annotated_vars) for v in self.variables],
+    self.environ,
     self.body.drop_annotations(True,annotated_vars)
 )
 
@@ -1418,7 +1419,7 @@ def is_numeral(term):
 def is_interpreted_symbol(s):
     if symbol_is_polymorphic(s) and len(s.sort.dom) == 0:
         print s
-    return is_numeral(s) and is_interpreted_sort(s.sort) or symbol_is_polymorphic(s) and is_interpreted_sort(s.sort.dom[0])
+    return is_numeral(s) and is_interpreted_sort(s.sort) or symbol_is_polymorphic(s) and len(s.sort.dom) > 0 and is_interpreted_sort(s.sort.dom[0])
 
 def is_deterministic_fmla(f):
     if isinstance(f,Some) and len(f.args) < 4:
@@ -1664,5 +1665,9 @@ def polar(fmla,pos,pol):
         return None if pos == 0 else pol
     return None
 
+def label_temporal(fmla,label):
+    if is_temporal(fmla):
+        return type(fmla)(label,fmla.body)
+    return fmla.clone([label_temporal(x,label) for x in fmla.args])
 
             

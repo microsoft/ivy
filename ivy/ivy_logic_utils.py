@@ -231,26 +231,31 @@ def normalize_named_binders(ast,names=None):
         subs = dict((v.name,nv) for v,nv in zip(vs,nvs))
         b = normalize_named_binders(ast.body, names)
         b = substitute_ast(b, subs)
-        return type(ast)(ast.name, nvs, b)
+        return type(ast)(ast.name, nvs, ast.environ, b)
     args = [normalize_named_binders(x, names) for x in ast.args]
     if is_app(ast):
         return normalize_named_binders(ast.rep,names)(*args)
     else:
         return ast.clone(args)
 
-def replace_temporals_by_named_binder_g_ast(ast, g=lambda vs, t: lg.NamedBinder('g', vs, t)):
+def default_globally_binder(vs, t, env):
+    name = 'g['+str(env)+']' if env is not None else 'g'
+    return lg.NamedBinder(name, vs, t)
+
+def replace_temporals_by_named_binder_g_ast(ast, g=default_globally_binder):
     """
     Replace temporal operators globally and eventually by a named
     binder g. Note that temporal operators inside formulas bound by
     named binders are also altered.
     """
+    print ast
     if type(ast) == lg.Globally:
         body = replace_temporals_by_named_binder_g_ast(ast.body, g)
         vs, nvs, body = normalize_free_variables(body)
-        return g(nvs,body)(*vs)
+        return g(nvs,body,ast.environ)(*vs)
     elif type(ast) == lg.Eventually:
         notbody = lg.Not(ast.body) #if type(ast.body) != lg.Not else ast.body.body
-        return replace_temporals_by_named_binder_g_ast(lg.Not(lg.Globally(notbody)), g)
+        return replace_temporals_by_named_binder_g_ast(lg.Not(lg.Globally(ast.environ,notbody)), g)
     else:
         args = [replace_temporals_by_named_binder_g_ast(x, g) for x in ast.args]
         if type(ast) == lg.Apply:

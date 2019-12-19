@@ -390,6 +390,7 @@ ivy_ast.Quantifier.cmpl = compile_quantifier
 ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
     self.name,
     [v.compile() for v in self.bounds],
+    None,
     self.args[0].compile()
 )
 
@@ -1826,17 +1827,26 @@ def handle_temporals(mod):
         isonames = imap[prop.name]
         assert len(isonames) > 0  # should at least be verified in isolate 'this'!
         if len(isonames) > 1:
-            raise IvyError(prop,'Temporal propery belongs to moe than one isolate: {}'.format(','.join(str(x) for x in isonames)))
-        new_props.append(prop.clone([prop.label,label_temporal(prop.formula,isonames[0])]))
+            raise IvyError(prop,'Temporal property belongs to more than one isolate: {}'.format(','.join(str(x) for x in isonames)))
+        new_props.append(prop.clone([prop.label,ivy_logic.label_temporal(prop.formula,isonames[0])]))
+    for prop,proof in mod.proofs:
+        if prop.temporal:
+            isonames = imap[prop.name]
+            add_labels_to_proof(proof,isonames)
     mod.labeled_props = new_props
     imap = iso.get_isolate_map(mod,verified=True,present=True)
     for actname,action in mod.actions.iteritems():
         action.labels = imap[actname]
 
-def label_temporal(fmla,label):
-    if ivy_logic.is_temporal(fmla):
-        return type(fmla)(label,fmla.body)
-    return fmla.clone([label_temporal(x,label) for x in fmla.args])
+def add_labels_to_proof(proof,labels):
+    if isinstance(proof,ivy_ast.ComposeTactics):
+        return proof.clone(map(add_labels_to_proof,proof.args))
+    if isinstance(proof,ivy_ast.IfTactic):
+        return proof.clone([proof.args[0]] + map(add_labels_to_proof,proof.args[1:]))
+    if isinstance(proof,ivy_ast.TacticTactic):
+        proof.labels = list(labels)
+    return proof
+        
         
 def add_action_label(action,label):
     if not hasattr(action,'labels'):

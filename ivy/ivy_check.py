@@ -22,6 +22,7 @@ import ivy_fragment as ifc
 import ivy_proof
 import ivy_temporal as itmp
 import ivy_printer
+import ivy_l2s
 
 import sys
 from collections import defaultdict
