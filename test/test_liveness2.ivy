@@ -247,7 +247,7 @@ object ticket_protocol = {
         # invariant ~($l2s_w T. (pc2(T) & (globally ~pc3(T))))(t0) -> (pc2(t0) & (globally ~pc3(t0)))
         invariant l2s_frozen -> (pc2(t0) & globally ~pc3(t0))
         invariant l2s_saved  -> (pc2(t0) & globally ~pc3(t0))
-        invariant l2s_saved  -> ($l2s_s T,K. m(T,K))(t0,K) <-> m(t0,K)
+        invariant l2s_saved  -> (($l2s_s T,K. m(T,K))(t0,K) <-> m(t0,K))
         invariant l2s_saved  -> le( ($ l2s_s . service) , service)
         invariant l2s_saved  -> le( ($ l2s_s . next_ticket) , next_ticket)
 

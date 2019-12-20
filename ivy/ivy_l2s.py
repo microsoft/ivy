@@ -88,6 +88,7 @@ def l2s_tactic(prover,goals,proof):
 
     assert hasattr(proof,'labels') and len(proof.labels) == 1
     proof_label = proof.labels[0]
+#    print 'proof label: {}'.format(proof_label)
     invars = [ilg.label_temporal(inv.compile(),proof_label) for inv in proof.tactic_decls]
 
     # Add the invariant phi to the list. TODO: maybe, if it is a G prop
@@ -96,6 +97,11 @@ def l2s_tactic(prover,goals,proof):
     # Add the invariant list to the model
     model.invars = model.invars + invars
     
+    # for inv in invars:
+    #     print inv
+    #     for b in ilu.named_binders_ast(inv):
+    #         print 'orig binder: {} {} {}'.format(b.name,b.environ,b.body)
+
     # model pass helper funciton
     def mod_pass(transform):
         model.invars = [transform(x) for x in model.invars]
@@ -123,6 +129,7 @@ def l2s_tactic(prover,goals,proof):
     def _l2s_g(vs, t, env):
         vs = tuple(vs)
         res = l2s_g(vs, t,env)
+#        print 'l2s_gs: {} {} {}'.format(vs,t,env)
         l2s_gs.add((vs,t,env))
         return res
     replace_temporals_by_l2s_g = lambda ast: ilu.replace_temporals_by_named_binder_g_ast(ast, _l2s_g)
@@ -163,6 +170,7 @@ def l2s_tactic(prover,goals,proof):
     # figure out which l2s_w and l2s_s are used in conjectures
     named_binders_conjs = defaultdict(list) # dict mapping names to lists of (vars, body)
     for b in ilu.named_binders_asts(model.invars):
+#        print 'binder: {} {} {}'.format(b.name,b.environ,b.body)
         named_binders_conjs[b.name].append((b.variables, b.body))
     named_binders_conjs = defaultdict(list,((k,list(set(v))) for k,v in named_binders_conjs.iteritems()))
     to_wait = [] # list of (variables, term) corresponding to l2s_w in conjectures

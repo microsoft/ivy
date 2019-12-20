@@ -1417,8 +1417,8 @@ def is_numeral(term):
     return isinstance(term,Symbol) and term.is_numeral()
 
 def is_interpreted_symbol(s):
-    if symbol_is_polymorphic(s) and len(s.sort.dom) == 0:
-        print s
+#    if symbol_is_polymorphic(s) and len(s.sort.dom) == 0:
+#        print s
     return is_numeral(s) and is_interpreted_sort(s.sort) or symbol_is_polymorphic(s) and len(s.sort.dom) > 0 and is_interpreted_sort(s.sort.dom[0])
 
 def is_deterministic_fmla(f):
@@ -1667,7 +1667,13 @@ def polar(fmla,pos,pol):
 
 def label_temporal(fmla,label):
     if is_temporal(fmla):
-        return type(fmla)(label,fmla.body)
-    return fmla.clone([label_temporal(x,label) for x in fmla.args])
+        return type(fmla)(label,label_temporal(fmla.body,label))
+    elif is_named_binder(fmla):
+        return type(fmla)(fmla.name,fmla.variables,label,label_temporal(fmla.body,label))
+    args = [label_temporal(x,label) for x in fmla.args]
+    if type(fmla) == lg.Apply:
+        func = label_temporal(fmla.func, label)
+        return type(fmla)(func, *args)
+    return fmla.clone(args)
 
             

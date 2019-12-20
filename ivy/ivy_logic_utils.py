@@ -248,7 +248,6 @@ def replace_temporals_by_named_binder_g_ast(ast, g=default_globally_binder):
     binder g. Note that temporal operators inside formulas bound by
     named binders are also altered.
     """
-    print ast
     if type(ast) == lg.Globally:
         body = replace_temporals_by_named_binder_g_ast(ast.body, g)
         vs, nvs, body = normalize_free_variables(body)
