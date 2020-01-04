@@ -211,6 +211,17 @@ class Action(AST):
         if hasattr(self,'formal_returns'):
             res.formal_returns = self.formal_returns
         return res
+    def drop_post_assume(self,pre):
+        args = [a.drop_post_assume(pre) if isinstance(a,Action) else (a,pre) for a in self.args]
+        pre = pre or any(a[1] for a in args)
+        res = self.clone([a[0] for a in args]) if pre else Sequence()
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return (res,pre)
     def drop_invariants(self):
         args = [a.drop_invariants() if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
@@ -270,7 +281,9 @@ class AssumeAction(Action):
         clauses = unfold_definitions_clauses(clauses)
         clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
         return ([],clauses,false_clauses(annot = EmptyAnnotation()))
-
+    def drop_post_assume(self,pre):
+        return (self,True)
+    
 class AssertAction(Action):
     def __init__(self,*args):
         assert len(args) <= 2
@@ -688,6 +701,15 @@ class Sequence(Action):
             interpreter.execute(op)
     def decompose(self,pre,post,fail=False):
         return [(pre,self.args,post)]
+    def drop_post_assume(self,pre):
+        res = []
+        for a in reversed(self.args):
+            a,pre = a.drop_post_assume(pre)
+            if pre:
+                res.append(a)
+        res.reverse()
+        res = Sequence(*res)
+        return (res,pre)
         
 determinize = False
 

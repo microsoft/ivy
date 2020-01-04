@@ -1,0 +1,291 @@
+#lang ivy
+
+# This is an implementation of a generic UDP endpoint. It allows a host to open a socket
+# and to send and receive packets on it. The network is unreliable and allows packet duplication.
+# Parameters are:
+#
+#     endpoint : the type of UDP endpoints
+#     pkt  : the type of messages
+#
+# The endpoint type should be a struct with fields `addr` (the IP
+# address) and `port`.
+
+module udp_host(endpoint,pkt) = {
+
+# The type of socket descriptors
+
+    type socket
+
+
+    
+# This code goes in the C++ header file, ahead of the ivy object declaration.
+# Here, we put declarations (perhaps forward) of any auxiliary classes we need).
+# We need to be careful that the names of these don't clash with other modules.
+# However, duplicates are removed, so we don't have to worry about multiple instances
+# of this module clashing.
+
+<<< header
+
+    #include <list>
+    #ifndef _WIN32
+    #include <netinet/udp.h>
+    #include <semaphore.h>
+    #endif
+
+    class udp_listener;   // class of threads that listen for connections
+    class udp_callbacks;  // class holding callbacks to ivy
+
+    // A udp_config maps endpoint ids to IP addresses and ports.
+
+
+
+
+>>>
+
+# This code goes in the C++ implementation file. Here, we put implementations of
+# the classes declared in the header, and auxiliary functions. 
+
+<<< impl
+
+
+    // get a new UDP socket
+
+    int make_udp_socket() {
+        int sock = ::socket(AF_INET, SOCK_DGRAM, 0);
+        if (sock < 0)
+            { std::cerr << "cannot create socket\n"; exit(1); }
+        return sock;
+    }
+    
+
+    // This structure holds all the callbacks for the endpoint. These are function objects
+    // that are called asynchronously.
+
+    struct udp_callbacks {
+        %`impl.handle_recv` rcb;
+        udp_callbacks(const %`impl.handle_recv` &rcb)
+            : rcb(rcb) {}
+    };
+
+    // This is a general class for an asynchronous task. These objects are called in a loop
+    // by a thread allocated by the runtime. The fdes method returns a file descriptor
+    // associated with the object. If fdes returns a negative value, the thread deletes the
+    // object and terminates.
+
+    class udp_task : public reader {
+      protected:
+        int sock;           // socket associated to this task, or -1 if task complete
+        udp_callbacks cb;   // callbacks to ivy
+        ivy_class *ivy;     // pointer to main ivy object (mainly to get lock)
+
+      public:
+
+        bool was_shut_down;
+
+        udp_task(int sock, const udp_callbacks &cb, ivy_class *ivy)
+          : sock(sock), cb(cb), ivy(ivy), was_shut_down(false) {} 
+
+        virtual int fdes() {
+            return sock;
+        }
+
+        ~udp_task() {
+            if (sock >= 0) {
+                ::close(sock);
+            }
+        }
+    };
+
+
+    // This task reads messages from a socket and calls the "recv" callback.
+
+    class udp_reader : public udp_task {
+        sockaddr_in myaddr;
+        std::vector<char> buf;
+      public:
+        udp_reader(int sock, const udp_callbacks &cb, ivy_class *ivy)
+            : udp_task(sock, cb, ivy) {
+            socklen_t len = sizeof(sockaddr_in);
+            if (::getsockname(sock,(struct sockaddr *)&myaddr,&len) < 0)
+	       { perror("getsockname failed"); exit(1); }
+        }
+
+        // This is called in a loop by the task thread.
+
+        virtual void read() {
+            // std::cout << "RECEIVING\n";
+
+	    int len=0;
+	    socklen_t lenlen=4;
+#ifdef _WIN32
+	    if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&len,&lenlen))
+#else
+	    if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,&len,&lenlen))
+#endif
+		{ perror("getsockopt failed"); exit(1); }
+	    std::vector<unsigned char> buf(len);
+	    int bytes;
+	    sockaddr_in srcaddr;
+	    socklen_t addrlen = sizeof(srcaddr);
+	    if ((bytes = recvfrom(sock,&buf[0],len,0,(sockaddr *)&srcaddr,&addrlen)) < 0)
+		{ std::cerr << "recvfrom failed\n"; exit(1); }
+	    if (bytes == 0 && was_shut_down) {
+                std::cout << "closing socket" << std::endl;
+                close(sock);
+	        sock = -1;  // will cause this thread to exit and reader object to be deleted
+	        return;
+	    }
+   	    buf.resize(bytes);
+	    `pkt` pkt;
+            pkt.resize(bytes);
+            std::copy(buf.begin(),buf.end(),pkt.begin());
+	    `endpoint` src;
+	    src.addr = ntohl(srcaddr.sin_addr.s_addr);
+	    src.port = ntohs(srcaddr.sin_port);
+	    `endpoint` dst;
+	    dst.addr = ntohl(myaddr.sin_addr.s_addr);
+	    dst.port = ntohs(myaddr.sin_port);
+	    ivy->__lock();
+	    cb.rcb(sock,src,dst,pkt);
+	    ivy->__unlock();
+	}
+
+    };
+
+
+>>>
+
+object impl = {
+
+    # Here we put any new members of the ivy C++ class. If we have allocated a per-instance
+    # object, we declared it here anti-quoted. The plugs in the actual member name, which may
+    # be any array if this is a parameterized instance.
+
+    # These empty objects are used to hold C++ values.
+
+    object cb = {}          # struct holding the callbacks
+
+    <<< member
+
+	udp_callbacks *`cb`;             // the callbacks to ivy
+        hash_space::hash_map<int,void *> `rdr`;
+
+    >>>
+
+
+    # Here, we put code to go in the initializer. If this is a
+    # parameterized instance, then this code will be run in a loop, so we
+    # have to be careful that any initialization of common objects is
+    # idempotent.
+
+    <<< init
+
+	// Create the callbacks. In a parameterized instance, this creates
+	// one set of callbacks for each endpoint id. When you put an
+	// action in anti-quotes it creates a function object (a "thunk")
+	// that captures the instance environment, in this case including
+	// the instance's endpoint id "me".
+
+	`cb` = new udp_callbacks(`handle_recv`);
+
+    >>>
+
+	# These actions are handlers for the callbacks. They just insert the endpoint's id
+	# and call the corresponding callback action.
+
+        action handle_recv(s:socket,src:endpoint,dst:endpoint,x:pkt) = {
+	    call recv(s,src,dst,x)
+	}
+
+	# open creates a socket and binds it to the requested endpoint.
+
+	action open(addr:endpoint) returns (s:socket) = {
+	    <<< impure
+		s = make_udp_socket();
+		// std::cout << "SOCKET " << s << std::endl;
+		struct sockaddr_in myaddr;
+		myaddr.sin_family = AF_INET;
+		myaddr.sin_addr.s_addr = htonl(addr.addr);
+		// myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		myaddr.sin_port = htons(addr.port);
+		// std::cout << "binding id: " << " addr: " << ntohl(myaddr.sin_addr.s_addr) << " port: " << ntohs(myaddr.sin_port) << std::endl;
+		if (::bind(s, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
+		    { perror("bind failed"); exit(1); }
+                udp_reader *r = new udp_reader(s, *`cb`, this);
+                `rdr`[s] = r;
+	        install_reader(r);
+	    >>>
+	}
+
+    }
+
+    # These are the implementations of the interface calls. These
+    # operations are synchronous.
+
+    # close the socket
+
+    action close(s:socket) = {
+	<<< impure
+
+	    // We don't want to close a socket when there is another thread
+	    // waiting, because the other thread won't know what to do with the
+	    // error. 
+
+	    // Instead we shut down the socket and let the other thread close it.
+	    // If there is a reader thread, it will see EOF and close the socket. If there is
+	    // on open writer thread, it will close the socket after we close the
+	    // send queue. If the queue is already closed, closing it has no effect.
+
+	    // invariant: if a socket is open there is a reader thread or
+	    // an open writer thread, but not both. 
+
+	    // Because of this invariant, the socket will be closed exactly once.
+
+            udp_reader *r = (udp_reader *)`rdr`[s];
+            if (r) {
+                r->was_shut_down = true;
+                `rdr`[s] = 0;
+            }
+	    ::shutdown(s,SHUT_RDWR);
+
+	>>>
+    }
+
+    # open creates a socket and binds it to the requested endpoint.
+
+    action open(addr:endpoint) returns (s:socket) = {
+        s := impl.open(addr)
+    }
+
+    # send transmits a packet synchronously.  
+
+    action send(s:socket,dst:endpoint,x:pkt) = {
+	<<< impure
+        std::cout << "socket" << s << std::endl;
+        struct sockaddr_in dstaddr;
+	dstaddr.sin_family = AF_INET;
+	dstaddr.sin_addr.s_addr = htonl(dst.addr);
+	//dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	dstaddr.sin_port = htons(dst.port);
+	// std::cout << "sending id: " << " addr: " << ntohl(dstaddr.sin_addr.s_addr) << " port: " << ntohs(dstaddr.sin_port) << std::endl;
+        std::vector<unsigned char> buf;
+        buf.resize(x.size());
+        std::copy(x.begin(),x.end(),buf.begin());
+	if (sendto(s,&buf[0],buf.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
+#ifdef _WIN32
+		     { std::cerr << "sendto failed " << WSAGetLastError() << "\n"; exit(1); }
+#else
+		     { perror("sendto failed"); exit(1); }
+#endif
+	>>>
+    }
+
+
+    # callback on reception of message, to be implemented by user.
+
+    action recv(s:socket,src:endpoint,dst:endpoint,x:pkt)
+
+    trusted isolate iso = this
+
+    attribute test = impl
+}

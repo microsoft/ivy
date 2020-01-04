@@ -1254,7 +1254,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     # check that native code does not occur in an untrusted isolate
 
-    if type(isolate) == ivy_ast.IsolateDef:
+    if type(isolate) == ivy_ast.IsolateDef and isolate_mode.get() != 'test':
         for action in mod.actions.values():
             if isinstance(action,ia.NativeAction):
                 raise iu.IvyError(action,'trusted code used in untrusted isolate')

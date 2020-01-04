@@ -1001,6 +1001,8 @@ def emit_action_gen(header,impl,name,action,classname):
     caname = varname(name)
     if name in im.module.before_export:
         action = im.module.before_export[name]
+    else:
+        print 'warning: exported action {} has no before advice'
     def card(sort):
 #        res = sort_card(sort)
 #        if res is not None:
@@ -1016,6 +1018,8 @@ def emit_action_gen(header,impl,name,action,classname):
         action.lineno = orig_action.lineno
         action.formal_params = orig_action.formal_params
         action.formal_returns = orig_action.formal_returns
+
+#    action,_ = action.drop_post_assume(False)
 
     with ia.UnrollContext(card):
         upd = action.update(im.module,None)
@@ -1655,6 +1659,7 @@ def find_import_callers():
         name = imp.imported()
         if not imp.scope() and name in im.module.actions:
             import_callers.add('ext:' + name[5:])
+            import_callers.add(name[5:])
             
 def module_to_cpp_class(classname,basename):
     global the_classname
@@ -5084,15 +5089,18 @@ def main_int(is_ivyc):
             if isolate != None:
                 isolates = [isolate]
             else:
-                extracts = list((x,y) for x,y in im.module.isolates.iteritems()
-                                if isinstance(y,ivy_ast.ExtractDef))
-                if len(extracts) == 0:
-                    isol = ivy_ast.ExtractDef(ivy_ast.Atom('extract'),ivy_ast.Atom('this'))
-                    isol.with_args = 1
-                    im.module.isolates['extract'] = isol
-                    isolates = ['extract']
-                elif len(extracts) == 1:
-                    isolates = [extracts[0][0]]
+                if target.get() == 'test':
+                    isolates = ['this']
+                else:
+                    extracts = list((x,y) for x,y in im.module.isolates.iteritems()
+                                    if isinstance(y,ivy_ast.ExtractDef))
+                    if len(extracts) == 0:
+                        isol = ivy_ast.ExtractDef(ivy_ast.Atom('extract'),ivy_ast.Atom('this'))
+                        isol.with_args = 1
+                        im.module.isolates['extract'] = isol
+                        isolates = ['extract']
+                    elif len(extracts) == 1:
+                        isolates = [extracts[0][0]]
 
         else:
             if isolate != None:
