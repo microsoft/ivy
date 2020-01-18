@@ -178,6 +178,9 @@ class ProofChecker(object):
     def let_tactic(self,decls,proof):
         cond = il.And(*[il.Equals(x,y) for x,y in proof.args])
         subgoal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
+        if not hasattr(decls[0],'lineno'):
+            print 'has no line number: {}'.format(decls[0])
+            exit(1)
         subgoal.lineno = decls[0].lineno
         return attrib_goals(proof,[subgoal]) + decls[1:]
 
@@ -258,7 +261,9 @@ class ProofChecker(object):
     def if_tactic(self,decls,proof):
         cond = proof.args[0]
         true_goal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
+        true_goal.lineno = decls[0].lineno
         false_goal = ia.LabeledFormula(decls[0].label,il.Implies(il.Not(cond),decls[0].formula))
+        false_goal.lineno = decls[0].lineno
         return (attrib_goals(proof.args[1],self.apply_proof([true_goal],proof.args[1])) +
                 attrib_goals(proof.args[2],self.apply_proof([false_goal],proof.args[2])) +
                 decls[1:])
@@ -413,6 +418,9 @@ def normalize_goal(x):
     conjunctions/disjunctions and single-variable quantifiers. """
     if goal_is_defn(x):
         return x
+    if not hasattr(x,'formula'):
+        print x
+        print type(x)
     return clone_goal(x,map(normalize_goal,goal_prems(x)),il.normalize_ops(goal_conc(x)))
 
 

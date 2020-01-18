@@ -115,12 +115,12 @@ module total_order_schemata(t) = {
 
     schema lt1 = {
         function x1 : t
-        property ~(X < Y & Y < x1 & x1 < X)
+        property ~(X < Y & ~(x1 < Y) & (x1 < X | x1 = X))
     }
 
     schema lt2 = {
         function x1 : t
-        property ~(~(X < Y) & ~(x1 < X) & x1 < Y)
+        property ~(~(X < Y) & (~(x1 < X) & x1 < Y | ~(x1 < X) & x1 ~= X & x1 = Y))
     }
 
     schema lt3 = {

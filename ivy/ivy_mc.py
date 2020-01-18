@@ -1081,7 +1081,7 @@ def to_aiger(mod,ext_act):
     # get the invariant to be proved, replacing free variables with
     # skolems. First, we apply any proof tactics.
 
-    pc = ivy_proof.ProofChecker(mod.axioms,mod.definitions,mod.schemata)
+    pc = ivy_proof.ProofChecker(mod.labeled_axioms,mod.definitions,mod.schemata)
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     conjs = []
     for lf in mod.labeled_conjs:
@@ -1463,7 +1463,6 @@ class AigerMatchHandler2(ivy_trace.TraceBase):
         self.add_state(eqns)
         
     def final_state(self):
-        print 'next!'
         self.aiger.sub.next()
 
         post = self.aiger.sub.latch_vals()  # use this, since file can be wrong!
