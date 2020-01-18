@@ -77,13 +77,17 @@ class TraceBase(art.AnalysisGraph):
                     expr.subgraph.to_lines(lines,hash,indent+1)
                     lines.append(indent * '    ' + '}\n')
                 lines.append('\n')
-            lines.append(indent * '    ' + '[\n')
+            foo = False
             for c in state.clauses.fmlas:
                 s1,s2 = map(str,c.args)
                 if not(s1 in hash and hash[s1] == s2):
                     hash[s1] = s2
+                    if not foo:
+                        lines.append(indent * '    ' + '[\n')
+                        foo = True
                     lines.append((indent+1) * '    ' + str(c) + '\n')
-            lines.append(indent * '    ' + ']\n')
+            if foo:
+                lines.append(indent * '    ' + ']\n')
         
     def __str__(self):
         lines = []

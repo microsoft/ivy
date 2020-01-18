@@ -203,6 +203,11 @@ class Action(AST):
         if hasattr(self,'formal_returns'):
             res.formal_returns = self.formal_returns
         return res
+    def add_label(self,label):
+        res = self.clone(self.args)
+        self.copy_formals(res)
+        res.label = label
+        return res
     def assert_to_assume(self,kinds):
         args = [a.assert_to_assume(kinds) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
@@ -1454,13 +1459,19 @@ def match_annotation(action,annot,handler):
                         recur(code,annot.elseb,env)
                 return
             if isinstance(action,ChoiceAction):
-                if isinstance(action,EnvAction):
+                if isinstance(action,EnvAction) and hasattr(action,'label'):
                     handler.handle(action,env)
                 assert isinstance(annot,IteAnnotation)
                 annots = unite_annot(annot)
                 assert len(annots) == len(action.args)
                 for act,(cond,ann) in reversed(zip(action.args,annots)):
                     if handler.eval(cond):
+                        if isinstance(action,EnvAction) and not hasattr(action,'label'):
+                            callact = act
+                            label = act.label if hasattr(act,'label') else 'unknown'
+                            callact = CallAction(ivy_ast.Atom(label,[]))
+#                            callact.label = label
+                            handler.handle(callact,env)
                         recur(act,ann,env,None)
                         return
                 assert False,'problem in match_annotation'

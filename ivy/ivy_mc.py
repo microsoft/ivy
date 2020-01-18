@@ -1071,7 +1071,7 @@ def to_aiger(mod,ext_act):
 
     # we use a special state variable __init to indicate the initial state
 
-    ext_acts = [mod.actions[x] for x in sorted(mod.public_actions)]
+    ext_acts = [mod.actions[x].add_label(x) for x in sorted(mod.public_actions)]
     ext_act = ia.EnvAction(*ext_acts)
 
     init_var = il.Symbol('__init',il.find_sort('bool')) 
@@ -1569,7 +1569,6 @@ def aiger_witness_to_ivy_trace2(aiger,witnessfilename,action,stvarset,ext_act,an
             # for v in aiger.inputs:
             #     if v in decoder:
             #         print '    {} = {}'.format(decoder[v],aiger.get_sym(v))
-            print 'path:'
             ia.match_annotation(action,annot,handler)
             handler.end()
         print str(handler)
