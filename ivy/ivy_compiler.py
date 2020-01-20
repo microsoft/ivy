@@ -1404,6 +1404,18 @@ def BalancedChoice(choices):
     return ChoiceAction(BalancedChoice(choices[0:len(choices)/2]),
                         BalancedChoice(choices[len(choices)/2:]))
 
+def get_file_version(filename):
+    f = open(filename,'rU')
+    if not f:
+        raise IvyError(None,"not found: %s" % filename)
+    header = f.readline()
+    header = string.strip(header)
+    if header.startswith('#lang ivy'):
+        version = header[len('#lang ivy'):]
+        if version.strip() != '':
+            return iu.string_version_to_numeric_version(version)
+    return None
+
 def ivy_new(filename = None):
 #    d = Interp()
     if filename:

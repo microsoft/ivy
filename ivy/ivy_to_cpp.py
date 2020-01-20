@@ -20,6 +20,8 @@ import itertools
 import ivy_cpp
 import ivy_cpp_types
 import ivy_fragment as ifc
+import sys
+import os
 
 
 from collections import defaultdict
@@ -5072,6 +5074,16 @@ def main_int(is_ivyc):
         global emit_main
         emit_main = False
         
+    if len(sys.argv) == 2 and ic.get_file_version(sys.argv[1]) >= [2]:
+        if not target.get() == 'repl' and emit_main:
+            raise iu.IvyError(None,'Version 2 compiler supports only target=repl')
+        cdir = os.path.join(os.path.dirname(__file__), 'ivy2/s3')
+        cmd = 'IVY_INCLUDE_PATH={} {} {}'.format(os.path.join(cdir,'include'),os.path.join(cdir,'ivyc_s3'),sys.argv[1])
+        print cmd
+        sys.stdout.flush()
+        status = os.system(cmd)
+        exit(status)
+
 
     with im.Module():
         if target.get() == 'test':
@@ -5115,13 +5127,18 @@ def main_int(is_ivyc):
                 if isolates == [None] and not iu.version_le(iu.get_string_version(),"1.6"):
                     isolates = ['this']
 
-        import sys
         import json
         for isolate in isolates:
             with im.module.copy():
                 with iu.ErrorPrinter():
 
-                    import os
+
+                    def do_cmd(cmd):
+                        print cmd
+                        status = os.system(cmd)
+                        if status:
+                            exit(1)
+    
                     if isolate:
                         if len(isolates) > 1:
                             print "Compiling isolate {}...".format(isolate)
@@ -5186,14 +5203,21 @@ def main_int(is_ivyc):
                             else:
                                 libspec += ''.join(' -l' + ll for ll in y.rep.strip('"').split(',') if not ll.endswith('.lib'))
                     if platform.system() == 'Windows':
-                        if 'Z3DIR' in os.environ:
-                            incspec = '/I %Z3DIR%\\include'
-                            libpspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
-                        else:
-                            import z3
-                            z3path = os.path.dirname(os.path.abspath(z3.__file__))
-                            incspec = '/I {}'.format(z3path)
-                            libpspec = '/LIBPATH:{}'.format(z3path)
+                        # if 'Z3DIR' in os.environ:
+                        #     incspec = '/I %Z3DIR%\\include'
+                        #     libpspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
+                        # else:
+                        #     import z3
+                        #     z3path = os.path.dirname(os.path.abspath(z3.__file__))
+                        #     incspec = '/I {}'.format(z3path)
+                        #     libpspec = '/LIBPATH:{}'.format(z3path)
+                        _dir = os.path.dirname(os.path.abspath(__file__))
+                        incspec = '/I {}'.format(os.path.join(_dir,'include'))
+                        libpspec = '/LIBPATH:{}'.format(os.path.join(_dir,'lib'))
+                        if not os.path.exists('libz3.dll'):
+                            print 'Copying libz3.dll to current directory.'
+                            print 'If the binary {}.exe is moved to another directory, this file must also be moved.'.format(basename)
+                            do_cmd('copy {} libz3.dll'.format(os.path.join(_dir,'lib','libz3.dll')))
                         for lib in libs:
                             _incdir = lib[1] if len(lib) >= 2 else []
                             _libdir = lib[2] if len(lib) >= 3 else []
@@ -5245,7 +5269,6 @@ def outfile(name):
     return (opt_outdir.get() + '/' + name) if opt_outdir.get() else name
         
 def find_vs():
-    import os
     try:
         windir = os.getenv('WINDIR')
         drive = windir[0]
