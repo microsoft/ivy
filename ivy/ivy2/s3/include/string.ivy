@@ -1,0 +1,50 @@
+#lang ivy
+
+# This file provide various traits for defining character string types
+# and manipulating strings.
+
+# String types provide all the traits of arrays, that is:
+#
+# - A domain type `domain` (representing character positions)
+# - A range type `range` (representing characters)
+# - A destructor `value : (domain -> range)` giving the character at a postion
+# - A destructor `begin : domain` giving the beginning position (always 0)
+# - A destructor `end " domain` giving the ending position
+# - An action `empty` that returns an empty string
+# - An action `append` that appends a character to a string
+# - An action `extend` that append a string to a string
+# - An action `resize` that sets the length of the string
+# - An action `segment` that returns a substring,
+ 
+include collections
+
+object string = {
+
+    module this (domain,range) = {
+        instantiate array (domain,range)
+    }
+
+    # The `ascii` module provides strings of ASCII characters
+    # represented internally using the C++ `char` type. That is, each
+    # character is represented by a single byte.
+
+    module ascii = {
+
+        # The domain type for ASCII strings is represented by the C++
+        # `size_t` type. This allows strings as large as available
+        # memory will allow.
+        
+        type domain
+        interpret domain -> ivy.native_int[size_t]
+
+        # The domain type for ASCII strings is represented by the C++
+        # `char` type. This allows code points in the range 0-127.
+        
+        type range
+        interpret range -> ivy.native_int[char]
+
+        instantiate array(domain,range)
+
+    }
+
+}

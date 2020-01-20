@@ -24,4 +24,21 @@ module environment(str) = {
         }
         >>>
     }
-}    
+}
+
+module sys_argv(pos,str) = {
+    action end returns(res:pos) = {
+	<<<
+	res = __argv.size();
+	>>>
+    }
+    action value(idx:pos) returns (res:str) = {
+	<<<
+	std::string &a = __argv[idx];
+	for (unsigned i = 0; i < a.size(); i++) {
+            res.push_back(a[i]);
+	}
+	>>>
+    }
+}
+

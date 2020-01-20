@@ -1749,6 +1749,7 @@ def module_to_cpp_class(classname,basename):
     header.append('class ' + classname + ' {\n  public:\n')
     header.append("    typedef {} ivy_class;\n".format(classname))
     header.append("""
+    std::vector<std::string> __argv;
 #ifdef _WIN32
     void *mutex;  // forward reference to HANDLE
 #else
@@ -2969,6 +2970,7 @@ class z3_thunk : public thunk<D,R> {
     int seed = 1;
     int sleep_ms = 10;
     int final_ms = 0; 
+    
     std::vector<char *> pargs; // positional args
     pargs.push_back(argv[0]);
     for (int i = 1; i < argc; i++) {
@@ -3067,6 +3069,7 @@ class z3_thunk : public thunk<D,R> {
                     impl.append('    initializing = true;\n')
                 impl.append('    {}_repl ivy{};\n'
                             .format(classname,cp))
+                impl.append('    for(unsigned i = 0; i < argc; i++) {ivy.__argv.push_back(argv[i]);}\n')
                 if target.get() == "test":
                     impl.append('    ivy._generating = false;\n')
                     emit_repl_boilerplate3test(header,impl,classname)
@@ -3215,8 +3218,8 @@ def emit_one_initial_state(header):
                 assign_symbol_from_model(header,sym,m)
             else:
                 mk_nondet_sym(header,sym,'init',0)
-    action = ia.Sequence(*[a for n,a in im.module.initializers])
-    action.emit(header)
+#    action = ia.Sequence(*[a for n,a in im.module.initializers])
+#    action.emit(header)
 
 def emit_parameter_assignments(impl):
     for sym in im.module.params:
