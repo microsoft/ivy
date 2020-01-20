@@ -14899,6 +14899,11 @@ namespace ivy
             
             pos::__t loop_nesting;
             
+            
+            // Annotation of current assignment
+            
+            ivy::ptr< annot::__t > asgn_ann;
+            
             void add_member  (const ivy::ptr< ivy::ident::__t > &namesp,const ivy::ptr< ivy::decl::__t >
                 &member);
             
@@ -14936,7 +14941,7 @@ namespace ivy
                     == other . dot_rhs & conflicts == other . conflicts & borrowings == other .
                     borrowings & num_borrowings == other . num_borrowings & fix_borrow_map == other
                     . fix_borrow_map & cond_nesting == other . cond_nesting & loop_nesting == other
-                    . loop_nesting;
+                    . loop_nesting & asgn_ann == other . asgn_ann;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
@@ -14951,7 +14956,7 @@ namespace ivy
                     dead . __is_zero() & locals . __is_zero() & constructors . __is_zero() &
                     dot_rhs . __is_zero() & conflicts . __is_zero() & borrowings . __is_zero() &
                     num_borrowings . __is_zero() & fix_borrow_map . __is_zero() &
-                    cond_nesting . __is_zero() & loop_nesting . __is_zero();
+                    cond_nesting . __is_zero() & loop_nesting . __is_zero() & asgn_ann . __is_zero();
             }
             struct __hash
             {
@@ -14979,7 +14984,8 @@ namespace ivy
                         pos::__t::__hash() (x . num_borrowings) +
                         ivy::cppident_to_cppexpr::__t::__hash() (x . fix_borrow_map) +
                         pos::__t::__hash() (x . cond_nesting) +
-                        pos::__t::__hash() (x . loop_nesting);
+                        pos::__t::__hash() (x . loop_nesting) +
+                        ivy::ptr< annot::__t >::__hash() (x . asgn_ann);
                 }
             };
             
@@ -18479,8 +18485,11 @@ void ivy::sequence::__t::encode  (pretty::__t &b,const priority::__t &prio) cons
 void ivy::sequence::__t::encode_int  (pretty::__t &b,const priority::__t &prio) const
 {
     (*this) . lhs -> encode (b,priority::__t (1));
-    b . newline();
-    (*this) . rhs -> encode (b,priority::__t (0));
+    if (! (*this) . rhs . isa< ivy::skipst::__t >())
+    {
+        b . newline();
+        (*this) . rhs -> encode (b,priority::__t (0));
+    }
 }
 vector__ivy__stmt::domain::__t vector__ivy__stmt::domain::__t::next () const
 {
@@ -20473,6 +20482,9 @@ void ivy::prog::__t::encode  (pretty::__t &b,const priority::__t &prio) const
     while (idx < (*this) . decls . end)
     {
         b . newline();
+        if (idx > vector__ivy__decl::domain::__t (0)) {
+            b . newline();
+        }
         (*this) . decls . value (idx) -> encode (b,priority::__t (0));
         idx = idx . next();
     }
@@ -26326,8 +26338,11 @@ void cpp::sequence::__t::encode  (pretty::__t &b,const priority::__t &prio) cons
 void cpp::sequence::__t::encode_int  (pretty::__t &b,const priority::__t &prio) const
 {
     (*this) . lhs -> encode (b,priority::__t (1));
-    b . newline();
-    (*this) . rhs -> encode (b,priority::__t (0));
+    if (! (*this) . rhs . isa< cpp::skipst::__t >())
+    {
+        b . newline();
+        (*this) . rhs -> encode (b,priority::__t (0));
+    }
 }
 vector__cpp__stmt::domain::__t vector__cpp__stmt::domain::__t::next () const
 {
@@ -27149,7 +27164,6 @@ void cpp::varst::__t::encode_int  (pretty::__t &b,const priority::__t &prio) con
         b . extend (ivy::from_str< str::__t > ("="));
         b . extend (ivy::from_str< str::__t > (" "));
         (*this) . initval -> encode (b,priority::__t (0));
-        b . extend (ivy::from_str< str::__t > (";"));
     }
     b . extend (ivy::from_str< str::__t > (";"));
     b . unnest();
@@ -27634,6 +27648,9 @@ void cpp::groupdc::__t::encode  (pretty::__t &b,const priority::__t &prio) const
     while (idx < (*this) . decls . end)
     {
         b . newline();
+        if (idx > vector__cpp__decl::domain::__t (0)) {
+            b . newline();
+        }
         (*this) . decls . value (idx) -> encode (b,priority::__t (0));
         idx = idx . next();
     }
@@ -27904,6 +27921,9 @@ void cpp::prog::__t::encode  (pretty::__t &b,const priority::__t &prio) const
     while (idx < (*this) . decls . end)
     {
         b . newline();
+        if (idx > vector__cpp__decl::domain::__t (0)) {
+            b . newline();
+        }
         (*this) . decls . value (idx) -> encode (b,priority::__t (0));
         idx = idx . next();
     }
@@ -29305,7 +29325,9 @@ void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy
         idx = idx . next();
         kdx = kdx . next();
     }
-    ivy::make_cpp_call (func,args,ann,st,proto,res);
+    ivy::ptr< annot::__t > cann;
+    cann = st . outputs . end > vector__ivy__expr::domain::__t (0) ? st . asgn_ann : ann;
+    ivy::make_cpp_call (func,args,cann,st,proto,res);
     ivy::unown_func_args (inputs,st);
     if (ret_vals . end > vector__cpp__expr::domain::__t (0) | rets . end >
     vector__cpp__stmt::domain::__t (0) | ! proto . has_ret)
@@ -29669,6 +29691,7 @@ void ivy::asgn::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &
     res . ann = (*this) . ann;
     (*this) . lhs -> to_cpp (st,res . lhs);
     st . outputs = ivy::comma::unfold_left ((*this) . lhs);
+    st . asgn_ann = (*this) . ann;
     ivy::kill_lvalues (st . outputs,st,paths);
     (*this) . rhs -> to_cpp (st,res . rhs);
     if (res . rhs -> get_verb() != cpp::verb::__t (cpp::verb::empty))
