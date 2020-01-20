@@ -1,0 +1,191 @@
+#lang ivy
+
+module array_impl = {
+    object impl = {
+
+	interpret t -> <<< std::vector<`range`> >>>
+
+	definition value(a:t,i:domain) = <<< (0 <= `i` && `i` < `a`.size()) ? `a`[`i`] : val >>>
+
+	definition end(a:t) = <<< `a`.size() >>>
+
+	implement create(s:domain,y:range) returns (a:t) {
+	    <<<
+	        `a`.resize(`s`);
+	        for (unsigned i = 0; i < `s`; i++)
+	            `a`[i] = y;
+	    >>>
+	}
+
+	implement empty returns (a:t) {
+	    <<<
+	    >>>
+	}
+
+	implement set(a:t,x:domain,y:range) returns (a:t) {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `a`[`x`] = `y`;
+	    >>>
+	}
+
+	implement get(a:t,x:domain) returns (y:range) {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `y` = `a`[`x`];
+	    >>>
+	}
+
+	implement size(a:t) returns (s:domain) {
+	    <<<
+	        `s` = (`domain`) `a`.size();
+	    >>>
+	}
+
+	implement resize(a:t,s:domain,v:range) returns (a:t) {
+	    <<<
+	        unsigned __old_size = `a`.size();
+	        `a`.resize(`s`);
+	        for (unsigned i = __old_size; i < (unsigned)`s`; i++)
+	            `a`[i] = v;
+            >>>
+        }
+
+        implement back(a:t) returns (res:range) {
+            <<<
+                if ((`domain`)`a`.size() > 0)
+                    `res` = `a`.back();
+            >>>
+#	    res := a.value(a.end.prev)
+	}
+
+        implement pop_back(a:t) returns (a:t){
+	    <<<
+	        if (`a`.size() > 0) {
+	            a.pop_back();
+	        }
+            >>>
+	}
+
+	implement append(a:t,v:range) returns (a:t) {
+	    <<<
+	        `a`.push_back(`v`);
+            >>>
+        }
+
+	implement extend(a:t,b:t) returns (a:t) {
+	    <<<
+                for (unsigned i = 0; i < `b`.size(); i++)
+	            `a`.push_back(`b`[i]);
+            >>>
+        }
+
+        implement reverse(a:t) returns (a:t) {
+	    <<<
+                for (unsigned i = 0; i < `a`.size()/2; i++) {
+                    std::swap(`a`[i],`a`[`a`.size()-i-1]);
+                }
+            >>>
+            
+        }
+
+        <<< impl
+        template <typename T>
+        T __array_segment(const T &a, long long lo, long long hi) {
+            T res;
+            lo = (lo < 0) ? 0 : lo;
+            hi = (hi > a.size()) ? a.size() : hi;
+            if (hi > lo) {
+                res.resize(hi-lo);
+                std::copy(a.begin()+lo,a.begin()+hi,res.begin());
+            }
+            return res;
+        }
+        >>>
+
+	definition segment(a:t,lo:domain,hi:domain) = 
+	<<< __array_segment(a,lo,hi) >>>
+
+	<<< impl
+	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        `t` a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<`range`>(arg.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<`t`>(ivy_deser &inp, `t` &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<`t`>(ivy_ser &res, const `t` &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, `t`& val) {
+	        z3::expr z3end = g.apply("`end`",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("`value`",z3val,g.int_to_z3(g.sort("`domain`"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<`t`>( gen &g, const  z3::expr &v,`t` &res){
+	        `domain` __end;
+	        __from_solver(g,g.apply("`end`",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<`t`>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("`domain`"),__sz);
+                z3::expr pred =  g.apply("`end`",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<`range`>(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)));
+	    }
+	    #endif
+
+	>>>
+    }
+}

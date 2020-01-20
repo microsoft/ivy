@@ -1402,7 +1402,7 @@ def emit_some_action(header,impl,name,action,classname,inline=False):
         indent(code)
         p = action.formal_returns[0]
         if p not in action.formal_params:
-            code.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
+            code.append(ctypefull(p.sort,classname=classname) + ' ' + varname(p.name) + ';\n')
             mk_nondet_sym(code,p,p.name,0)
     with ivy_ast.ASTContext(action):
         action.emit(code)

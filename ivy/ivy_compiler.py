@@ -930,7 +930,7 @@ def resolve_alias(name):
         return resolve_alias(parts[0]) + iu.ivy_compose_character + parts[1]
     return name
 
-defined_attributes = set(["weight","test","method","separate","iterable","cardinality","radix","override","cppstd","libspec"])
+defined_attributes = set(["weight","test","method","separate","iterable","cardinality","radix","override","cppstd","libspec","macro_finder"])
 
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
@@ -1165,6 +1165,8 @@ class IvyDomainSetup(IvyDeclInterp):
             if lhs in interp or lhs in self.domain.native_types :
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             self.domain.native_types[lhs] = thing.formula.args[1]
+            if thing.formula.args[1].args[0].code.strip() == 'int':
+                compile_theory(self.domain,lhs,'int')
             return
         rhs = thing.formula.args[1].rep
         self.domain.interps[lhs].append(thing)

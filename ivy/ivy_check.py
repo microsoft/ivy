@@ -680,12 +680,17 @@ def check_module():
         raise iu.IvyError(None,"Some assertions are not checked")
 
     for isolate in isolates:
-        if isolate != None and isolate in im.module.isolates:
+        if isolate is not None and isolate in im.module.isolates:
             idef = im.module.isolates[isolate]
             if len(idef.verified()) == 0 or isinstance(idef,ivy_ast.TrustedIsolateDef):
                 continue # skip if nothing to verify
         if isolate:
             print "\nIsolate {}:".format(isolate)
+        if isolate is not None and iu.compose_names(isolate,'macro_finder') in im.module.attributes:
+            save_macro_finder = islv.opt_macro_finder.get()
+            if save_macro_finder:
+                print "Turning off macro_finder"
+                islv.set_macro_finder(False)
         with im.module.copy():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
@@ -694,6 +699,10 @@ def check_module():
                 mc_isolate(isolate)
             else:
                 check_isolate()
+        if isolate is not None and iu.compose_names(isolate,'macro_finder') in im.module.attributes:
+            if save_macro_finder:
+                print "Turning on macro_finder"
+                islv.set_macro_finder(True)
     print ''
     if failures > 0:
         raise iu.IvyError(None,"failed checks: {}".format(failures))
