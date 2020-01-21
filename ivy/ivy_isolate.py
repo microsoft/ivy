@@ -1053,6 +1053,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     
     proved,not_proved = get_props_proved_in_isolate(mod,isolate)
     mod.labeled_axioms.extend(not_proved)
+    mod.labeled_axioms = [m for m in mod.labeled_axioms if not m.explicit]
     mod.labeled_props = proved
 
     # filter natives

@@ -383,7 +383,7 @@ def summarize_isolate(mod):
 #    print 'check_lineno: {}'.format(check_lineno)
     check = not opt_summary.get()
     subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
-    axioms = [m for m in mod.labeled_axioms if m.id not in subgoalmap]
+    axioms = [m for m in mod.labeled_axioms if m.id not in subgoalmap] 
     schema_instances = [m for m in mod.labeled_axioms if m.id in subgoalmap]
     if axioms:
         print "\n    The following properties are assumed as axioms:"

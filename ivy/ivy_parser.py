@@ -338,6 +338,10 @@ def addtemporal(lf):
     lf.temporal = True
     return lf
 
+def addexplicit(lf):
+    lf.explicit = True
+    return lf
+
 label_counter = 0
 
 def newlabel(pref):
@@ -358,7 +362,7 @@ def addlabel(lf,pref):
 if iu.get_numeric_version() <= [1,6]:
     def p_top_axiom_labeledfmla(p):
         'top : top opttemporal AXIOM labeledfmla'
-        p[0] = check_non_temporal(p[1])
+        p[0] = p[1]
         lf = addlabel(p[4],'axiom')
         d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
         d.lineno = get_lineno(p,3)
@@ -379,11 +383,12 @@ else:
         p[0] = lf
 
     def p_top_axiom_optlabel_gprop(p):
-        'top : top opttemporal AXIOM lgprop'
-        p[0] = check_non_temporal(p[1])
-        lf = addlabel(p[4],'axiom')
-        d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
-        d.lineno = get_lineno(p,3)
+        'top : top optexplicit opttemporal AXIOM lgprop'
+        p[0] = p[1]
+        lf = addlabel(p[5],'axiom')
+        lf = addexplicit(lf) if p[2] else lf
+        d = AxiomDecl(addtemporal(lf) if p[3] else check_non_temporal(lf))
+        d.lineno = get_lineno(p,4)
         p[0].declare(d)
 
 def p_optskolem(p):
@@ -396,16 +401,18 @@ def p_optskolem_symbol(p):
     p[0].lineno = get_lineno(p,1)
 
 def p_top_property_labeledfmla(p):
-    'top : top opttemporal PROPERTY labeledfmla optskolem optproof'
+    'top : top optexplicit opttemporal PROPERTY labeledfmla optskolem optproof'
     p[0] = p[1]
-    lf = addlabel(p[4],'prop')
-    d = PropertyDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
-    d.lineno = get_lineno(p,3)
+    lf = addlabel(p[5],'prop')
+    lf = addtemporal(lf) if p[3] else check_non_temporal(lf)
+    lf = addexplicit(lf) if p[2] else lf
+    d = PropertyDecl(lf)
+    d.lineno = get_lineno(p,4)
     p[0].declare(d)
-    if p[5] is not None:
-        p[0].declare(NamedDecl(p[5]))
     if p[6] is not None:
-        p[0].declare(ProofDecl(p[6]))
+        p[0].declare(NamedDecl(p[6]))
+    if p[7] is not None:
+        p[0].declare(ProofDecl(p[7]))
 
 def p_top_conjecture_labeledfmla(p):
     'top : top CONJECTURE labeledfmla'
@@ -414,16 +421,17 @@ def p_top_conjecture_labeledfmla(p):
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
+def p_optexplicit(p):
+    'optexplicit : '
+    p[0] = False
+
+def p_optexplicit_explicit(p):
+    'optexplicit : EXPLICIT'
+    p[0] = True
+
 # from version 1.7, "invariant" replaces "conjecture"
 if not iu.get_numeric_version() <= [1,6]:
 
-    def p_optexplicit(p):
-        'optexplicit : '
-        p[0] = False
-
-    def p_optexplicit_explicit(p):
-        'optexplicit : EXPLICIT'
-        p[0] = True
 
     def p_top_invariant_labeledfmla(p):
         'top : top optexplicit INVARIANT labeledfmla optproof'
