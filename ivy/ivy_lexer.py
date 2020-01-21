@@ -144,6 +144,7 @@ reserved = all_reserved = {
     'isa' : 'ISA',
    'autoinstance' : 'AUTOINSTANCE',
    'constructor' : 'CONSTRUCTOR',
+    'finite' : 'FINITE',
 }
 
 tokens += tuple(all_reserved.values())

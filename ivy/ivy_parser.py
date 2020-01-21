@@ -1128,6 +1128,14 @@ def p_top_update_terms_from_terms_upaxes(p):
                                                SymbolList(*deps),
                                                UpdatePatternList(*p[6]))))
 
+def p_optfinite(p):
+    'optfinite : '
+    p[0] = False
+
+def p_optfinite_finite(p):
+    'optfinite : FINITE'
+    p[0] = True
+
 def p_optghost(p):
     'optghost : '
     p[0] = False
@@ -1146,12 +1154,14 @@ def p_typesymbol_this(p):
     p[0].lineno = get_lineno(p,1)
 
 def p_top_type_symbol(p):
-    'top : top optghost TYPE typesymbol'
+    'top : top optfinite optghost TYPE typesymbol'
     p[0] = p[1]
-    scnst = Atom(p[4])
-    scnst.lineno = get_lineno(p,4)
-    tdfn = (GhostTypeDef if p[2] else TypeDef)(scnst,UninterpretedSort())
-    tdfn.lineno = get_lineno(p,3)
+    scnst = Atom(p[5])
+    scnst.lineno = get_lineno(p,5)
+    tdfn = (GhostTypeDef if p[3] else TypeDef)(scnst,UninterpretedSort())
+    if p[2]:
+        tdfn.finite = True
+    tdfn.lineno = get_lineno(p,4)
     p[0].declare(TypeDecl(tdfn))
 
 def p_top_type_symbol_eq_sort(p):

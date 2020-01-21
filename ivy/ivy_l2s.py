@@ -126,7 +126,7 @@ def l2s(mod, lf):
 
     # construct the monitor related building blocks
 
-    uninterpreted_sorts = [s for s in mod.sig.sorts.values() if type(s) is lg.UninterpretedSort]
+    uninterpreted_sorts = [s for s in mod.sig.sorts.values() if type(s) is lg.UninterpretedSort and s.name not in mod.finite_sorts]
     reset_a = [
         AssignAction(l2s_a(s)(v), l2s_d(s)(v))
         for s in uninterpreted_sorts
@@ -169,7 +169,7 @@ def l2s(mod, lf):
     reset_w = [
         AssignAction(
             l2s_w(vs,t)(*vs),
-            lg.And(*(l2s_d(v.sort)(v) for v in vs))
+            lg.And(*(l2s_d(v.sort)(v) for v in vs if v.sort not in mod.finite_sorts))
         )
         for vs, t in to_wait
     ]
@@ -194,7 +194,7 @@ def l2s(mod, lf):
     # projection of relations
     fair_cycle += [
         lg.ForAll(vs, lg.Implies(
-            lg.And(*(l2s_a(v.sort)(v) for v in vs)),
+            lg.And(*(l2s_a(v.sort)(v) for v in vs if v.sort not in mod.finite_sorts)),
             lg.Iff(l2s_s(vs, t)(*vs), t)
         ))
         if len(vs) > 0 else
@@ -208,9 +208,9 @@ def l2s(mod, lf):
     fair_cycle += [
         forall(vs, lg.Implies(
             lg.And(*(
-                [l2s_a(v.sort)(v) for v in vs] +
-                [lg.Or(l2s_a(t.sort)(l2s_s(vs, t)(*vs)),
-                       l2s_a(t.sort)(t))]
+                [l2s_a(v.sort)(v) for v in vs if v.sort not in mod.finite_sorts)] +
+                ([lg.Or(l2s_a(t.sort)(l2s_s(vs, t)(*vs)),
+                       l2s_a(t.sort)(t))] if t.sort not in mod.finite_sorts else [])
             )),
             lg.Eq(l2s_s(vs, t)(*vs), t)
         ))
@@ -308,6 +308,7 @@ def l2s(mod, lf):
         add_params_to_d = [
             AssignAction(l2s_d(p.sort)(p), lg.true)
             for p in action.formal_params
+            if p.sort not in mod.finite_sorts
         ]
         new_action = concat_actions(*(
             change_monitor_state +
