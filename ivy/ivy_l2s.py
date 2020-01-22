@@ -93,6 +93,47 @@ def l2s_tactic(prover,goals,proof):
 #    print 'proof label: {}'.format(proof_label)
     invars = [ilg.label_temporal(inv.compile(),proof_label) for inv in proof.tactic_decls]
 
+    l2s_waiting = lg.Const('l2s_waiting', lg.Boolean)
+    l2s_frozen = lg.Const('l2s_frozen', lg.Boolean)
+    l2s_saved = lg.Const('l2s_saved', lg.Boolean)
+    l2s_d = lambda sort: lg.Const('l2s_d',lg.FunctionSort(sort,lg.Boolean))
+    l2s_a = lambda sort: lg.Const('l2s_a',lg.FunctionSort(sort,lg.Boolean))
+    l2s_w = lambda vs, t: lg.NamedBinder('l2s_w', vs, proof_label, t)
+    l2s_s = lambda vs, t: lg.NamedBinder('l2s_s', vs, proof_label, t)
+    l2s_g = lambda vs, t, environ: lg.NamedBinder('l2s_g', vs, environ, t)
+    old_l2s_g = lambda vs, t, environ: lg.NamedBinder('_old_l2s_g', vs, environ, t)
+
+    # Desugar the invariants.
+    #
+    # $was. phi(V)  -->   l2s_saved & ($l2s_s V.phi(V))(V)
+    # $happened. phi --> l2s_saved & ~($l2s_w V.phi(V))(V)
+    #
+    # We push $l2s_s inside propositional connectives, so that the saved
+    # values correspond to atoms. Otherwise, we would have redundant
+    # saved values, for example p(X) and ~p(X).
+
+    def desugar(expr):
+        def apply_was(expr):
+            if isinstance(expr,(lg.And,lg.Or,lg.Not,lg.Implies,lg.Iff)):
+                return expr.clone([apply_was(a) for a in expr.args])
+            vs = list(iu.unique(ilu.variables_ast(expr)))
+            return l2s_s(vs,expr)(*vs)
+        def apply_happened(expr):
+            vs = list(iu.unique(ilu.variables_ast(expr)))
+            return lg.Not(l2s_w(vs,expr)(*vs))
+        if ilg.is_named_binder(expr):
+            if expr.name == 'was':
+                if len(expr.variables) > 0:
+                    raise iu.IvyError(expr,"operator 'was' does not take parameters")
+                return lg.And(l2s_saved,apply_was(expr.body))
+            elif expr.name == 'happened':
+                if len(expr.variables) > 0:
+                    raise iu.IvyError(expr,"operator 'happened' does not take parameters")
+                return lg.And(l2s_saved,apply_happened(expr.body))
+        return expr.clone([desugar(a) for a in expr.args])
+    
+    invars = map(desugar,invars)
+                          
     # Add the invariant phi to the list. TODO: maybe, if it is a G prop
     # invars.append(ipr.clone_goal(goal,[],invar))
 
@@ -112,16 +153,6 @@ def l2s_tactic(prover,goals,proof):
         newb = []
         model.bindings = [b.clone([transform(b.action)]) for b in model.bindings]
         model.init = transform(model.init)
-
-    l2s_waiting = lg.Const('l2s_waiting', lg.Boolean)
-    l2s_frozen = lg.Const('l2s_frozen', lg.Boolean)
-    l2s_saved = lg.Const('l2s_saved', lg.Boolean)
-    l2s_d = lambda sort: lg.Const('l2s_d',lg.FunctionSort(sort,lg.Boolean))
-    l2s_a = lambda sort: lg.Const('l2s_a',lg.FunctionSort(sort,lg.Boolean))
-    l2s_w = lambda vs, t: lg.NamedBinder('l2s_w', vs, proof_label, t)
-    l2s_s = lambda vs, t: lg.NamedBinder('l2s_s', vs, proof_label, t)
-    l2s_g = lambda vs, t, environ: lg.NamedBinder('l2s_g', vs, environ, t)
-    old_l2s_g = lambda vs, t, environ: lg.NamedBinder('_old_l2s_g', vs, environ, t)
 
     # We first convert all temporal operators to named binders, so
     # it's possible to normalize them. Otherwise we won't have the
