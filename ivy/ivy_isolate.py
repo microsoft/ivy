@@ -399,22 +399,16 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
     ivy_logic.sig.symbols.clear()
     ivy_logic.sig.symbols.update(new_symbols)
     
-    for x,y in strip_map.iteritems():
-        print "{} : {}".format(x,y)
-
     # strip the parameters
     old_params = list(mod.params)
     mod.params = []
     for sym in old_params:
-        iu.dbg('sym')
-        iu.dbg('sym.sort')
         name = sym.name
         strip_params = strip_map_lookup(name,strip_map)
         if strip_params:
             if not (len(sym.sort.dom) >= len(strip_params)):
                 raise iu.IvyError(None,"cannot strip isolate parameters from {}".format(name))
             new_sort = strip_sort(sym.sort,strip_params)
-            iu.dbg('new_sort')
             sym =  ivy_logic.Symbol(name,new_sort)
         mod.params.append(sym)
 
