@@ -898,6 +898,13 @@ else:
         a.lineno = get_lineno(p,2)
         p[0] = SpoilTactic(a)
         p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_tactic(p):
+        'proofstep : TACTIC SYMBOL opttacticwith'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = TacticTactic(a,p[3])
+        p[0].lineno = get_lineno(p,1)
     
     def p_proofstep_property(p):
         'proofstep : opttemporal PROPERTY labeledfmla optskolem optproofgroup'
@@ -1008,6 +1015,27 @@ else:
         p[0] = IfTactic(p[2],p[3],p[5])
         p[0].lineno = get_lineno(p,1)
 
+    def p_opttacticwith(p):
+        'opttacticwith : '
+        p[0] = TacticWith()
+
+    def p_opttacticwith_with_tacticwithlist(p):
+        'opttacticwith : WITH tacticwithlist'
+        p[0] = TacticWith(*p[2])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_tacticwithelem_invariant(p):
+        'tacticwithelem : INVARIANT labeledfmla'
+        p[0] = addlabel(p[2],'invar')
+        
+    def p_tactwithlist_tacticwithelem(p):
+        'tacticwithlist : tacticwithelem'
+        p[0] = [p[1]]
+
+    def p_tactwithlist_tactwithlist_tacticwithelem(p):
+        'tacticwithlist : tacticwithlist tacticwithelem'
+        p[0] = p[1]
+        p[0].append(p[2])
 
 def p_proofseq_proofstep(p):
     'proofseq : proofstep'

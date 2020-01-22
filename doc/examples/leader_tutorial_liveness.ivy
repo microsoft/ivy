@@ -1,0 +1,173 @@
+#lang ivy1.7
+
+include order
+include timeout
+include udp
+
+
+################################################################################
+#
+# ADT describing a totally ordered datatype
+#
+################################################################################
+
+isolate id = {
+    type this
+    specification {
+        instantiate totally_ordered(this)
+    }
+
+    implementation {
+        interpret this -> bv[32]
+    }
+}
+
+################################################################################
+#
+# ADT describing a ring topology.
+#
+# Nodes are totally ordered and provide a `get_next` action that gets
+# the next element of the ring in round-robin order.
+#
+################################################################################
+
+instance node : iterable
+
+object node = { ...
+    action get_next(x:this) returns (y:this)
+
+    specification {
+
+        # get_next has the property that either we wrap around (i.e.,
+        # the output is the least element and the input the greatest) or
+        # the output is the successor of the input (i.e., output is greater
+        # than input and there are no elements between).
+
+    after get_next {
+        ensure (y <= X & X <= x) | (x < y & ~ (x < Z & Z < y))
+    }
+    }
+
+    implementation {
+        implement get_next {
+            y := 0 if x = node.max else x.next;
+        }
+    }
+
+
+}
+
+parameter pid(N:node) : id
+axiom [pid_injective] pid(N) = pid(M) -> N = M
+
+################################################################################
+#
+# The abstract model of the protocol has three actions:
+#
+# - send: this occurs when a node sends its own id
+# - pass: this occurs when a node receives and id and passes it along
+# - elect: this occurs when a node declares itself leader
+#
+################################################################################
+
+isolate abstract_model = {
+    action send(n:node,p:id)
+    action elect(n:node)
+
+    specification {
+        relation sent(V:id,N:node)
+
+        after init {
+            sent(V,N) := false;
+        }
+
+        before send {
+            require sent(p,n) & p > pid(n) | p = pid(n);
+            sent(p,n.get_next) := true;
+        }
+
+        before elect {
+            require sent(pid(n),n);
+            ensure forall N:node. pid(N) <= pid(n);
+        }
+
+	temporal property (forall P,N.
+	                     (eventually (sent(P,N) & P > pid(N) | P = pid(N))
+	                       -> eventually call send(P,N)))
+			    -> eventually exist L. sent(pid(L),L)
+			    
+
+    }
+
+    private {
+        invariant ~(pid(N) < pid(P) & sent(pid(N),N))
+        # invariant ~(pid(P) < pid(Q) & N:node < P & P < Q & sent(pid(P),N))
+        # invariant ~(pid(N) < pid(P) & N < P & P < Q & sent(pid(N),Q))
+        # invariant ~(pid(Q) < pid(N) & N < P & P < Q & sent(pid(Q),P))
+        invariant ~(L < M & M < N & pid(L) < pid(M) & sent(pid(L),N))
+        invariant ~(L < M & M < N & pid(M) < pid(N) & sent(pid(M),L))
+        invariant ~(L < M & M < N & pid(N) < pid(L) & sent(pid(N),M))
+    }
+} with node, id, pid_injective
+
+
+################################################################################
+#
+# The high-level service specification
+#
+################################################################################
+
+isolate leader = {
+
+    action elect(v:node)                 # called when v is elected leader
+
+    specification {
+    before elect {
+        ensure pid(v) >= pid(X)    # only the max pid can be elected
+    }
+
+    temporal property eventualy exists L. call elect(L)
+    }
+
+    implementation {
+
+        instantiate net : udp_simple2(node,id)
+
+        instantiate timer(N:node) : timeout_sec
+
+        var highest(N:node) : id
+
+        after init {
+            highest(N) := pid(N);
+        }
+
+        implement timer.timeout(self:node) {
+            call abstract_model.send(self,highest(self));              # ghost
+        call net.send(self,self.get_next,highest(self));
+        }
+
+        implement net.recv(self:node,v:id) {
+            if v = pid(self) {  # Found a leader
+                call abstract_model.elect(self);
+                call elect(self);
+            }
+        else if v > highest(self)  { # pass message to next node
+                highest(self) := v;
+            }
+        }
+    }
+
+    private {
+        temporal axiom forall N. globally eventually call timer.timeout(N)
+	temporal axiom forall P,N. (eventually net.sent(P,N)) -> (eventually call net.recv(N,P))
+	
+
+        invariant net.sent(V,N) -> abstract_model.sent(V,N)
+        invariant highest(N) >= pid(N)
+        invariant highest(N) = pid(N) | abstract_model.sent(highest(N),N)
+    }
+} with node, id, abstract_model
+
+import leader.elect
+
+extract code(n:node) = leader(n), pid(n), node, id

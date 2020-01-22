@@ -374,6 +374,7 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
         new_action = strip_action(action,strip_map,strip_binding,is_init=is_init,init_params=init_params)
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
+        new_action.labels = action.labels
         new_actions[name] = new_action
     mod.actions.clear()
     mod.actions.update(new_actions)
@@ -794,8 +795,7 @@ def follow_definitions(ldfs,all_syms):
 def empty_clone(action):
     res = ia.Sequence()
     res.lineno = action.lineno
-    res.formal_params = action.formal_params
-    res.formal_returns = action.formal_returns
+    action.copy_formals(res)
     return res
 
 def collect_sort_destructors(sort,res,memo):
@@ -956,7 +956,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             if use_mixin(mixin.mixer()):
                 mod.isolate_info.monitors.append((mixin.mixer(),mixin.mixee(),mod.actions[mixin.mixer()]))
             
-
 
     # figure out what is exported:
     exported = set()
@@ -1146,9 +1145,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
     mod.native_definitions = [c for c in mod.native_definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
 
-
-
-
     # After checking, we can put in place the new action definitions
 
     old_actions = dict()
@@ -1280,7 +1276,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     init_cond = ivy_logic.And(*(lf.formula for lf in mod.labeled_inits))
     mod.init_cond = lu.formula_to_clauses(init_cond)
-
 
 
 class SortOrder(object):
@@ -1436,10 +1431,10 @@ def apply_present_conjectures(isol,mod):
         assumes = map(conj_to_assume,conjs)
         brackets.append((actname,assumes,[]))
     posts = defaultdict(list)
-    for conj in conjs:
-        for actname in mod.conj_actions[conj.label.rep]:
-            if actname not in myexports:
-                posts[actname].append(conj_to_assume(conj))
+#    for conj in conjs:
+#        for actname in mod.conj_actions[conj.label.rep]:
+#            if actname not in myexports:
+#                posts[actname].append(conj_to_assume(conj))
     for actname,assumes in posts.iteritems():
         brackets.append((actname,[],assumes))
     return brackets
@@ -1863,3 +1858,14 @@ def get_isolate_exports(mod,cg,iso):
     exports = set(act for act in actions if act in mod_exports
                   or any((x not in actions) for x in cg[act]))
     return exports
+
+# This creates a map that takes each name in the hierarchy to
+# a list of the isolates in which it is present/verified
+
+def get_isolate_map(mod,verified=True,present=True):
+    res = defaultdict(list)
+    for ison,isol in mod.isolates.iteritems():
+        def fun(name):
+            res[name].append(ison)
+        iter_isolate(mod,isol,fun,verified,present)
+    return res
