@@ -1330,6 +1330,9 @@ def may_alias(x,y):
 
 def emit_param_decls(header,name,params,extra=[],classname=None,ptypes=None):
     header.append(funname(name) + '(')
+    for p in params:
+        if il.is_function_sort(p.sort):
+            raise(iu.IvyError(None,'Cannot compile parameter {} with function sort'.format(p)))
     header.append(', '.join(extra + [ctype(p.sort,classname=classname,ptype = ptypes[idx] if ptypes else None) + ' ' + varname(p.name) for idx,p in enumerate(params)]))
     header.append(')')
 
@@ -5074,15 +5077,16 @@ def main_int(is_ivyc):
         global emit_main
         emit_main = False
         
-    if len(sys.argv) == 2 and ic.get_file_version(sys.argv[1]) >= [2]:
-        if not target.get() == 'repl' and emit_main:
-            raise iu.IvyError(None,'Version 2 compiler supports only target=repl')
-        cdir = os.path.join(os.path.dirname(__file__), 'ivy2/s3')
-        cmd = 'IVY_INCLUDE_PATH={} {} {}'.format(os.path.join(cdir,'include'),os.path.join(cdir,'ivyc_s3'),sys.argv[1])
-        print cmd
-        sys.stdout.flush()
-        status = os.system(cmd)
-        exit(status)
+    with iu.ErrorPrinter():
+        if len(sys.argv) == 2 and ic.get_file_version(sys.argv[1]) >= [2]:
+            if not target.get() == 'repl' and emit_main:
+                raise iu.IvyError(None,'Version 2 compiler supports only target=repl')
+            cdir = os.path.join(os.path.dirname(__file__), 'ivy2/s3')
+            cmd = 'IVY_INCLUDE_PATH={} {} {}'.format(os.path.join(cdir,'include'),os.path.join(cdir,'ivyc_s3'),sys.argv[1])
+            print cmd
+            sys.stdout.flush()
+            status = os.system(cmd)
+            exit(status)
 
 
     with im.Module():

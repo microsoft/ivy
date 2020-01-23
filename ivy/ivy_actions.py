@@ -1229,7 +1229,8 @@ def apply_mixin(decl,action1,action2):
     res.lineno = action1.lineno
     res.formal_params = action2.formal_params
     res.formal_returns = action2.formal_returns
-    res.labels = action2.labels
+    if hasattr(action2,'labels'):
+        res.labels = action2.labels
     return res
 
 def params_to_str(params):

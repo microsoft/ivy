@@ -1412,8 +1412,9 @@ def BalancedChoice(choices):
                         BalancedChoice(choices[len(choices)/2:]))
 
 def get_file_version(filename):
-    f = open(filename,'rU')
-    if not f:
+    try:
+        f = open(filename,'rU')
+    except:
         raise IvyError(None,"not found: %s" % filename)
     header = f.readline()
     header = string.strip(header)

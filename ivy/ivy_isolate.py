@@ -374,7 +374,8 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
         new_action = strip_action(action,strip_map,strip_binding,is_init=is_init,init_params=init_params)
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
-        new_action.labels = action.labels
+        if hasattr(action,'labels'):
+            new_action.labels = action.labels
         new_actions[name] = new_action
     mod.actions.clear()
     mod.actions.update(new_actions)
@@ -399,6 +400,21 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
         new_symbols[name] = sym
     ivy_logic.sig.symbols.clear()
     ivy_logic.sig.symbols.update(new_symbols)
+    
+    # strip the parameters
+    old_params = list(mod.params)
+    mod.params = []
+    for sym in old_params:
+        name = sym.name
+        strip_params = strip_map_lookup(name,strip_map)
+        if strip_params:
+            if not (len(sym.sort.dom) >= len(strip_params)):
+                raise iu.IvyError(None,"cannot strip isolate parameters from {}".format(name))
+            new_sort = strip_sort(sym.sort,strip_params)
+            sym =  ivy_logic.Symbol(name,new_sort)
+        mod.params.append(sym)
+
+
 
     if iu.version_le(iu.get_string_version(),"1.6"):
         del mod.params[:]

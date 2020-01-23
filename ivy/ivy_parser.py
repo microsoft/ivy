@@ -1193,12 +1193,14 @@ def p_top_type_symbol(p):
     p[0].declare(TypeDecl(tdfn))
 
 def p_top_type_symbol_eq_sort(p):
-    'top : top optghost TYPE typesymbol EQ sort'
+    'top : top optfinite optghost TYPE typesymbol EQ sort'
     p[0] = p[1]
-    scnst = Atom(p[4])
-    scnst.lineno = get_lineno(p,4)
-    tdfn = (GhostTypeDef if p[2] else TypeDef)(scnst,p[6])
-    tdfn.lineno = get_lineno(p,5)
+    scnst = Atom(p[5])
+    scnst.lineno = get_lineno(p,5)
+    tdfn = (GhostTypeDef if p[3] else TypeDef)(scnst,p[7])
+    if p[2]:
+        tdfn.finite = True
+    tdfn.lineno = get_lineno(p,6)
     p[0].declare(TypeDecl(tdfn))
 
 def p_tsyms_tsym(p):
