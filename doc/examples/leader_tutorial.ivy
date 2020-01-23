@@ -1,5 +1,15 @@
 #lang ivy1.7
 
+################################################################################
+#
+# Leader election tutorial example
+#
+# See leader_tutorial.md for a description of this example, with instructions
+# on how to verify and run it.
+#
+################################################################################
+
+
 include order
 include timeout
 include udp
@@ -94,9 +104,6 @@ isolate abstract_model = {
         
     private {
         invariant ~(pid(N) < pid(P) & sent(pid(N),N))
-        # invariant ~(pid(P) < pid(Q) & N:node < P & P < Q & sent(pid(P),N))
-        # invariant ~(pid(N) < pid(P) & N < P & P < Q & sent(pid(N),Q))
-        # invariant ~(pid(Q) < pid(N) & N < P & P < Q & sent(pid(Q),P))
         invariant ~(L < M & M < N & pid(L) < pid(M) & sent(pid(L),N))
         invariant ~(L < M & M < N & pid(M) < pid(N) & sent(pid(M),L))
         invariant ~(L < M & M < N & pid(N) < pid(L) & sent(pid(N),M))
@@ -112,11 +119,11 @@ isolate abstract_model = {
 
 isolate leader = {
 
-    action elect(v:node)                 # called when v is elected leader
+    action elect(self:node)                 # called when v is elected leader
 
     specification {
 	before elect {
-	    ensure pid(v) >= pid(X)    # only the max pid can be elected
+	    ensure pid(self) >= pid(X)     # only the max pid can be elected
 	}
     }
 

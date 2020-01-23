@@ -1137,6 +1137,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         for dfn in mod.definitions:
             if ivy_logic.is_deterministic_fmla(dfn.formula.args[1]):
                 determined.add(dfn.formula.defines())
+        determined.update(mod.params)
         for a in dropped_axioms:
             for x in lu.used_symbols_ast(a.formula):
                 if x in all_syms and not ivy_logic.is_interpreted_symbol(x) and x not in determined:

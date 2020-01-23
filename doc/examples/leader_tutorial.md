@@ -5,8 +5,10 @@ title: Designing and implementing a protocol in Ivy
 
 In this tutorial, we'll learn how to take a distributed protocol from
 an abstract model to working implementation in Ivy. The example we
-will use is a simple ring-based leader election protocol introduced in [this paper](http://dl.acm.org/citation.cfm?id=359108) in
-1979.  This is an example of a *parameterized systems*, because the
+will use is a simple ring-based leader election protocol introduced in
+[this paper](http://dl.acm.org/citation.cfm?id=359108) in
+1979.  The Ivy source code is in the file `leader_tutorial.ivy`.
+This is an example of a *parameterized system*, because the
 protocol can have an arbitrary number of similar participants. We will
 see how parameterized protocols are modeled and implemented in Ivy.
 
@@ -32,34 +34,35 @@ specification*. The service specification describes the interface of
 the system, and tells us what properties the interface should satisfy.
 In Ivy, a unit of verification is called an *isolate* (because it is
 verified in isolation). An isolate consists of an *interface*,
-consisting of exported procedures and functions, a *specification*,
-describing the externally observable properties of the interface, and
-an *implementation* the provides executable bodies for interface functions
-and procedures.
+containing exported types, procedures and functions, a
+*specification*, describing the externally observable properties of
+the interface, and an *implementation* that provides executable bodies
+for interface functions and procedures, as well as variables and theories
+that are hidden from the isolate's environment. 
 
 Here is how the interface and specification of the leader election
 service are described in Ivy:
 
     isolate leader = {
 
-        action elect(v:node)  # called when v is elected leader
+        action elect(self:node)
 
         specification {
-        before elect {
-            ensure pid(v) >= pid(X)  # only the max pid can be elected
+            before elect {
+                ensure pid(self) >= pid(X)
+            }
         }
     }
 
 Procedures in Ivy are called *actions*. Unlike functions, actions may
-have side effects. The interface of our isolate `leader` consists of
-two actions: `tick` is called by the environment when a timer expires
-and implemented by `leader`, while `elect` is called by the isolate
+have side effects. The external interface of our isolate `leader` consists of
+one action, which is a callback: `elect` is called by the isolate
 when a node is elected leader, and implemented by the
 environment. There is no explicit declaration in Ivy as to which
 isolate implements a given interface action. Ivy only requires that
 each action have at most one implementation.
 
-Notice that each action has a parameter `self` of type `node`. This
+The `elect` action has parameter `self` of type `node`. This
 parameter acts like a process identifier. It tells us the *location*
 in which the action occurs. This is how Ivy represents a
 parameterized, distributed system -- an action has a location
@@ -87,15 +90,15 @@ the implementation, allows us to focus on the essence of the proof.
 Once we have verified an abstract model, we can use the correctness of
 the abstract model as a lemma in the proof of various implementations.
 
-An abstract model of a protocol usually as a variety of actions
-corresponding to different various steps in the protocol. It has state
+An abstract model of a protocol usually has a variety of actions
+corresponding to various steps in the protocol. It has state
 variables that typical describe in some abstract way the information
 that has been transmitted between parties in the protocol. In the case
 of the leader election ring, we have two abstract actions: `send(n,p)`
 corresponds node `n` sending pid `p` to the next node in the ring, while
 `elect(n)` corresponds to a node `n` declaring
 itself leader. We have one state variable called `sent`. This is a
-binary relation between pids and nodes, such that `send(P,N)` is true
+binary relation between pids and nodes, such that `sent(P,N)` is true
 when pid `P` has been sent to node `N`. When possible, we represent
 the abstract state of protocols with relations rather than functions
 (i.e., maps) in order to keep our proof obligations within the
@@ -148,23 +151,22 @@ circuit, and hence is as high as than any other pid in the ring).
  
 We have one additional specification for `elect`: we ensure that in
 fact the pid of node `n` is maximal in the ring. Finally, notice the
-declaration `node,id` at the end of the isolate. This tells Ivy that
-the correctness of this isolate depends on the specifications of
-isolates `node` and `id`. These isolates are abstract datatypes that
-we will examine shortly. We also use a axiom `pid_injective` (which we
-will examine later) which states that the pids of the nodes are
-distinct. Without this fact, the protocol doesn't work, since a node
-could receive its own pid without that value having made a full tour
-of the ring.
+declaration `with node,id,pid_injective` at the end of the
+isolate. This tells Ivy that the correctness of this isolate depends
+on the specifications of isolates `node` and `id`. These isolates are
+abstract datatypes that we will examine shortly. We also use an axiom
+`pid_injective` (which we will examine later) which states that the
+pids of the nodes are distinct. Without this fact, the protocol
+doesn't work, since a node could receive its own pid without that
+value having made a full tour of the ring.
 
 ### Proving the abstract model
 
 Before continuing, we should prove that our abstract model is correct
 (meaning that the `ensure` condition always holds, assuming that the
-environment satisfies the `require` conditions).
-We do this by providing an *inductive
-invariant*. An inductive invariant is a formula about the state that has
-the following key properties:
+environment satisfies the `require` conditions).  We do this by
+providing an *inductive invariant*. An inductive invariant is a
+formula about the state that has the following key properties:
 
 - *initiation*: It is true in all initial states.
 
@@ -182,41 +184,43 @@ invariant to make it inductive.
 
 Ivy makes this step easier by providing tools to visualize the
 failures of inductive proofs and suggest possible refinements to the
-proof. We start by na\"ively trying to verify the abstract model using
+proof. We start by naively trying to verify the abstract model using
 this command:
 
-    $ ivy_check isolate=abstract_model leader.ivy
+    $ ivy_check isolate=abstract_model trace=true leader_tutorial_no_proof.ivy
     
 Ivy uses the Z3 theorem prover to try to verify the program
 assertions, given the invariants.  Since we have given no invariants,
-it effective has to verify that the `ensure` condition holds when the
+it effectively has to verify that the `ensure` condition holds when the
 action `elect` is occurs in any state (and given the specifications of
 the datatypes `node` and `id`). This is not the case, so a
 counterexample execution is produced (we know a counterexample can be
 produced because we are using only the EPR logic, which has the finite
 model property).
 
-In the counterexample, we see a graphical representation of a state
-with two nodes, in which the node having the smaller pid is receiving
-its own pid. Clearly, this state should not be possible. Ivy can help us
-to construct a more general statement from this counterexample:
+The counterexample trace starts in a state with two nodes, in which
+the node having the smaller pid is receiving its own pid. Clearly,
+this state should not be possible. We can rule out this state (and others like it)
+be dding the following invariant to the isolate:
 
     invariant ~(N.pid < M.pid & sent(N.pid,N))
     
 The capital letters in this formula are free variables. They are
 implicitly universally quantifier, so this statement applies to all
 nodes `M` and `N`.  It says that it should never be the case that a
-node receives its own pid and another node has a greater pid. We add
-this invariant to the isolate and try again.
+node receives its own pid and another node has a greater pid. In fact,
+Ivy can help us to construct this invariant from the counterexample (see 
+[this tutorial](http://microsoft.github.io/ivy/examples/leader.html)).
 
-This time, Ivy show us a counterexample to induction with three nodes
-in the ring. The nodes occur in the order `0`, `1`, `2`.  Node `2` is
+We add this invariant to the isolate and try again.  This time, Ivy
+show us a counterexample to induction with three nodes in the
+ring. The nodes occur in the order `0`, `1`, `2`.  Node `2` is
 receiving the pid of node `0`, but the pid of node `1` is higher.
 This leads to a state in which `0` is receiving its own pid
-incorrectly, violating our stated invariant. Clearly, this situation is not
-possible, since the pid of `0` cannot bypass node `1` to reach node `2`. Ivy
-again helps us to generalize this statement, leading to the following conjectured
-invariant:
+incorrectly, violating our stated invariant. Clearly, this situation
+is not possible, since the pid of `0` cannot bypass node `1` to reach
+node `2`. This leads to the following conjectured invariant (which
+again Ivy can help us construct):
 
     invariant ~(L < M & M < N & L.pid < M.pid & sent(L.pid,N))
 
@@ -247,7 +251,7 @@ actually in EPR.
 
 ### Abstract datatypes
 
-In important trick for keeping proof obligations in a decidable
+An important trick for keeping proof obligations in a decidable
 fragment is to use *abstract datatype*. Consider in our case the types
 `node` and `pid`. If these are represented by integers (or in the case
 of `node`, the integers modulo a constant) the above invariant is
@@ -599,7 +603,7 @@ run-time services.
 
 We compile the code with this command:
 
-    $ ivyc extract=code leader.ivy
+    $ ivyc leader.ivy
     
 This produces a binary executable file called `leader` (under
 Unix-like operating systems).
