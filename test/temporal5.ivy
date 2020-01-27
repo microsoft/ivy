@@ -1,0 +1,44 @@
+#lang ivy1.7
+
+# This is a test for the temporal logic plumbing.
+
+isolate iso1 = {
+
+    var b : bool
+    
+    after init {
+        b := true;
+    }
+    
+    action act(x:bool) = {
+        b := b | x
+    }
+
+    temporal property [p1] globally b
+    proof {
+        tactic invariance
+    }
+}
+
+isolate iso2 = {
+    var c : bool
+
+    after init {
+        c := true
+    }
+
+    action act(x:bool) = {
+        c := c & iso1.b;
+    }
+
+
+    temporal property [p2] globally c
+    proof {
+        tactic invariance
+    }
+
+} with iso1
+
+
+export iso1.act
+export iso2.act

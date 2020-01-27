@@ -581,6 +581,11 @@ def p_term_namedbinder_dot_fmla(p):
     p[0] = NamedBinder(p[2], [],p[4])
     p[0].lineno = get_lineno(p,1)
 
+def p_term_namedbinder_dollar_fmla(p):
+    'term : DOLLAR SYMBOL DOLLAR fmla %prec SEMI'
+    p[0] = NamedBinder(p[2], [],p[4])
+    p[0].lineno = get_lineno(p,1)
+
 if not (iu.get_numeric_version() <= [1,6]):
     def p_fmla_fmla_isa_atype(p):
         'term : term ISA atype'

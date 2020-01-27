@@ -1,0 +1,78 @@
+#lang ivy1.7
+
+# This is a test for the temporal logic plumbing. It shows a case
+# where a temporal property is proved in isolate iso1 and used at a
+# call site to iso1 in iso2. This is just an invariance property, so
+# we could have used "invariant". However, this illustrates the use of
+# temporal properties from different environments as assumptions.
+
+isolate iso1 = {
+
+    var a : bool
+    var b : bool
+    
+    after init {
+        a := true;
+        b := true;
+    }
+    
+    action act(x:bool) = {
+        b := (b & a) | x
+    }
+
+    temporal property [p1] globally b
+    proof {
+        tactic invariance with
+            invariant [p3] a
+    }
+}
+
+isolate iso2 = {
+    var c : bool
+
+    after init {
+        c := true
+    }
+
+    action act(x:bool) = {
+        call iso1.act(x);
+        c := c & iso1.b;
+    }
+
+
+    temporal property [p2] globally c
+    proof {
+        tactic invariance
+    }
+
+} with iso1
+
+
+export iso2.act
+
+# Here is the proof subgoal we get for property p2 after applying the
+# invariance tactic. Notice that the invariant iso1.b as assumed after
+# the return from iso1.act, since this is the point that we exit the
+# environment if iso1.b. This allows us to prove the invariant p2
+# even though we are missing the invariant p3 used in the proof of iso1.
+# Notice that p1 is also assumed as in invariant of the loop (since this
+# is also outside the environment of p1).
+#
+# let
+#     ext:iso2.act = action(fml:x:Boolean){{{{
+#            call iso1.act(fml:x); assume iso1.b};
+#            iso2.c := (iso2.c & iso1.b)
+#     }}}
+#     iso1.act = action(fml:x:Boolean){
+#        iso1.b := ((iso1.b & iso1.a) | fml:x)
+#     }
+# in
+#     {{iso1.a := true; iso1.b := true}; iso2.c := true}
+#     while *
+#         invariant [iso2.p2] iso2.c
+#     {
+#         diverge;
+#         assume [iso1.p1] iso1.b;
+#         call one of {ext:iso2.act}
+#     }
+#  |= true

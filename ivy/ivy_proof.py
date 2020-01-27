@@ -88,10 +88,12 @@ class ProofChecker(object):
         self.definitions[sym.name] = defn
         return subgoals
         
-    def admit_proposition(self,prop,proof=None):
+    def admit_proposition(self,prop,proof=None,subgoals=None):
         """ Admits a proposition with proof.  If a proof is given it
             is used to match the definition to a schema, else default
-            heuristic matching is used.
+            heuristic matching is used. If a list of subgoals is supplied, it is
+            assumed that these entail prop and the proof is applied to
+            the subgoals.
         
         - prop is an ivy_ast.LabeledFormula
         """
@@ -101,7 +103,8 @@ class ProofChecker(object):
             return self.admit_definition(prop,proof)
         if proof is None:
             raise NoMatch(prop,"no proof given for property")
-        subgoals = self.apply_proof([prop],proof)
+        subgoals = subgoals or [prop]
+        subgoals = self.apply_proof(subgoals,proof)
         if subgoals is None:
             raise NoMatch(proof,"goal does not match the given schema")
         self.axioms.append(prop)
@@ -154,8 +157,17 @@ class ProofChecker(object):
                 return decls
             elif isinstance(proof,ia.PropertyTactic):
                 return self.property_tactic(decls,proof)
+            elif isinstance(proof,ia.TacticTactic):
+                return self.tactic_tactic(decls,proof)
             assert False,"unknown proof type {}".format(type(proof))
 
+    def tactic_tactic(self,decls,proof):
+        tn = proof.tactic_name
+        if tn not in registered_tactics:
+            raise IvyError(proof,'unknown tactic: {}'.format(proof.tn))
+        tactic = registered_tactics[tn]
+        return tactic(self,decls,proof)
+    
     def compose_proofs(self,decls,proofs):
         for proof in proofs:
             decls = self.apply_proof(decls,proof)
@@ -317,7 +329,7 @@ def make_goal(lineno,label,prems,conc):
 
 # Replace the premises and conclusions of a goal, keeping label and lineno
 def clone_goal(goal,prems,conc):
-    return make_goal(goal.lineno,goal.label,prems,conc)
+    return goal.clone_with_fresh_id([goal.label,ia.SchemaBody(*(prems+[conc])) if prems else conc])
 
 # Substitute a goal g2 for the conclusion of goal g1. The result has the label of g2.
 
@@ -343,6 +355,11 @@ def fresh_label(goals):
 def goal_add_prem(goal,prem,lineno):
     return make_goal(lineno,goal.label,goal_prems(goal) + [prem], goal_conc(goal))
     
+# Add a premise to a goal
+
+def goal_prefix_prems(goal,prems,lineno):
+    return make_goal(lineno,goal.label,prems + goal_prems(goal), goal_conc(goal))
+
 # Get the symbols and types defined in the premises of a goal
 
 def goal_defns(goal):
@@ -422,7 +439,6 @@ def normalize_goal(x):
         print x
         print type(x)
     return clone_goal(x,map(normalize_goal,goal_prems(x)),il.normalize_ops(goal_conc(x)))
-
 
 def get_unprovided_defns(g1,g2):
     defns = goal_defns(g2)
@@ -1085,3 +1101,8 @@ class RemoveSymbols(object):
         for sym in self.saved:
             self.symset.add(sym)
         return False # don't block any exceptions
+
+registered_tactics = dict()
+
+def register_tactic(name,tactic):
+    registered_tactics[name] = tactic

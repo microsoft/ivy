@@ -1,0 +1,28 @@
+#lang ivy1.7
+
+# This is a test for the temporal logic plumbing.
+
+var b : bool
+var c : bool
+
+after init {
+    b := true;
+    c := true
+}
+
+action act(x:bool) = {
+    c := c & b;
+    b := b | x
+}
+
+temporal property [p1] globally b
+proof {
+    tactic invariance
+}
+
+temporal property [p2] globally c
+proof {
+    tactic invariance
+}
+
+export act

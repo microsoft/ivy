@@ -83,7 +83,7 @@ class Module(object):
         self.conj_actions = dict() # map from conj names to action name list
         self.conj_subgoals = None # None or labeled formula list
         self.assumed_invariants = [] # labeled_formula_list
-
+        self.finite_sorts = set() # set of sort names
         
         self.sig = il.sig.copy() # capture the current signature
 

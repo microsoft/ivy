@@ -152,7 +152,6 @@ object cpp = {
 		b := b.extend("=");
 		b := b.extend(" ");
 		b := s.initval.encode(b,0);
-		b := b.extend(";");
 	    }
             b := b.extend(";");
             b := b.unnest;
@@ -469,6 +468,9 @@ object cpp = {
             var idx := s.decls.begin;
             while idx < s.decls.end {
                 b := b.newline;
+                if idx > 0 {
+		    b := b.newline; # empty line between decls
+                }
                 b := s.decls.value(idx).encode(b,0);
                 idx := idx.next;
             };

@@ -813,8 +813,10 @@ module stmt_base(expr,asgntok,cppstyle) = {
 
         action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.lhs.encode(b,1);
-            b := b.newline;
-            b := s.rhs.encode(b,0);
+            if ~(s.rhs isa skipst) {
+                b := b.newline;
+                b := s.rhs.encode(b,0);
+            }
         }
 
         var dummy : vector[stmt]  # workaround
@@ -1209,6 +1211,9 @@ module prog_base(cppstyle) = {
 	    var idx := s.decls.begin;
 	    while idx < s.decls.end {
 		b := b.newline;
+                if idx > 0 {
+		    b := b.newline; # empty line between decls
+                }
 		b := s.decls.value(idx).encode(b,0);
 		idx := idx.next;
 	    };

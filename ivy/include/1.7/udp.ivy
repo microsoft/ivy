@@ -175,6 +175,30 @@ module udp_simple(addr,pkt) = {
     trusted isolate iso = this
 }
 
+module udp_simple2(addr,pkt) = {
+
+    action recv(dst:addr,v:pkt)
+    action send(src:addr,dst:addr,v:pkt)
+
+    specification {
+        relation sent(V:pkt, N:addr)
+
+        after init {
+	    sent(V, N) := false
+	}
+    
+	before send {
+	    sent(v,dst) := true
+	}
+	before recv {
+	    assert sent(v,dst)
+	}
+    }
+
+    instance impl(X:addr) : udp_wrapper(addr,pkt,X,4990)
+    trusted isolate iso = this
+}
+
 module nondup_endpoint(port,pkt) = {
 
     action recv(v:pkt)

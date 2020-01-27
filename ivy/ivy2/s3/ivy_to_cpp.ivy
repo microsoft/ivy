@@ -299,7 +299,11 @@ object ivy = { ...
 
 	    # Depth of nesting of loops
 
-	    loop_nesting : pos
+	    loop_nesting : pos,
+
+            # Annotation of current assignment
+
+            asgn_ann : annot
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -779,7 +783,8 @@ object ivy = { ...
             idx := idx.next;
             kdx := kdx.next
         };
-        (res,st) := make_cpp_call(func,args,ann,st,proto);
+        var cann := st.asgn_ann if st.outputs.end > 0 else ann;
+        (res,st) := make_cpp_call(func,args,cann,st,proto);
         st := unown_func_args(inputs,st);
         if ret_vals.end > 0 | rets.end > 0 | ~proto.has_ret {
             st := st.add_stmt(cpp.asgn.make(cpp.empty.make(ann),res,ann));
@@ -1111,6 +1116,7 @@ object ivy = { ...
             res.ann := s.ann;
             (res.lhs,st) := s.lhs.to_cpp(st);
             st.outputs := comma.unfold_left(s.lhs);
+            st.asgn_ann := s.ann;
             st := kill_lvalues(st.outputs,st,paths);
 	    (res.rhs,st) := s.rhs.to_cpp(st);
 	    if res.rhs.get_verb ~= cpp.verb.empty {

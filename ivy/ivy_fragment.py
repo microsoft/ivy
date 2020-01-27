@@ -547,6 +547,12 @@ def get_assumes_and_asserts(preconds_only):
     for ldf in im.module.labeled_conjs:
         asserts.append((ldf.formula,ldf))
         assumes.append((ldf.formula,ldf))
+
+    for ldf in im.module.assumed_invariants:
+        if not ldf.explicit:
+            assumes.append((ldf.formula,ldf))
+
+
     # TODO: check axioms, inits, conjectures
 
     # for x in assumes:
