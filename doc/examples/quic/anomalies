@@ -418,6 +418,25 @@ adverse: yes
 spec-related: yes
 exploit: no
 
+Event files: anomaly25.iev
+picoquic log file: anomaly25.log
+QUIC version: draft 23
+Implementation:
+    ivy, commit 9919d39
+    picoquic, commit 89a5117
+
+picoquic issue #696
+
+The log seems to show a case where, after receiving a
+delayed PATH_RESPONSE, the server sends subsequent packets to a bad
+socket (perhaps closed?). The PATH_RESPONSE is received at
+T=4.385283. Note, the tester has just been updated to draft 23, so
+there may be some illegal packets in the input stream. However, this
+behavior looks like an internal error that shouldn't happen even in
+cases of protocol violation.
+
+
+
 
 
 

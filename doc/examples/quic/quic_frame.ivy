@@ -175,6 +175,7 @@ object frame = {
 
         variant this of frame = struct {
             seq_num                : cid_seq,     # the sequence number of the new cid
+            retire_prior_to        : cid_seq,     # retire seq nums prior to this
             length                 : cid_length,  # the length of the new cid in bytes
             scid                   : cid,         # the new cid
             token                  : reset_token  # the stateless reset token
@@ -246,6 +247,16 @@ object frame = {
         variant this of frame = struct {
             pos               : stream_pos  # max number of bytes
         }
+    }
+
+    object retire_connection_id = {
+        
+        # Retire connection id frames are a variant of frame.
+
+        variant this of frame = struct {
+            seq_num                : cid_seq     # the sequence number of the new cid
+        }
+        
     }
 
     instance idx : unbounded_sequence
@@ -327,6 +338,12 @@ object frame = {
 #
 # - The queued frames at aid `C` are
 #   represented by `queued_frames(C)` and are initially empty.
+# 
+# - The function queued_level(C) gives the packet type associated with the 
+#   currently queued frames for aid C
+#
+#   TODO: Currently we can only queue frames of the same packet type,
+#   We should have a separate frame queue for each packet type. 
 #
 # - The relation `queued_non_probing(C)` indicates that one of the queued
 #   frames at aid `C` contains a non-probing frame. This is a frame
@@ -349,7 +366,11 @@ object frame = {
 # - The function `conn_total_data(C)` represents the total number of stream
 #   bytes received by aid `C`.
 #
-
+#Hamid
+# - The relation `queued_ack_eliciting(C)` indicates that one or more of the queued
+#   frames at aid `C` is an ACK eliciting frame, i.e. according to draft 24, frames other than ACK, PADDING, CONNECTION_CLOSE
+#Hamid
+ 
 relation stream_seen(C:cid,S:stream_id)
 function max_stream_data_val(C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(C:cid,S:stream_id)
@@ -368,6 +389,9 @@ relation queued_close(C:cid)
 function num_queued_frames(C:cid) : frame.idx
 relation path_challenge_pending(C:cid,D:stream_data)
 function conn_total_data(C:cid) : stream_pos
+#Hamid
+relation queued_ack_eliciting(C:cid)
+#Hamid
 
 after init {
     stream_seen(C,S) := false;
@@ -380,6 +404,9 @@ after init {
     queued_non_ack(C) := false;
     queued_close(C) := false;
     path_challenge_pending(C,D) := false;
+#Hamid
+    queued_ack_eliciting(C) := false;
+#Hamid
 }
 
 
@@ -1011,12 +1038,49 @@ object frame = { ...
 	around handle {
             require connected(dcid) & connected_to(dcid) = scid;
             require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
-            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid); #Will change with implementing TODO
             ...
-            call enqueue_frame(scid,f,e,true);
+	        cid_mapped(f.scid) := true;
+	        cid_to_aid(f.scid) := scid;
+            seqnum_to_cid(scid,f.seq_num) := f.scid;
+            #Hamid
+            if (f.seq_num > max_seq_num(scid)) {
+                max_seq_num(scid) := f.seq_num;
+            };
+            #Hamid 
+	        call enqueue_frame(scid,f,e,true);
         }
     }
 }
+#
+# #### RETIRE_CONNECTION_ID event
+#
+# RETIRE_CONNECTION_ID frames are used to tell the sender of the new connection id that the connection id will no longer be used.
+#
+
+object frame = { ...
+    object retire_connection_id = { ...
+        action handle(f:frame.retire_connection_id,scid:cid,dcid:cid,e:quic_packet_type)
+	around handle {
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid); #Will change with implementing TODO
+            # TODO remember the highest sequence number that was sent
+            #Hamid
+            require f.seq_num <= max_seq_num(dcid);
+            #Hamid 
+            # TODO specify that you cannot retire the connection id of the current packet
+            #
+	        ... 
+	        cid_mapped(seqnum_to_cid(dcid, f.seq_num)) := false;
+            #Hamid
+            # the connection id seqnum_to_cid is being retired, append it to an array and iterate over the array in packet
+            #Hamid
+	        call enqueue_frame(scid,f,e,true);
+        }
+    }
+}
+
 
 #
 # #### PATH_CHALLENGE event
@@ -1109,7 +1173,9 @@ object frame = { ...
 # Note: the auxilary functions contain redundant information that is useful for
 # specifying packet events. By encoding history information in this way, we make
 # it easier for constraint solvers to construct tests.
-
+# 
+# The argument probing indicates that the frame is a probing frame, according to [9.1]
+# of the transport document( as of draft 23)
 action enqueue_frame(scid:cid, f:frame, e:quic_packet_type, probing:bool) = {
     queued_frames(scid) := queued_frames(scid).append(f);
     num_queued_frames(scid) := queued_frames(scid).end;
@@ -1122,7 +1188,12 @@ action enqueue_frame(scid:cid, f:frame, e:quic_packet_type, probing:bool) = {
     };
     if (f isa frame.connection_close) | (f isa frame.application_close) {
         queued_close(scid) := true;
-    }
+    };
+#Hamid
+    if ~(f isa frame.ack) & ~(f isa frame.connection_close) & ~(f isa frame.application_close){
+	    queued_ack_eliciting(scid) := true;
+    };
+#Hamid
 }
 
 #

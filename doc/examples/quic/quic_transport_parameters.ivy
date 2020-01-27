@@ -112,10 +112,17 @@ object max_ack_delay = {
     instantiate trans_params_ops(this)
 }
 
+object active_connection_id_limit = {
+    variant this of transport_parameter = struct {  # tag = 14
+        stream_pos_32 : stream_pos
+    }
+    instantiate trans_params_ops(this)
+}
+
 object quic_transport_parameters = {
     variant this of tls.extension = struct {
-        initial_version : version,  # holds negotiated version in encrypted extensions
-        versions : vector[version], # empty in client_hello
+#        initial_version : version,  # holds negotiated version in encrypted extensions
+#        versions : vector[version], # empty in client_hello
         transport_parameters : vector[transport_parameter]
     }
 }
