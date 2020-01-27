@@ -24,6 +24,8 @@ import ivy_trace
 import ivy_temporal as itmp
 import ivy_printer
 import ivy_l2s
+import ivy_mc
+import ivy_bmc
 
 import sys
 from collections import defaultdict
@@ -692,20 +694,19 @@ def check_separately(isolate):
         return opt_separate.get()
     return get_isolate_attr(isolate,'separate','false') == 'true'
 
-def mc_isolate(isolate):
+def mc_isolate(isolate,meth=ivy_mc.check_isolate):
     if im.module.labeled_props:
         raise IvyError(im.module.labeled_props[0],'model checking not supported for property yet')
-    import ivy_mc
     if not check_separately(isolate):
         with im.module.theory_context():
-            ivy_mc.check_isolate()
+            meth()
         return
     for lineno in all_assert_linenos():
         with im.module.copy():
             old_checked_assert = act.checked_assert.get()
             act.checked_assert.value = lineno
             with im.module.theory_context():
-                ivy_mc.check_isolate()
+                meth()
             act.checked_assert.value = old_checked_assert
     
 def get_isolate_method(isolate):
@@ -750,8 +751,16 @@ def check_module():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
                 continue
-            if get_isolate_method(isolate) == 'mc':
+            method_name = get_isolate_method(isolate)
+            if method_name == 'mc':
                 mc_isolate(isolate)
+            elif method_name.startswith('bmc['):
+                global some_bounded
+                some_bounded = True
+                _,prms = iu.parse_int_subscripts(method_name)
+                if len(prms) != 1:
+                    raise IvyError(None,'BMC method specifier should be bmc[<steps>]. Got "{}".'.format(method_name))
+                mc_isolate(isolate,lambda : ivy_bmc.check_isolate(prms[0]))
             else:
                 check_isolate()
         if isolate is not None and iu.compose_names(isolate,'macro_finder') in im.module.attributes:
@@ -775,11 +784,17 @@ def main():
     ivy_init.read_params()
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()
+    global some_bounded
+    some_bounded = False
+
     with im.Module():
         with utl.ErrorPrinter():
             ivy_init.source_file(sys.argv[1],ivy_init.open_read(sys.argv[1]),create_isolate=False)
             check_module()
-    print "OK"
+    if some_bounded:
+        print "BOUNDED"
+    else:
+        print "OK"
 
 
 if __name__ == "__main__":

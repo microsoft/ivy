@@ -696,3 +696,11 @@ def dbg(*exprs):
         del frame
 
 
+def parse_int_subscripts(name):
+    things = name.split('[')
+    thy = things[0]
+    things = things[1:]
+    if not all(t.endswith(']') for t in things):
+        raise iu.IvyError(None,'bad subscript syntax: {}'.format(name))
+    prms = [int(t[:-1]) for t in things]
+    return thy,prms

@@ -1503,7 +1503,7 @@ def match_annotation(action,annot,handler):
             raise AnnotationError()
     recur(action,annot,dict())
     
-def env_action(actname,label='env'):
+def env_action(actname,label=None):
     actnames = sorted(ivy_module.module.public_actions) if actname is None else [actname] 
     racts = []
     for a in actnames:
@@ -1513,8 +1513,12 @@ def env_action(actname,label='env'):
             ract.formal_params = act.formal_params
         if hasattr(act,'formal_returns'):
             ract.formal_returns = act.formal_returns
+        if isinstance(a,str):
+            ract.label = a[4:] if a.startswith('ext:') else a
         racts.append(ract)
     action = EnvAction(*racts)
-    action.label = label if not isinstance(actname,str) else actname
+    if label is not None:
+        action.label = label
+#        action.label = label if not isinstance(actname,str) else actname
     return action
 
