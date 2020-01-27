@@ -1657,6 +1657,7 @@ def find_import_callers():
         name = imp.imported()
         if not imp.scope() and name in im.module.actions:
             import_callers.add('ext:' + name[5:])
+            import_callers.add(name[5:])
             
 def module_to_cpp_class(classname,basename):
     global the_classname
