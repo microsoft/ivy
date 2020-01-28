@@ -1448,10 +1448,10 @@ def apply_present_conjectures(isol,mod):
         assumes = map(conj_to_assume,conjs)
         brackets.append((actname,assumes,[]))
     posts = defaultdict(list)
-#    for conj in conjs:
-#        for actname in mod.conj_actions[conj.label.rep]:
-#            if actname not in myexports:
-#                posts[actname].append(conj_to_assume(conj))
+    for conj in conjs:
+        for actname in mod.conj_actions[conj.label.rep]:
+            if actname not in myexports:
+                posts[actname].append(conj_to_assume(conj))
     for actname,assumes in posts.iteritems():
         brackets.append((actname,[],assumes))
     return brackets
