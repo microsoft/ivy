@@ -233,7 +233,7 @@ def l2s_tactic(prover,goals,proof):
             l2s_w(vs,t)(*vs),
             lg.And(*([l2s_d(v.sort)(v) for v in vs if v.sort.name not in mod.finite_sorts]
                      + [lg.Not(t),
-                        replace_temporals_by_l2s_g(lg.Not(lg.Globally(proof_label,lg.Not(t))))]))
+                        replace_temporals_by_l2s_g(lg.Not(lg.Globally(proof_label,ilu.negate(t))))]))
         ).set_lineno(lineno)
         for vs, t in to_wait
     ]
@@ -400,7 +400,7 @@ def l2s_tactic(prover,goals,proof):
                     wait(*vs),
                     lg.And(wait(*vs),
                            lg.Not(t),
-                           replace_temporals_by_l2s_g(lg.Not(lg.Globally(proof_label,lg.Not(t)))))
+                           replace_temporals_by_l2s_g(lg.Not(lg.Globally(proof_label,ilu.negate(t)))))
                     # TODO check this and make sure its correct
                     # note this adds to l2s_gs
                 ).set_lineno(lineno))
@@ -721,7 +721,7 @@ def l2s(mod, lf):
     update_w = [
         AssignAction(
             l2s_w(vs,t)(*vs),
-            lg.And(l2s_w(vs,t)(*vs), lg.Not(t), replace_temporals_by_l2s_g(lg.Not(lg.Globally(lg.Not(t)))))
+            lg.And(l2s_w(vs,t)(*vs), lg.Not(t), replace_temporals_by_l2s_g(lg.Not(lg.Globally(ilu.negate(t)))))
             # TODO check this and make sure its correct
             # note this adds to l2s_gs
         )

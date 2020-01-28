@@ -1916,7 +1916,7 @@ def handle_temporals(mod):
             assert len(isonames) > 0  # should at least be verified in isolate 'this'!
             if len(isonames) > 1:
                 raise IvyError(prop,'Temporal property belongs to more than one isolate: {}'.format(','.join(str(x) for x in isonames)))
-                new_props.append(prop.clone([prop.label,ivy_logic.label_temporal(prop.formula,isonames[0])]))
+            new_props.append(prop.clone([prop.label,ivy_logic.label_temporal(prop.formula,isonames[0])]))
         else:
             new_props.append(prop)
             
