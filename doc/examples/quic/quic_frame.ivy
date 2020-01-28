@@ -711,6 +711,7 @@ object frame = { ...
             require connected(scid) & connected_to(scid) = dcid;
             require stream_id_allowed(dcid,f.id);  # [4]
 	    ...
+            stream_seen(scid,f.id) := true;
             call enqueue_frame(scid,f,e,false);
         }
     }
