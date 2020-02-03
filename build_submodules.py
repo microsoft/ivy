@@ -153,3 +153,5 @@ if __name__ == "__main__":
     install_z3()
     build_picotls()
     install_picotls()
+    build_v2_compiler()
+    
