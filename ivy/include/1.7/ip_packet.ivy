@@ -1,0 +1,27 @@
+#lang ivy
+
+include packet_wrapper
+
+# Linux packet sockets
+#
+# - pkt : packet type ("array of integer" traits)
+# - ifnum : interface number type ("integer" traits)
+# - macaddr : mac address type ("integer" traits)
+#
+#
+
+module ip_packet_socket(pkt,ifnum,macaddr) = {
+
+    action recv(v:pkt,ifidx:ifnum)
+    action send(v:pkt,ifidx:ifnum,dst:macaddr)
+
+    specification {
+        before send {
+            require true;
+        }
+    }
+
+    instance impl : packet_wrapper(pkt,ifnum,macaddr)
+    trusted isolate iso = this
+    attribute test = impl
+}

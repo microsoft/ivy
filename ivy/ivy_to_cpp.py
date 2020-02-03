@@ -4809,11 +4809,11 @@ public:
         return ctx.string_val(value);
     }
 
-    unsigned sort_card(const z3::sort &range) {
+    unsigned long long sort_card(const z3::sort &range) {
         if (range.is_bool())
             return 2;
         if (range.is_bv())
-            return 1 << range.bv_size();
+            return ((unsigned long long)1) << range.bv_size();
         if (range.is_int())
             return 1;  // bogus -- we need a good way to randomize ints
         return enum_values.find(range)->second.size();
@@ -4867,8 +4867,8 @@ public:
     void randomize(const z3::expr &apply_expr) {
         z3::sort range = apply_expr.get_sort();
 //        std::cout << apply_expr << " : " << range << std::endl;
-        unsigned card = sort_card(range);
-        int value = rand() % card;
+        unsigned long long card = sort_card(range);
+        int value = ((unsigned long long)rand()) % card;
         z3::expr val_expr = int_to_z3(range,value);
         z3::expr pred = apply_expr == val_expr;
         add_alit(pred);
@@ -4878,8 +4878,8 @@ public:
         z3::func_decl decl = decls_by_name.find(decl_name)->second;
         z3::expr apply_expr = mk_apply_expr(decl_name,num_args,args);
         z3::sort range = decl.range();
-        unsigned card = sort_card(range);
-        int value = rand() % card;
+        unsigned long long card = sort_card(range);
+        int value = ((unsigned long long) rand()) % card;
         z3::expr val_expr = int_to_z3(range,value);
         z3::expr pred = apply_expr == val_expr;
         add_alit(pred);
