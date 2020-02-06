@@ -68,7 +68,7 @@ module packet_wrapper(pkt,ifnum,macaddr) = {
 		ivy->__unlock();
 	    }
 	    virtual void write(`pkt` pkt, `ifnum` idx, `macaddr` mac) {
-//	        std::cout << "idx: " << std::hex << mac << std::endl;
+//	        std::cout << "mac: " << std::hex << mac << std::endl;
 	        std::vector<char> buf;
                 buf.resize(pkt.size());
                 std::copy(pkt.begin(),pkt.end(),buf.begin());

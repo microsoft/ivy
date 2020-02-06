@@ -1125,8 +1125,9 @@ def emit_action_gen(header,impl,name,action,classname):
 }
 """)
     open_scope(impl,line="void " + caname + "_gen::execute(" + classname + "& obj)")
+    global number_format
     if action.formal_params:
-        code_line(impl,'__ivy_out << "> {}("'.format(name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
+        code_line(impl,'__ivy_out {} << "> {}("'.format(number_format,name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
     else:
         code_line(impl,'__ivy_out << "> {}"'.format(name.split(':')[-1]) + ' << std::endl')
     if opt_trace.get():
@@ -1140,9 +1141,9 @@ def emit_action_gen(header,impl,name,action,classname):
         if opt_trace.get():
             code_line(impl,ctypefull(action.formal_returns[0].sort,classname=classname)+' __res = '+call)
             code_line(impl,'__ivy_out << "}" << std::endl')
-            code_line(impl,'__ivy_out << "= " << __res <<  std::endl')
+            code_line(impl,'__ivy_out {} << "= " << __res <<  std::endl'.format(number_format))
         else:
-            code_line(impl,'__ivy_out << "= " << ' + call + ' <<  std::endl')
+            code_line(impl,'__ivy_out {} << "= " << '.format(number_format) + call + ' <<  std::endl')
     close_scope(impl)
     global_classname = None
 

@@ -145,7 +145,7 @@ module array(domain,range) = {
 
 	implement create {
 	    <<<
-	        `a`.resize`s`);
+	        `a`.resize(`s`);
 	        for (unsigned i = 0; i < `s`; i++)
 	            `a`[i] = y;
 	    >>>
