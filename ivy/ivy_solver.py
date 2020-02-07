@@ -1352,6 +1352,7 @@ def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None
     res = filter_redundant_facts(res,axioms)
 
     uc = true_clauses()
+#    print "weaken: {}".format(weaken)
     if weaken:
         def unlikely(fmla):
             # remove if possible the =constant predicates

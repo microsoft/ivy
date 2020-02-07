@@ -200,7 +200,7 @@ def make_check_art(act_name=None,precond=[]):
     ag = art.AnalysisGraph()
     
     pre = itp.State()
-    pre.clauses = lut.and_clauses(*precond)
+    pre.clauses = lut.and_clauses(*precond) if precond else lut.true_clauses()
     pre.clauses.annot = act.EmptyAnnotation()
     
     with itp.EvalContext(check=False): # don't check safety

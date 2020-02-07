@@ -1481,6 +1481,30 @@ def substitute_constants_ast(ast,subs):
         copy_attributes_ast(ast,res)
         return res
 
+def substitute_constants_ast2(ast,subs):
+    """
+    Substitute terms for variables in an ast. Here, subs is
+    a dict from string names of variables to terms.
+    """
+    if (isinstance(ast, Atom) or isinstance(ast,App)) and not ast.args:
+        if ast.rep in subs:
+            return subs[ast.rep]
+        names = split_name(ast.rep)
+        if names[0] in subs:
+            thing = type(ast)(compose_names(*names[1:]),ast.args)
+            thing.lineno = ast.lineno
+            res = MethodCall(subs[names[0]],thing)
+            res.lineno = ast.lineno
+            return res
+        return ast
+    else:
+        if isinstance(ast,str):
+            return ast
+        new_args = [substitute_constants_ast2(x,subs) for x in ast.args]
+        res = ast.clone(new_args)
+        copy_attributes_ast(ast,res)
+        return res
+
 def variables_distinct_ast(ast1,ast2):
     """ rename variables in ast1 so they don't occur in ast2. 
     """

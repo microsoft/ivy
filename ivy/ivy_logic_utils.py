@@ -1168,6 +1168,12 @@ def or_clauses(*args):
 def ite_clauses(cond,args):
     assert len(args) == 2
     args = coerce_args_to_clauses(args)
+    if args[0].is_false() and args[1].is_false():
+        return args[0]
+    if args[0].is_false():
+        args[0] = Clauses(args[0].fmlas,args[1].defs,args[0].annot) 
+    elif args[1].is_false():
+        args[1] = Clauses(args[1].fmlas,args[0].defs,args[1].annot) 
     used = set(chain(*[arg.symbols() for arg in args]))
     used.update(symbols_ast(cond))
     rn = UniqueRenamer('__ts0',used)

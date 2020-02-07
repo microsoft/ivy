@@ -1467,8 +1467,9 @@ def match_annotation(action,annot,handler):
                         if isinstance(action,EnvAction) and not hasattr(action,'label'):
                             callact = act
                             label = act.label if hasattr(act,'label') else 'unknown'
-                            callact = CallAction(ivy_ast.Atom(label,[]))
-#                            callact.label = label
+#                            callact = CallAction(ivy_ast.Atom(label,[]))
+                            callact = EnvAction(act)
+                            callact.label = 'call ' + label
                             handler.handle(callact,env)
                         recur(act,ann,env,None)
                         return
