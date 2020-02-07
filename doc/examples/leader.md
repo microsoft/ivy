@@ -36,7 +36,7 @@ suggestively called `self`. This parameter is used in any references
 to state components within the action. Thus, object `foo` really acts
 like a collection of independent objects or processes, one for each
 element of type `t`. The type `t` acts like a reference to one of
-these objects.
+these objects. 
 
 Ivy provides a shorthand for parameterized objects. We can equivalently
 write the object `foo` as follows:
@@ -90,7 +90,8 @@ process receives its own `id`, this value must have traveled all the
 way around the ring, so the process knows its `id` is greater than all
 others and it declares itself leader.
 
-We'll start with a service specification for this protocol:
+We'll start with a service specification for this protocol, using the
+explicit parameterized style:
 
     isolate app = {
 
@@ -98,15 +99,16 @@ We'll start with a service specification for this protocol:
         action elect(me:node)                 # called when v is elected leader
 
         specification {
-        before elect {
-            ensure me.pid >= node.pid(X)    # only the max pid can be elected
+            before elect {
+                ensure me.pid >= node.pid(X)    # only the max pid can be elected
+            }
         }
     } with node, id, trans
 
 
 The isolate `app` is parameterized on an abstract datatype `node`
 that we will define shortly. Type `node` represents a reference to a
-process in our system. The function `pid` gives the `id` if a node, and
+process in our system. The function `pid` gives the `id` of a node, and
 will be defined shortly. The `with` clause at the end of the isolate
 tells us that this isolate depends on isolates `node`, `id` and `trans`
 that we will define later.
@@ -116,8 +118,7 @@ environment at some frequency, while `elect` is called by a node when
 it is elected leader.  The specification of `elect` says that only the
 node with the maximum `id` value can be elected.
 
-Now that we know what the protocol is supposed to do, let's define the
-protocol itself.  First, we use the explicit parameter style:
+Now that we know what the protocol is supposed to do, let's implement it:
 
     isolate app = {
 
@@ -149,7 +150,7 @@ process knows it is leader and calls `elect`. Otherwise, if the
 received value is greater, it calls `trans.send` to send the value on
 to the next node.
 
-Here is the same object described in the implicit style:
+Here is the same isolate described in the implicit style:
 
     isolate app(me:node) = {
 
@@ -190,7 +191,6 @@ With our protocol implemented, let's look at the interfaces that it's
 built on, starting with the type of `id` values:
 
     module total_order_properties(t) = {
-        relation (X:t < Y:t)
         property [transitivity] X:t < Y & Y < Z -> X < Z
         property [antisymmetry] ~(X:t < Y & Y < X)
         property [totality] X:t < Y | X = Y | Y < X
@@ -224,24 +224,17 @@ interesting:
 
         specification {
 
-            # We guarantee that nodes are totally ordered.
-
             instantiate total_order_properties(this)   
 
-            # get_next has the property that either we wrap around (i.e.,
-            # the output is the least element and the input the greatest) or
-            # the output is the successor of the input (i.e., output is greater
-            # than input and there are no elements between). 
-
             after get_next {
-                ensure (y <= X & X <= x) | (x < y & ~ (x < Z & Z < y))
+                ensure (x < y & ~ (x < Z & Z < y)) | (y <= X & X <= x)
             }
         }
     }
 
 
 
-The type `node` supplies an action `get_next` taht takes an element `x` and
+The type `node` supplies an action `get_next` that takes an element `x` and
 returns the next element `y` in the ring.  The specification says that
 either `y` is the least element larger than `x` or `x` is the maximum
 element and `y` the minimum (that is, we "wrap around" to the
@@ -251,7 +244,13 @@ This is one way of specifying a ring topology. Later we will
 see a different way that can make the proofs a little simpler. We can
 implement either version with fixed-width integers. We omit the implementation
 here.
- 
+
+Notice the axiom `injectivity`. This says that no two processes have
+the same `id`, which is necessary for correctness of the protocol. It
+is an axiom rather than a property because it is an assumption about
+the envionment. That is, we *assume* that the processes are configured
+such that each has a unique `id` but we cannot prove this.
+
 Finally, we need a specification for the network transport layer. It's
 quite simple:
 
@@ -291,7 +290,8 @@ Notice that `trans` has been written as paramterized isolate. In
 particular, the first parameter of each action is the *location* where
 the action occurs (the source for `send` and the destination for
 `recv`). This is imporant for extracting parallel processes from the
-Ivy code.
+Ivy code. In the [netorking tutorial](http://microsoft.github.io/ivy/examples/networking.html)
+we will see how the transport service can be implemented.
 
 ## Verifying the leader election protocol
 
@@ -370,10 +370,10 @@ so let's try `Invariant|Diagram` again to see what Ivy thinks:
 
 <p><img src="images/leader7.png" alt="Testing Ivy screenshot" /></p>
 
-Now we can see the problem: node 1's id is arriving at node 0, but it
-should never have passed node 2, because node 2 has a higher
+Now we can see the problem: node 2's id is arriving at node 1, but it
+should never have passed node 0, because node 0 has a higher
 id. Notice, though, that there are two additional arrows in the diagram
-we didn't mention (the ones from node 0 to id 0 and id 0 to id 1). Maybe
+we didn't mention (the ones from node 1 to id 0 and id 0 to id 1). Maybe
 these are actually irrelevant. We could remove these manually by
 clicking on the corresponding facts below. However, we have another
 trick up our sleeve. We can use bounded checking to see if some arrows
@@ -383,8 +383,8 @@ arbitrarily) select a bound of 4 steps. Here is what Ivy says:
 <p><img src="images/leader8.png" alt="Testing Ivy screenshot" /></p>
 
 This conjecture says that we never have nodes in the order `N < P < Q`
-such that `P` has a smaller id than `Q` and the id of `P` is arriving
-at `N`. In the graph, we see that the highlights have been removed
+such that `Q` has a smaller id than `N` and the id of `Q` is arriving
+at `P`. In the graph, we see that the highlights have been removed
 from the two irrelevant arrows:
 
 <p><img src="images/leader9.png" alt="Testing Ivy screenshot" /></p>
@@ -457,7 +457,7 @@ into our implementation object `app`, like this:
 As we observed above, this proof is a bit messy because of the way we
 described the ring topology using a totally ordered set. There's a
 different way to describe rings that avoids this problem. Here is an
-alternative specification of `ring_topology`:
+alternative specification of `node`:
 
     isolate node = {
 
@@ -490,7 +490,7 @@ of a total order. One the other hand, it is very easy to specify
 `get_next` in terms of `btw`. We say that `y` is next after `x` in the
 ring if there is no `Z` between `x` and `y`. You might wonder if the
 properties given above for `btw` are really correct. Later, when we
-implement the isoalte, we'll prove that it has these properties.
+implement `node`, we'll prove that it has these properties.
 
 Now, let's try to verify the isolate `app` with this new version of `node`:
 
@@ -548,8 +548,10 @@ Finally, try this command to verify that in fact the properties of
 
     $ ivy_check leader_election_ring_btw.ivy
     
-Have a look at the implementation of the `node` isolate. If this doesn't
-make sense, see the tutorial on [abstract datatypes](http://microsoft.github.io/ivy/examples/datatypes.html).
+Have a look at the implementation of the `node` isolate in file
+`leader_election_ring_btw.ivy`. If this doesn't make sense, see the
+tutorial on
+[abstract datatypes](http://microsoft.github.io/ivy/examples/datatypes.html).
 
 
 
