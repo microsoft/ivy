@@ -685,7 +685,12 @@ def emit_set(header,symbol):
     if is_large_type(sort):
         vs = variables(sort.dom)
         cvars = ','.join('ctx.constant("{}",sort("{}"))'.format(varname(v),v.sort.name) for v in vs)
-        code_line(header,'slvr.add(forall({},__to_solver(*this,apply("{}",{}),obj.{})))'.format(cvars,sname,cvars,cname))
+        open_scope(header)
+        code_line(header,'std::vector<z3::expr> __quants;');
+        for v in vs:
+            code_line(header,'__quants.push_back(ctx.constant("{}",sort("{}")));'.format(varname(v),v.sort.name));
+        code_line(header,'slvr.add(forall({},__to_solver(*this,apply("{}",{}),obj.{})))'.format("__quants",sname,cvars,cname))
+        close_scope(header)
         return
     for idx,dsort in enumerate(domain):
         dcard = sort_card(dsort)
@@ -4642,6 +4647,15 @@ def emit_boilerplate1(header,impl,classname):
 
 using namespace hash_space;
 
+inline z3::expr forall(const std::vector<z3::expr> &exprs, z3::expr const & b) {
+    Z3_app *vars = new  Z3_app [exprs.size()];
+    std::copy(exprs.begin(),exprs.end(),vars);
+    Z3_ast r = Z3_mk_forall_const(b.ctx(), 0, exprs.size(), vars, 0, 0, b);
+    b.check_error();
+    delete vars;
+    return z3::expr(b.ctx(), r);
+}
+
 class gen : public ivy_gen {
 
 public:
@@ -4766,6 +4780,11 @@ public:
         return eval_apply(decl_name,3,args);
     }
 
+    int eval_apply(const char *decl_name, int arg0, int arg1, int arg2, int arg3) {
+        int args[4] = {arg0,arg1,arg2,arg3};
+        return eval_apply(decl_name,4,args);
+    }
+
     z3::expr apply(const char *decl_name, std::vector<z3::expr> &expr_args) {
         z3::func_decl decl = decls_by_name.find(decl_name)->second;
         unsigned arity = decl.arity();
@@ -4805,6 +4824,16 @@ public:
         a.push_back(arg1);
         a.push_back(arg2);
         a.push_back(arg3);
+        return apply(decl_name,a);
+    }
+
+    z3::expr apply(const char *decl_name, z3::expr arg0, z3::expr arg1, z3::expr arg2, z3::expr arg3, z3::expr arg4) {
+        std::vector<z3::expr> a;
+        a.push_back(arg0);
+        a.push_back(arg1);
+        a.push_back(arg2);
+        a.push_back(arg3);
+        a.push_back(arg4);
         return apply(decl_name,a);
     }
 
