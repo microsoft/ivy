@@ -661,7 +661,8 @@ def emit_set(header,symbol):
     cname = varname(name)
     sort = symbol.sort
     domain = sort_domain(sort)
-    if sort.rng.name in im.module.sort_destructors and all(is_finite_iterable_sort(s) for s in domain):
+    if sort.rng.name in im.module.sort_destructors and not is_large_type(sort):
+    # all(is_finite_iterable_sort(s) for s in domain):
         destrs = im.module.sort_destructors[sort.rng.name]
         for destr in destrs:
             vs = variables(domain)
