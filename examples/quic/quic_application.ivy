@@ -107,11 +107,20 @@ around app_server_open_event {
 }
 
 action map_cids(dcid:cid,scid:cid) = {
+    used_cid(dcid) := true;
     connected(dcid) := true;
     connected_to(dcid) := scid
 }
 
+# HACK: this records whether a connection ID has been used. It
+# is used by the packet parser to recognize valid CID's in short
+# packets before decryption.
 
+relation used_cid(C:cid)
+
+after init {
+    used_cid(C) := false;
+}
 
 # Send event
 # ----------

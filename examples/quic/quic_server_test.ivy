@@ -208,7 +208,7 @@ after init {
 #
 
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
-    tp.initial_version := 0xff000012;
+#    tp.initial_version := 0xff000017;
     var imsdbl : initial_max_stream_data_bidi_local;
     imsdbl.stream_pos_32 := max_stream_data;
     var imd : initial_max_data;
@@ -237,7 +237,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         require dst = server.ep;
         require pkt.token.end = 0; 
     };
-    require pkt.long -> pkt.pversion = 0xff000012
+    require pkt.long -> pkt.pversion = 0xff000017
 }
 
 # The protocol specification describes all the events occurring the
@@ -320,6 +320,20 @@ before frame.max_stream_id.handle(f:frame.max_stream_id,scid:cid,dcid:cid) {
         require scid = the_cid;
     }
 }
+
+before frame.new_connection_id.handle(f:frame.new_connection_id,scid:cid,dcid:cid) {
+    if _generating {
+        require scid = the_cid;
+    }
+}
+
+
+before frame.retire_connection_id.handle(f:frame.retire_connection_id,scid:cid,dcid:cid) {
+    if _generating {
+        require scid = the_cid;
+    }
+}
+
 
 # Generate connection_close frames only for the environment process(es).
 #
@@ -428,6 +442,8 @@ export frame.path_response.handle
 export packet_event
 export client_send_event
 export tls_recv_event
+#export frame.new_connection_id.handle
+#export frame.retire_connection_id.handle
 #export frame.rst_stream.handle
 #export frame.max_stream_id.handle
 #export frame.connection_close.handle

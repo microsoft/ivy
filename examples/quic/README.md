@@ -153,7 +153,7 @@ before updating submodules:
 
 Run a server:
 
-    ./picoquicdemo
+    ./picoquicdemo -L -l -
     
 Run a client:
 

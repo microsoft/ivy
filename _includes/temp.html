@@ -1,0 +1,198 @@
+<div class="unit one-fourth hide-on-mobiles">
+  <aside>
+{% unless site.url == "http://localhost:4001" %}
+{% capture cache %}
+
+  {% comment %}
+  Rebuilt Array
+    0: title
+    1: url
+    2: blank
+    3: current
+    4: active
+    5: submenu
+  {% endcomment %}
+
+  {% assign menu = "" | split: ""  %}
+
+  {% for link1 in site.data.contents %}
+    {% assign i1 = forloop.index0 %}
+    {% assign item1 = "" | split: ""  %}
+     
+    {% assign item1 = item1 | push: link1.title  %}
+  
+    {% assign url1 = link1.url %}
+    {% assign blank1 = true %}
+    {% unless link1.url contains 'http://' %}
+      {% unless link1.url contains 'https://' %}
+        {% assign url1 = site.url  | append: link1.url %}
+        {% assign blank1 = false %}
+      {% endunless %}
+    {% endunless %}
+    {% assign item1 = item1 | push: url1  %}
+    {% assign item1 = item1 | push: blank1  %}
+  
+    {% assign found_active1 = false %}
+    
+    {% if(link1.url == page.url) %}
+      {% assign current1 = true %}
+      {% assign found_active1 = true %}
+    {% else %}
+      {% assign current1 = false %}
+    {% endif %}
+  
+    {% assign item1 = item1 | push: current1 %}
+
+    {% assign sub1 = "" | split: ""  %}    
+    {% if link1.submenu %} 
+    
+      {% for link2 in link1.submenu %}
+        {% assign i2 = forloop.index0 %}
+        {% assign item2 = "" | split: ""  %}    
+      
+        {% assign item2 = item2 | push: link2.title  %}
+  
+        {% assign url2 = link2.url %}
+        {% assign blank2 = true %}
+        {% unless link2.url contains 'http://' %}
+          {% unless link2.url contains 'https://' %}
+            {% assign url2 = site.url  | append: link2.url %}
+            {% assign blank2 = false %}
+          {% endunless %}
+        {% endunless %}
+        {% assign item2 = item2 | push: url2  %}
+        {% assign item2 = item2 | push: blank2  %}
+      
+        {% assign found_active2 = false %}     
+  
+        {% if(link2.url == page.url) %}
+          {% assign current2 = true %}
+          {% assign found_active2 = true %} 
+          {% assign found_active1 = true %}
+        {% else %}
+          {% assign current2 = false %}
+        {% endif %}
+  
+        {% assign item2 = item2 | push: current2 %}
+
+        {% assign sub2 = "" | split: ""  %}    
+        {% if link2.submenu %}
+    
+          {% for link3 in link2.submenu %}
+            {% assign i3 = forloop.index0 %}
+            {% assign item3 = "" | split: ""  %}    
+          
+            {% assign item3 = item3 | push: link3.title  %}
+  
+            {% assign url3 = link3.url %}
+            {% assign blank3 = true %}
+            {% unless link3.url contains 'http://' %}
+              {% unless link3.url contains 'https://' %}
+                {% assign url3 = site.url  | append: link3.url %}
+                {% assign blank3 = false %}
+              {% endunless %}
+            {% endunless %}
+            {% assign item3 = item3 | push: url3  %}
+            {% assign item3 = item3 | push: blank3  %}
+  
+            {% if(link3.url == page.url) %}
+              {% assign current3 = true %}
+              {% assign found_active2 = true %}
+              {% assign found_active1 = true %}
+            {% else %}
+              {% assign current3 = false %}
+            {% endif %}
+            {% assign item3 = item3 | push: current3 %}
+          
+            {% assign found_active3 = current3 %}
+            {% assign item3 = item3 | push: found_active3 %}
+          
+            {% assign sub2 = sub2 | push: item3 %}
+          {% endfor %}  
+        {% endif %}
+          
+        {% assign item2 = item2 | push: found_active2 %} 
+        {% assign found_active2 = false %}   
+    
+        {% assign item2 = item2 | push: sub2 %}
+        
+        {% assign sub1 = sub1 | push: item2 %}
+
+      {% endfor %}  
+    {% endif %}
+      
+    {% assign item1 = item1 | push: found_active1 %} 
+    {% assign found_active1 = false %}       
+    
+    {% assign item1 = item1 | push: sub1 %}
+
+    {% assign menu = menu | push: item1 %}
+  {% endfor %}
+{% endcapture %}
+
+          <!--ul class="nav nav-sidebar"-->
+          <ul class="nav" id="menu">
+        {% for item1 in menu %}      
+                 
+          {% if item1[3] %}
+          <li class="active">{% else %}<li>
+          {% endif %}
+            <span class="fa fa-list"></span>
+            <a class="page-link" href="{{ item1[1] }}" 
+              {% if item1[2] %}target="_blank"{% endif %}>
+              <span class="collapse in">{{ item1[0] }}</span>
+              {% if item1[3] %}
+              <span class="sr-only">(current)</span>
+              {% endif %}
+            </a>
+            {% if item1[5] %}
+            {% if item1[4] %}
+            <ul>
+               {% for item2 in item1[5] %}
+                               
+                 {% if item2[3] %}
+                 <li class="active">{% else %}<li>
+                 {% endif %}
+                    <span class="fa fa-chevron-right"></span>
+                    <a class="page-link" href="{{ item2[1] }}" 
+                      {% if item2[2] %}target="_blank"{% endif %}>
+                      <span class="collapse in">{{ item2[0] }}</span>
+                      {% if item2[3] %}
+                      <span class="sr-only">(current)</span>
+                      {% endif %}
+                    </a>
+                    {% if item2[5] %}
+                    {% if item2[4] %}
+                    <ul>
+                       {% for item3 in item2[5] %}
+                 
+                         {% if item3[3] %}
+                         <li class="active">{% else %}<li>
+                         {% endif %}
+                            <span class="fa fa-asterisk"></span>
+                            <a class="page-link" href="{{ item3[1] }}" 
+                              {% if item3[2] %}target="_blank"{% endif %}>
+                              <span class="collapse in">{{ item3[0] }}</span>
+                              {% if item3[3] %}
+                              <span class="sr-only">(current)</span>
+                              {% endif %}
+                            </a>
+                         </li>
+               
+                       {% endfor %}
+                    </ul>
+                    {% endif %}
+                    {% endif %}
+                 </li>
+               
+               {% endfor %}
+            </ul>
+            {% endif %}
+            {% endif %}
+          </li>
+        {% endfor %}
+          </ul>
+{% endunless %}
+
+  </aside>
+</div>

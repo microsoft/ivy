@@ -11,6 +11,7 @@ attribute frame.rst_stream.handle.weight = "0.02"
 attribute frame.max_stream_id.handle.weight = "0.02"
 attribute frame.max_stream_data.handle.weight = "0.02"
 attribute frame.max_data.handle.weight = "0.02"
+attribute frame.path_response.handle.weight = "5"
 
 
 # export frame.connection_close.handle

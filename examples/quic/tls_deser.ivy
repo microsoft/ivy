@@ -25,7 +25,7 @@ object tls_ser_server = {}
 
     struct tls_name_map : hash_space::hash_map<std::string,int> {};
 
-    struct tls_name_struct tls_field_length_bytes[26] = {
+    struct tls_name_struct tls_field_length_bytes[27] = {
         {"fragment",2},
         {"content",2},
         {"tls.client_hello",3},
@@ -48,6 +48,7 @@ object tls_ser_server = {}
         {"ack_delay_exponent",2},
         {"initial_max_stream_id_uni",2},
         {"disable_migration",2},
+        {"active_connection_id_limit",2},
         {"initial_max_stream_data_bidi_remote",2},
         {"initial_max_stream_data_uni",2},
         {"max_ack_delay",2},
@@ -79,7 +80,7 @@ object tls_ser_server = {}
     };
     tls_name_map tls_field_bytes_map;
 
-    struct tls_name_struct tls_tags[23] = {
+    struct tls_name_struct tls_tags[24] = {
         {"tls.handshake_record",22},
         {"tls.application_data_record",23},
         {"tls.change_cipher_spec",20},
@@ -99,6 +100,7 @@ object tls_ser_server = {}
         {"ack_delay_exponent",0xa},
         {"initial_max_stream_id_uni",9},
         {"disable_migration",0xc},
+        {"active_connection_id_limit",0xe},
         {"initial_max_stream_data_bidi_remote",6},
         {"initial_max_stream_data_uni",7},
         {"max_ack_delay",0xb}, 
@@ -106,7 +108,7 @@ object tls_ser_server = {}
     };
     tls_name_map tls_tags_map;
 
-    struct tls_name_struct tls_tag_bytes[16] = {
+    struct tls_name_struct tls_tag_bytes[17] = {
         {"tls.unknown_extension",2},
         {"quic_transport_parameters",2},
         {"initial_max_stream_data_bidi_local",2},
@@ -119,6 +121,7 @@ object tls_ser_server = {}
         {"ack_delay_exponent",2},
         {"initial_max_stream_id_uni",2},
         {"disable_migration",2},
+        {"active_connection_id_limit",2},
         {"initial_max_stream_data_bidi_remote",2},
         {"initial_max_stream_data_uni",2},
         {"max_ack_delay",2},

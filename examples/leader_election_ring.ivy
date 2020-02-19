@@ -71,65 +71,13 @@ isolate node = {
 
 ################################################################################
 #
-# The abstract model of the protocol has three actions:
-#
-# - send: this occurs when a node sends its own id
-# - pass: this occurs when a node receives and id and passes it along
-# - elect: this occurs when a node declares itself leader
-#
-################################################################################
-
-isolate abstract_protocol = {
-    action send(n:node)
-    action pass(n:node,inp:id)
-    action elect(n:node)
-
-    specification {
-        relation sent(V:id,N:node)
-
-        after init {
-            sent(V,N) := false;
-        }
-
-        after send {
-            sent(n.pid,n.get_next) := true;
-        }
-
-        before pass {
-            require sent(inp,n);
-            require inp > n.pid;
-        }
-
-        after pass {
-            sent(inp,n.get_next) := true;
-        }
-
-        before elect {
-            require sent(n.pid,n);
-        }
-
-        after elect {
-            ensure forall N:node. N.pid <= n.pid;
-        }
-    }
-        
-    private {
-        invariant ~(node.pid(N) < node.pid(P) & sent(node.pid(N),N))
-        invariant ~(node.pid(P) < node.pid(Q) & N:node < P & P < Q & sent(node.pid(P),N))
-        invariant ~(node.pid(N) < node.pid(P) & N < P & P < Q & sent(node.pid(N),Q))
-        invariant ~(node.pid(Q) < node.pid(N) & N < P & P < Q & sent(node.pid(Q),P))
-    }
-} with node, id
-
-################################################################################
-#
 # The transport-layer service specification
 #
 ################################################################################
 
 isolate trans = {
 
-    action send(dst:node, v:id)
+    action send(src:node, dst:node, v:id)
     action recv(dst:node, v:id)
 
     specification {
@@ -159,36 +107,37 @@ isolate trans = {
 isolate app = {
 
     action tick(me:node)                 # called when a timer expires
-    action elect(v:node)                 # called when v is elected leader
+    action elect(me:node)                 # called when v is elected leader
 
     specification {
 	before elect {
-	    assert v.pid >= node.pid(X)    # only the max pid can be elected
+	    ensure me.pid >= node.pid(X)    # only the max pid can be elected
 	}
     }
 
     implementation {
         implement tick(me:node) {
-            call abstract_protocol.send(me);              # ghost
-	    call trans.send(me.get_next,me.pid);
+ 	    call trans.send(me,me.get_next,me.pid);
         }
         
         implement trans.recv(me:node,v:id) {
             if v = me.pid {  # Found a leader
-                call abstract_protocol.elect(me);
                 call elect(me);
             }
 	    else if v > me.pid  { # pass message to next node
-                call abstract_protocol.pass(me,v);
-	        call trans.send(me.get_next,v);
+	        call trans.send(me,me.get_next,v);
             }
         }
     }
 
-    private {
-        invariant trans.sent(V,N) -> abstract_protocol.sent(V,N)
-    }
-} with node, id, trans, abstract_protocol
+    # private {
+    #     invariant ~(node.pid(N) < node.pid(P) & trans.sent(node.pid(N),N))
+    #     invariant ~(node.pid(P) < node.pid(Q) & trans.sent(node.pid(P),N) & N < P & P < Q)
+    #     invariant ~(node.pid(N) < node.pid(P) & trans.sent(node.pid(N),Q) & N < P & P < Q)
+    #     invariant ~(node.pid(Q) < node.pid(N) & trans.sent(node.pid(Q),P) & N < P & P < Q)
+    # }
+    
+} with node, id, trans
 
 import app.elect
 export app.tick

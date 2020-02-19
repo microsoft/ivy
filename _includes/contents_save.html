@@ -1,0 +1,26 @@
+<div class="unit one-fourth hide-on-mobiles">
+  <aside>
+    {{ page.url | inspect }}
+    {% assign url_parts = page.url | split: '/' %}
+    {% assign url_parts_size = url_parts | size %}
+    {% assign rm = url_parts | last %}
+    {% assign url_parts_size_minus_one = url_parts_size | minus: 1  %}
+    {% assign base_url = url_parts | slice: 0,url_parts_size_minus_one | join: "/" %}
+    {{ base_url  | inspect}}
+
+    <ul>
+    {% for node in site.pages %}
+      {{ node.url | inspect }}
+      {% if node.url contains base_url %}
+        {% assign node_url_parts = node.url | split: '/' %}
+        {% assign node_url_parts_size = node_url_parts | size %}
+        {% assign filename = node_url_parts | last %}
+        {% if url_parts_size == node_url_parts_size and filename != 'index.html' %}
+          <li><a href='{{node.url}}'>{{node.title}}</a></li>
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    </ul>
+
+  </aside>
+</div>

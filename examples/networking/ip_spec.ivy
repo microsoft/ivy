@@ -1,0 +1,301 @@
+#lang ivy1.7
+
+# This is an example of a wire specification for simplified version of
+# IP. A wire specification describes the legal sequences of messages that
+# can be observed in the execution of a protocol. Put another way, it tells
+# us which mesages are legal for a given party to send at a given moment in
+# the protocol's execution.
+#
+# There are many possible ways to describe such a specification. Here,
+# the approach we take is to write a program that takes the observed
+# message sequence as input. We write this program in a programming
+# language called Ivy. While Ivy is a general-purpose programming
+# language, it has certain unusual featers that make it suitable for
+# writing specifications (and also for doing formal proofs, which we
+# do not consider here).
+#
+# One important aspect of Ivy is that a program can place logical
+# requirements on its input. In other words, in addition to describing
+# what to *do* with the input, the program also tells us what input
+# values are legal to give to the program. This is sometimes referred
+# to as a 'contract' in programming languages. Contracts give us a way
+# to use a prgram as a specification for a protocol. That is, the
+# program simply reads the protocol messages as input. The legal
+# message sequences are the ones that satisfy the program's contract.
+# Any mesage that violates the contract is considered illegal.
+#
+# Ivy has another unusual feature that allow us to make our
+# specifications operational. That is, it supports contract-based
+# testing. That is, the Ivy compiler can "close" the program by
+# providing it with *random* input that satisfies its contract.  This
+# capability allows us to generate random legal protocol traffic,
+# which we can use for various purposes, including testing
+# implementations of the protocol.
+#
+# Let's see how this works for a *very* simple protocol: a simplified
+# version of IP.
+#
+# As in most programs, we start by declaring some useful datatypes.
+# In Ivy, there aren't any pre-defined datatypes, except for
+# `bool`. There are, however, various templates we can use to create
+# datatypes. These are found in the Ivy standard libraries.  Here, we
+# include the `order` library, to get ordered datatypes like integers
+# and natural numbers. We also include the `collections` library to get
+# arrays (the library includes various datatypes). 
+
+include order
+include collections
+
+# We instantiate some templates here to get a general index type `pos`
+# (basically, unsigned numbers with arbitrary precision) a type `byte`
+# represented by vectors of 8 bits, and a type `stream` represented by
+# variable-length arrays of `byte`, indexed by the `pos` type. The
+# `stream` datatype will be used to represent IP datagram payloads.
+
+instance pos : unbounded_sequence
+instance byte : bit_vector(8)
+instance stream : array(pos,byte)
+
+# So much for the generic. Now let's move on to describing IP. We put
+# all of the declarations related specifically to IP in a scope called
+# `ip`. Ivy calls this an "object" (similarly to Scala) but you can
+# also think of it as a namespace.
+
+object ip = {
+
+    # For IP we need some specific datatypes to represent fields of
+    # the IP headers. Addresses are 32-bit numbers, protocol
+    # identifiers are 4-bit numbers, datagram identifiers are 16-bit
+    # numbers and so on. Note that even though `protocol` and
+    # `version` are both instance of `bit_vector(4)`, they are
+    # distinct types and are not assignment compatible.
+    
+    instance addr : bit_vector(32)
+    instance protocol : bit_vector(4)
+    instance ident : bit_vector(16)
+    instance version : bit_vector(4)
+    instance ttl : bit_vector(8)
+    instance tos : bit_vector(8)
+    
+    # Now we define a struct to represent the IP datagram. Note this
+    # is not quite like in C, where the struct definition might
+    # describe the actual layout of the datagram at the byte
+    # level. Instead, this structure gives a more high-level
+    # description of the datagram's content. We will worry later about
+    # the byte-level representation. In particular, our high-level
+    # struct is missing some fields of the byte-level IP header, because
+    # these fields depend on the byte-level structure of the header. For this reasom,
+    # our high-level struct has no fields for the header length, the total length
+    # of the datagram, and the checksum. These fields will be added by the
+    # encoding function that translates the high-level representatio ho byte-level.
+
+    type datagram = struct {
+        version_field : version,
+        tos_field : tos,
+        ident_field : ident,
+        false_flag : bool,
+        may_fragment_flag : bool,
+        more_flag : bool,
+        offset_field : pos,
+        ttl_field : ttl,
+        protocol_field : protocol,
+        source_addr_field : addr,
+        destination_addr_field : addr,
+        payload : stream
+    }
+
+    # An internetwork consists of a collection of networks and
+    # hosts. A host that is connected to more than one network is a
+    # router. For the moment, we don't want to think about what the actual
+    # hosts and networks are in our internetwork. Instead we will declare
+    # *uninterpreted types* to act as identifiers for hosts and networks.
+    # These types are a bit like forward class references in C++. 
+
+    type network
+    type host
+
+    # Our internet and the IP protocol have state. In Ivy, state
+    # information is stored in relations, which you can think of as
+    # database tables (there are also functions, which we will deal
+    # with later).
+    #
+    # Each host in out internet is connected to some networks by a network
+    # interface with a given IP address. We describe this configuration using
+    # a relation `intf`. That is, `intf(H,N,A)` holds if host `H` is
+    # connected to network `N` with an interface having address
+    # `A`. Notice that this allows a host to have multiple interfaces
+    # to the same network.
+    #
+    # This is how we declare the relation `intf`. Notice we give the
+    # parameters of `intf` as typed variables. Variables in Ivy start
+    # with capital letters (as in Prolog) and we will see more uses of
+    # them later:
+    
+    relation intf(H:host,N:network,A:addr)
+
+    # We do not allow interfaces with the same address connected to two
+    # distinct hosts or networks. That is, the network configuration
+    # must satisfy the following invariant:
+
+    invariant intf(H1,N1,A) & intf(H2,N2,A) ->  H1 = H2 & N1 = N2
+
+    # The invariant is a formula that must always be true about the
+    # state.  Notice that the formula has some free variables in
+    # it. This is interpreted to mean the the formula must be true for
+    # all possible values of the variables. Thus, the invariant states
+    # that if we have any two interfaces with the same address `A`,
+    # then they must also have the same host and network. The arrow
+    # `->` in the formula stands for implication, or if/then.
+
+    # Ivy programs consist of actions, which we can think of as
+    # procedures with contracts. In the IP protocol, there is just one
+    # action, corresponding to the transmission of a datagram by a
+    # host on a local network, via an interface. The idea is that each
+    # time an actual transmission occurs, this procedure is
+    # called. Here is the declaration of the action `transmit`:
+    
+    action transmit(h:host,src:addr,dst:addr,n:network,d:datagram)
+
+    # The action has five parameters (these are the inputs of our
+    # specification).  The parameters give the identify of the sender,
+    # the sending and receiving interfaces, the network identifier and
+    # the datagram being transmitted. Notice we have simply assumed
+    # here that the local network has a way to send our datagram from
+    # `src` to `dst` without considering how the IP datagram gets
+    # encapsulated in the underlying local network protocol.
+    
+    # Now we need to provide a contract for this action, so we know
+    # which input values are legal at any given time. To write the
+    # contract, we need to store some state information relating to
+    # the protocol execution. 
+    #
+    # In particular, the specification state records which datagrams
+    # have been seen by which which hosts. A datagram is considered
+    # seen by a host if it is transmitted on a network to which the
+    # host is connected. We again use a relation to record this
+    # information:
+
+    relation seen(H:host,D:datagram)
+
+    # This relation needs to be initialized so that when the program
+    # starts, no datagrams have been seen. We do this with an
+    # *initializer*, which looks like this.
+
+    after init {
+        seen(H,D) := false
+    }
+
+    # Notice the use of Ivy variables in the assignment to `seen`.
+    # This means that, for *all* values of host `H` and datagram `D`,
+    # we set `seen(H,D)` to false (or if you want to think of `seen`
+    # as a table, it means remove all of the rows from the table).
+        
+    # Now we get to the requirements of the contract. There are two of
+    # these. The first says that a host may not attempt to transmit a
+    # datagram on an interface it does not possess (part of the nature
+    # of formal specifications is that you often have to state the
+    # obvious).
+    #
+    # The second contract requirement is that a datgram may only be
+    # transmitted by the host if the host has seen the datagram, or if it is
+    # the originator of the datagram (meaning that the sending interface is
+    # the same as the source address of the datagram).
+
+    # If the these requirements are met, our program updates the state
+    # to reflect the transmission event. When a transmission occurs, we
+    # update the `seen` relation to reflect the fact that all hosts
+    # with interfaces on the network have now seen the datagram.
+
+    # This contract is specified using a special statement call
+    # `before`.  It provides some code that should be executed before
+    # the action actually occurs. This is very similar to the notion of 'advice'
+    # in an aspect-oriented programmin g language such as AspectJ.
+    #
+    # The `before` code in this case states the contract requirements
+    # with a special form of code assertion called `require`. Here, we
+    # give two conditions that are required to hold. If these
+    # assertions pass, then we go on to update the `seen`
+    # relation. Notice again the we use a variable to update many rows
+    # of the table at once. The assignment says that for every host,
+    # we should add a row indicating it has seen the datagram `d` if
+    # the host has an interface on network `n` with the given
+    # destination address `dst`. 
+
+    before transmit {
+        require intf(h,n,src); # host must control the local source address
+        require exists H. intf(H,n,dst); # destination interface must exist
+        require intf(h,n,d.source_addr_field) | seen(h,d);
+        
+        seen(H,d) := seen(H,d) | intf(H,n,dst);
+    }
+
+    # Note we haven't dealt with TTL yet. This specification really
+    # says that you have to forward the *exact* packet you receive,
+    # including the same TTL field. Obviously, this is wrong, but
+    # we'll correct it later. Similarly, we haven't dealt with
+    # fragmentation. Here we just want the simplest possible example
+    # of a wire specification top see how specifications are written in
+    # Ivy.
+
+    # Also, notice that we haven't said how routers actually choose to
+    # forward packets. Obvious a real router will need a forwarding
+    # table, but how to get the routing table is not part of the IP
+    # specification. In effect, our specification lets routers forward
+    # packets in any way they want. 
+
+}    
+
+# To make a specification, the final thing we need to do is tell Ivy what that actual
+# program inputs are. We do this by declaring the `transmit` action as an *export*. This
+# means that someone outside of our program will be calling `transmit`:
+
+export ip.transmit
+
+# Notice that since we are now outside the scope `ip`, we need to
+# refer to `transmit` using its full name, which includes the object
+# `ip`.
+#
+# That's it! We now have a very simple network layer wire
+# specification for our simplified version of IP.
+#
+# Now let's use it to generate some traffic we can look at. Remember we said that
+# the Ivy compiler can generate random inputs for our program. To do this, however,
+# we need to fill in some missing information. First, we need some actual definitions
+# for the uninterpreted types `network` and `host`:
+
+interpret ip.host -> {host1,router,host2}
+interpret ip.network -> {net1,net2}
+
+# The above to statements tell Ivy to interpret the `host` type as an enumerated type
+# with three elements, and the `network` type as an enumerated type with two elements.
+# In effect, we have defined a very small internet.
+#
+# In addition, we need to initialize the relation `intf` that defines
+# the network topology. Here is an example:
+
+after init {
+    ip.intf(H,N,A) := false;
+    ip.intf(host1,net1,0x0A000001) := true;
+    ip.intf(router,net1,0x0A000002) := true;
+    ip.intf(router,net2,0x0A000102) := true;
+    ip.intf(host2,net2,0x0A000101) := true;
+}
+
+# That is, when we start up, we first clear out the relation `intf` and then we add some
+# entries that corresspond to a small internetwork which we have two networks, `net1` and
+# `net2`, each with one host and a router between them. Notice we gave the IP addresses of
+# the interfaces as 32-bit hex numbers (using the same syntax as in C). That's because Ivy
+# doesn't know about the dot notation for IP addresses. In effect, we have defined two class C
+# networks with prefixes 10.0.0 and 10.0.1.
+
+# This little trick causes the tester to print numbers in hex, which is helpful:
+
+attribute radix=16
+
+# Now let's compile this program and run it. Here is the command line to compile:
+#
+#     $ ivyc target=test ip_spec.ivy
+#
+# The option `target=test` tells the compiler to produce a randomized contract-based tester
+# for our program.
+
