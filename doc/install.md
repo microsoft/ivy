@@ -62,6 +62,10 @@ future.
 See the [python documentation](https://docs.python.org/2/install/) for
 general instructions on installing python packages.
 
+Optionally, build the experimental Ivy v2.0 compiler:
+
+    $ python build_v2_compiler.py
+
 ### Run
 
 Run Ivy on an example, like this:
