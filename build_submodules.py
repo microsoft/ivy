@@ -136,7 +136,7 @@ def build_v2_compiler():
     cwd = os.getcwd()
 
     os.chdir('ivy/ivy2/s1')
-    do_cmd('ivyc target=repl ivyc_s1.ivy')
+    do_cmd('python ../../ivy_to_cpp.py target=repl ivyc_s1.ivy')
     do_cmd('g++ -O2 -o ivyc_s1 ivyc_s1.cpp -pthread')
 
     os.chdir('../s2')

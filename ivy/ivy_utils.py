@@ -669,7 +669,9 @@ def get_default_ui_module():
 #        return sys.modules[__name__]
     else:
         defui = 'ivy_ui_' + defui
-    return __import__('ivy.'+defui).__dict__[defui]
+    prefix = ''.join(x + '.' for x in __name__.split('.')[:-1])
+    module = __import__(prefix+defui)
+    return module.__dict__[defui] if prefix else module
     
 def get_default_ui_class():
     mod = get_default_ui_module()
