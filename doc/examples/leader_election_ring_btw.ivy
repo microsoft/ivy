@@ -135,8 +135,8 @@ isolate app = {
     }
 
     private {
-        invariant ~(node.pid(P) < node.pid(N) & trans.sent(node.pid(P),P))
-        invariant ~(node.pid(Q) < node.pid(P) & node.pid(P) < node.pid(N) & trans.sent(node.pid(P),Q) & node.btw(Q,P,N))
+#        invariant ~(node.pid(P) < node.pid(N) & trans.sent(node.pid(P),P))
+#        invariant ~(node.pid(Q) < node.pid(P) & node.pid(P) < node.pid(N) & trans.sent(node.pid(P),Q) & node.btw(Q,P,N))
     }
     
 } with node, id, trans
