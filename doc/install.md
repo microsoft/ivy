@@ -200,7 +200,7 @@ These instructions have been tested for macOS 10.12 Sierra up to macOS
 1. Install Xcode from App Store
 2. Install Xcode command line tools
 
-        xcode-select --install
+        $ xcode-select --install
 
 3. Install Xserver
 
