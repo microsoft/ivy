@@ -1,18 +1,16 @@
 #lang ivy1.7
 
 isolate clock = {
-
     type this
-    relation (X:clock < Y:clock)
-    action incr(inp:clock) returns (out:clock)
+    action incr(inp:this) returns (out:this)
 
     specification {
-        property [transitivity] X:clock < Y & Y < Z -> X < Z
-        property [antisymmetry] ~(X:clock < Y & Y < X)
+        property [transitivity] X:this < Y & Y < Z -> X < Z
+        property [antisymmetry] ~(X:this < Y & Y < X)
 
-	after incr {
-	    assert inp < out
-	}
+        after incr {
+            ensure inp < out
+        }
     }
 
     implementation {
@@ -41,13 +39,13 @@ isolate intf = {
         }
 
         before ping {
-            assert side = left & time < x;
+            require side = left & time < x;
             side := right;
             time := x
         }
 
         before pong {
-            assert side = right & time < x;
+            require side = right & time < x;
             side := left;
             time := x
         }
@@ -57,51 +55,59 @@ isolate intf = {
 
 isolate left_player = {
 
-    individual ball : bool
-    individual time : clock
-    after init {
-        ball := true;
-        time := 0
+    implementation {
+        individual ball : bool
+        individual time : clock
+        after init {
+            ball := true;
+            time := 0
+        }
+
+        action hit = {
+            if ball {
+                call intf.ping(clock.incr(time));
+                ball := false
+            }
+        }
+
+        implement intf.pong {
+            ball := true;
+            time := x
+        }
     }
 
-    action hit = {
-	if ball {
-	    call intf.ping(clock.incr(time));
-	    ball := false
-	}
+    private {
+        invariant ball -> (intf.side = intf.left & intf.time <= time)
     }
-
-    implement intf.pong {
-	ball := true;
-	time := x
-    }
-
-    conjecture ball -> (intf.side = intf.left & intf.time <= time)
 }
 with intf, clock
 
 
 isolate right_player = {
-
-    individual ball : bool
-    individual time : clock
-    after init {
-        ball := false
+    
+    implementation {
+        individual ball : bool
+        individual time : clock
+        after init {
+            ball := false
+        }
+        
+        action hit = {
+            if ball {
+                call intf.pong(clock.incr(time));
+                ball := false
+            }
+        }
+        
+        implement intf.ping {
+            ball := true;
+            time := x
+        }
     }
 
-    action hit = {
-	if ball {
-	    call intf.pong(clock.incr(time));
-	    ball := false
-	}
+    private {
+        invariant ball -> (intf.side = intf.right & intf.time <= time)
     }
-
-    implement intf.ping {
-	ball := true;
-	time := x
-    }
-
-    conjecture ball -> (intf.side = intf.right & intf.time <= time)
 }
 with intf, clock
 

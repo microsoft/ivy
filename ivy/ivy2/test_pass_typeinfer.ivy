@@ -1,0 +1,27 @@
+#lang ivy1.7
+
+include reader
+include pass_flat
+include pass_typeinfer
+include io
+
+instance stdio : io.stdio(str,pos,char)
+
+object ivy { ...
+    action show_expr(e:expr) = {
+	call stdio.writeln(e.enc)
+    }
+}
+
+
+init {
+    var p : ivy.prog;
+    p := ivy.prog.read_file("test.ivy");
+    p := p.flat;
+    p := p.typeinfer;
+    var s : str;
+    s := p.enc;
+    stdio.write(s);
+}
+
+

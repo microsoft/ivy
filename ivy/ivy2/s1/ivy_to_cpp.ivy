@@ -1,0 +1,1889 @@
+#lang ivy1.7
+
+include ivylang
+include cpplang
+include hash
+include reader
+include pass_flat
+include pass_typeinfer
+include analysis
+
+module generic_to_cpp(ivytype,cpptype,cppclass) = {
+    action to_cpp(s:ivytype,st:tocppst) returns (res:cppclass,st:tocppst) = {
+        var t : cpptype;
+        (t,st) := s.to_cpp_int(st);
+        t.ann := s.ann;
+        res := t
+    }
+}
+
+
+module binary_op_to_cpp(ivytype,cpptype,cppclass) = {
+    instantiate generic_to_cpp(ivytype,cpptype,cppclass)
+    action to_cpp_int(s:ivytype,st:tocppst) returns (res:cpptype,st:tocppst) = {
+        (res.lhs,st) := s.lhs.to_cpp(st);
+        (res.rhs,st) := s.rhs.to_cpp(st);
+    }
+}
+    
+object ivy = { ...
+    
+    # The set of names reserved by C++. Ivy names that clash with these
+    # have to be changed.
+    
+    function cpp_reserved_word(X:str) : bool
+
+    after init {
+        cpp_reserved_word("bool") := true;
+        cpp_reserved_word("char") := true;
+        cpp_reserved_word("int") := true;
+        cpp_reserved_word("long") := true;
+        cpp_reserved_word("new") := true;
+        cpp_reserved_word("and") := true;
+        cpp_reserved_word("or") := true;
+        cpp_reserved_word("not") := true;
+    }
+
+
+    # A 'access_path' is an abstraction of an lvalue. The path of an
+    # expression is a sequence of identifiers that gives the name of a
+    # root variable, with a sequence of field references appended. For
+    # example the path of `f.a(x).b(y)` is `[f,a,b]`. If `a.b` is a
+    # function, then the path of `a.b(x,y).c` is `[a.b,c]`. On the
+    # other hand, `(x+y).a` is not an lvalue and does not have a path.
+    # Paths are used in alias analysis.
+
+    object access_path = {
+        type this = struct {
+            elems : vector[ident]
+        }
+    }
+
+    # Two paths may alias if one is a prefix of the other
+    
+    action path_may_alias(v:access_path,w:access_path) returns (res : bool) = {
+        res := true;
+        var idx := v.elems.begin;
+        while res & idx < v.elems.end & idx < w.elems.end {
+            res := (v.elems.value(idx) = w.elems.value(idx));
+            idx := idx.next
+        }
+    }
+    
+    # A pair consisting of an lvalue and an alias count
+
+    type lvalue_count = struct {
+        lvalue : cpp.expr,
+        path : access_path,
+        cnt : pos
+    }
+    
+    instance ident_to_declvec : hash_map(ident,vector[decl])
+    instance ident_to_cppclass : hash_map(ident,expr)
+    instance ident_to_prototype : hash_map(ident,prototype)
+    
+    object tocppst = {
+        type this = struct {
+            
+            # Maps types to their members, which includes destructors and
+            # member actions.
+
+            members : ident_to_declvec,
+
+            # Maps types to their C++ superclasses
+
+            cppclasses : ident_to_cppclass,
+
+            # Identifiers of all objects
+
+            objects : ident_set,
+
+            # Types of global actions and variables
+
+            globals : global_types,
+
+            # True if we are emitting a member action
+
+            is_member : bool,
+
+            # The name of the "this" parameter in a member
+
+            this_ident : ident,
+
+	    # True if we are in a class declaration
+
+	    in_class : bool,
+
+            # True if we are only emitting prototypes
+
+            proto_only : bool,
+
+            # The subtyping relation
+
+            subtype_rel : subtypes,
+
+            # True if we are emitting a native C++ name
+
+            native : bool,
+
+            # True if we are emitting forward declarations
+            
+            forward : bool,
+
+            # Current outputs (lvalues to which expression value will be assigned).
+
+            outputs : vector[expr],
+
+            # Code to be emitted before the current statement
+
+            code : vector[cpp.stmt],
+
+            # Counter for temporary variables
+
+            counter : pos,
+
+            # Map from action names to action prototypes
+
+            protos : ident_to_prototype,
+
+            # The dead list of the current context. If an lvalue is on
+            # this list, then any occurrence is the last reference to
+            # the value.
+
+            dead : vector[lvalue_count],
+
+            # The set of local variables in scope
+
+            locals : local_tracker,
+
+	    # The set of constructor functions
+
+	    constructors : ident_set,
+
+	    # True is compiling rhs of a dot operator
+
+	    dot_rhs : bool
+
+        }
+
+        action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
+            var emp : vector[decl];
+            s.members := s.members.set(namesp,s.members.get(namesp,emp).append(member));
+        }
+
+        action add_stmt(s:this,code:cpp.stmt) returns (s:this) = {
+            s.code := s.code.append(code);
+        }
+
+	# Get the added code and clear it.
+
+	action get_code(s:this,ann:annot) returns (s:this,res:cpp.stmt) = {
+            res := cpp.sequence.fold_right(s.code,ann);
+            s.code := vector[cpp.stmt].empty;
+	}
+	
+        # This adds a statement to the end of the current code, clears
+        # the code and returns the result.
+
+        action wrap_stmt(s:this,code:cpp.stmt,ann:annot) returns (s:this,res:cpp.stmt) = {
+            s := s.add_stmt(code);
+	    (s,res) := s.get_code(ann);
+        }
+
+    }
+        
+    # This declares a temporary variable in the current code
+    # context and returns it.
+
+    action make_temp(s:tocppst,ty:expr,ann:annot) returns (s:tocppst,res:cpp.expr) = {
+        var name : str;
+        name := "__tmp";
+        name := name.extend(s.counter.to_str);
+        s.counter := s.counter.next;
+        res := cpp.symbol.makestr(name,ann);
+        var vst : cpp.varst;
+        (vst.vtype._type,s) := fix_variant_type(ty,s);
+        vst.vtype.name := res;
+        vst.ann := ann;
+        var vstt : cpp.stmt := vst;
+        s := s.add_stmt(vstt);
+    }
+
+    # Given a C++ lvalue, this returns its "path". The path is an identifier
+    # that gives the name of the variable, with a sequence of field references
+    # appended. For example the path of `f.a(x).b(y)` is `f.(a.b)`. The path of
+    # a.b(x,y) is `a.b`. On the other hand, `(x+y).a` is not an lvalue and does
+    # not have a path. For such cases, we return `ok = false`.
+
+    action lvalue_path(s:expr,path:access_path) returns (path:access_path, ok:bool) = {
+        if s isa symbol {
+            if s.get_verb = verb.none {
+                path.elems := path.elems.append(s.get_name);
+                ok := true
+            }
+        } else if s isa app {
+            if s.is(verb.colon) {
+                (path,ok) := lvalue_path(s.get_arg(0),path)
+            } else if s.is(verb.dot) {
+                (path,ok) := lvalue_path(s.get_arg(0),path);
+                if ok {
+                    path.elems := path.elems.append(s.get_arg(1).get_arg(0).get_name);
+                }
+            } else {
+                if s.is(verb.none) {
+                    (path,ok) := lvalue_path(s.get_func,path);
+                }
+            }
+        }
+    }
+
+    # Workaround
+
+    var dummy_vector_access_path : vector[access_path]
+
+    # Get a list of all of the lvalue paths occurring in a C++
+    # expression.
+    
+    action lvalue_paths(s:expr,paths:vector[access_path],ao:bool)
+        returns (paths:vector[access_path]) =
+    {
+        if s.is(verb.colon) {
+            paths := lvalue_paths(s.get_arg(0),paths,ao)
+        } else {
+            if ~ao {
+                var path : access_path;
+                var ok : bool;
+                (path,ok) := lvalue_path(s,path);
+                if ok {
+                    paths := paths.append(path);
+                }
+            };
+            if s isa app {
+                if s.is(verb.dot) {
+                    paths := lvalue_paths(s.get_arg(0),paths,true);
+                } else {
+                    var args := s.get_args;
+                    var idx := args.begin;
+                    while idx < args.end {
+                        paths := lvalue_paths(args.value(idx),paths,false);
+                        idx := idx.next;
+                    }
+                }
+            }
+        }
+    }
+    
+    # This determines whether a C++ lvalue is dead in current context
+
+    action is_dead(e:cpp.expr,st:tocppst,cnt:pos) returns (res:bool) = {
+        var idx := st.dead.begin;
+        while ~res & idx < st.dead.end {
+            var d := st.dead.value(idx);
+            res := cpp.expr.eq(e,d.lvalue) & d.cnt <= cnt;
+            idx := idx.next
+        }
+    }
+
+    # In context of class declarations, identifiers are declared
+    # without their namespaces.
+
+    action name_in_context(name:expr,st:tocppst) returns(name:expr) = {
+        if st.in_class {
+	    name := symbol.make(name.get_name.get_member,name.get_ann);
+	};
+    }
+
+    object ident = { ...
+        action to_cpp(s:this,native:bool) returns (res:cpp.ident)
+    }
+
+    # Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
+    # needed for name subscripts to make legal C++ identifiers.
+
+    action mangle(s:cpp.ident) returns (res:str) = {
+        if s isa cpp.dotident {
+            res := mangle(s.get_namesp);
+            res := res.extend("__");
+            res := res.extend(s.get_member.to_str);
+        } else {
+            res := s.to_str
+        }
+    }
+
+    # In translating Ivy names to C++, we have to avoid clashes with C++
+    # reserved words like "char" and "bool". We do this by prepending "__".
+    # C++ names beginning with "__" are reserved for the compiler. If the
+    # `native` argument is true, we treate the identifier as a native C++
+    # name and do not perform this translation. Also non-native names with
+    # subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
+
+    action strident_to_cpp(s:strident,native:bool) returns (t:cpp.strident) = {
+        if ~native & cpp_reserved_word(s.val) {
+            t.val := "__";
+            t.val := t.val.extend(s.val);
+        } else {
+            t.val := s.val;
+        };
+        var idx := s.subscrs.begin;
+        while idx < s.subscrs.end {
+            var subs := s.subscrs.value(idx).to_cpp(native);
+            if native {
+                t.subscrs := t.subscrs.append(subs);
+            } else {
+                t.val := t.val.extend("__");
+                t.val := t.val.extend(mangle(subs))
+            };
+            idx := idx.next
+        }
+    }
+
+    object strident = { ...
+        action to_cpp(s:this,native:bool) returns (res:cpp.ident) = {
+            var x := strident_to_cpp(s,native); # workaround
+            var y : cpp.ident := x;
+            res := y;
+        }
+    }
+
+    object dotident = { ...
+        action to_cpp(s:this,native:bool) returns (res:cpp.ident) = {
+            var t : cpp.dotident;
+            t.namesp := s.namesp.to_cpp(native);
+            t.member := strident_to_cpp(s.member,native);
+            res := t
+        }
+    }
+
+    object expr = { ...
+        action to_cpp(s:expr,st:tocppst) returns (res:cpp.expr,st:tocppst)
+    }
+    
+    # When translating symbols to C++, we need to take care of name clashes between
+    # namespaces (Ivy objects) and classes (Ivy types). If a type has the same identifier as
+    # an object, we append `.__t` to the identifier of the type.
+
+    action fix_object_clash(id:ident,st:tocppst) returns (id:ident) = {
+        if st.objects.mem(id) {
+            var tok : strident;
+            tok.val := "__t";
+            id := dotident.make(id,tok);
+        }
+    }
+    
+    # Also, when compiling a class member function, the first argument is implicit, and
+    # is replaced in the C++ by `(*this)`. A few verbs are spelled differently in C++.
+    # We fix this here.
+
+    object symbol = { ...
+        instantiate generic_to_cpp(ivy.symbol,cpp.symbol,cpp.expr)
+        action to_cpp_int(s:symbol,st:tocppst) returns (res:cpp.symbol,st:tocppst) = {
+            var vrb := s.get_verb;
+            if vrb = verb.not {
+                res.name := cpp.strident.make("!")
+            } else if vrb = verb.equals {
+                res.name := cpp.strident.make("==")
+            } else if vrb = verb.notequals {
+                res.name := cpp.strident.make("!=")
+            } else if vrb = verb.ite {
+                res.name := cpp.strident.make("?")
+            } else if st.is_member & s.name = st.this_ident & ~st.dot_rhs {
+                res.name := cpp.strident.make("(*this)");
+            } else {
+                var id := s.name;
+                if ~st.locals.mem(id) {
+                    id := fix_object_clash(s.name,st);
+                };
+                res.name := id.to_cpp(st.native);
+            };
+            res.vrb := cpp.str_to_verb(res.name.to_str);
+        }
+    }
+
+    action make_vector_type(ty:expr) returns (ty:expr) = {
+	var vid : strident;
+	vid.val := "vector";
+	vid.subscrs := vid.subscrs.append(ty.get_name);
+	var name := vid.prefix(strident.make("ivy"));
+	ty := symbol.make(name,ty.get_ann)
+    }
+
+    action fix_tpl_param(s:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+#        s := symbol.make(fix_object_clash(s.get_name,st),s.get_ann);
+        (res,st) := fix_variant_type(s,st)
+    }
+        
+    action make_md_vector_type(dom:vector[expr],rng:expr,st:tocppst)
+        returns (res:cpp.expr,st:tocppst) =
+    {
+	var vid : cpp.strident;
+	vid.val := "vector";
+        var crng : cpp.expr;
+        (crng,st) := fix_tpl_param(rng,st);
+	vid.subscrs := vid.subscrs.append(crng.get_name);
+	var idx := dom.begin;
+	while idx < dom.end {
+            var dty : cpp.expr;
+            (dty,st) := fix_tpl_param(dom.value(idx),st);
+	    vid.subscrs := vid.subscrs.append(dty.get_name);
+	    idx := idx.next
+	};
+	var name := vid.prefix(cpp.strident.make("ivy"));
+	res := cpp.symbol.make(name,rng.get_ann)
+    }
+
+    # Function types are handled specially, using C++ templates in the
+    # standard header. For now we have only a dense representation
+    # using `std::vector`. This works only when the domain types are
+    # convertible to `size_t`. We also need at least a hash table type
+    # here for sparse data.
+    
+    action function_type(ty:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+	if ty isa app {
+	    # var cty := ty.curry;
+	    # var rng := function_type(cty.get_arg(1));
+	    # ty := make_vector_type(rng);
+	    (res,st) := make_md_vector_type(times.unfold_left(ty.get_arg(0)),ty.get_arg(1),st)
+	} else {
+            (res,st) := ty.to_cpp(st)
+        }
+    }
+
+    # Make a C++ expression of the form `ivy::from_str<ty>(arg)`
+
+    action make_from_string(ty:cpp.expr,arg:cpp.expr,ann:annot) returns(res:cpp.expr) = {
+        var id : cpp.strident;
+        id.val := "from_str";
+        id.subscrs := id.subscrs.append(ty.get_name);
+        var name := cpp.dotident.make(cpp.strident.make("ivy"),id);
+        res := cpp.app.make1(cpp.symbol.make(name,ann),arg,ann);
+    }
+
+    # Returns true if the C++ express is `*this`. This case requires special
+    # handling for indirect calls. 
+
+    action is_cpp_this(s : cpp.expr) returns (res:bool) = {
+	if s isa cpp.symbol {
+	    res := (s.get_name.to_str = "(*this)");
+	}
+    }
+
+    # Make a C++ function call. There are three cases here:
+    #
+    # Ordinary function call: `prefix.f(a0..an)`
+    # Method call: `a0.f(a1..an)`
+    # Indirect method call: `a0->f(a1..an)`
+    #
+    # The last case is used if `f : (t * ... -> u)` is a member function where
+    # type `t` is a variant type. However, if the first argument is `(*this)` we
+    # do *not* use this form, as `this` is a normal C++ pointer, not a special
+    # Ivy variant pointer. 
+    
+    action make_cpp_call(func:expr, args:vector[cpp.expr], ann:annot, st:tocppst)
+        returns (res:cpp.expr, st:tocppst) =
+    {
+        if func_is_member(func)   {
+            var fid := func.get_arg(0).get_name.to_cpp(false);
+            var cfunc := cpp.symbol.make(fid.get_member,func.get_ann);
+            if is_variant_type(get_dom0(func.get_arg(1)),st) & ~is_cpp_this(args.value(0)) {
+                cfunc := cpp.arrow.make(args.value(0),cfunc,ann)
+            } else {
+                cfunc := cpp.dot.make(args.value(0),cfunc,ann)
+            };
+            res := cpp.app.make(cfunc,args.segment(1,args.end),ann);
+        } else {
+            var cfunc : cpp.expr;
+            (cfunc,st) := func.to_cpp(st);
+            res := cpp.app.make(cfunc,args,ann);
+        }
+    }
+
+    # After executing a function call, the call gives up ownership of
+    # its arguments, possibly allowing the arguments to be
+    # side-effected by future calls. A good example is this:
+    #
+    #     a := a.resize(size(a) - 1);
+    #
+    # Here, the call to `size` has ownership over `a` which would
+    # prevent `resize` from side-effecting `a`. However, since the
+    # call to `size` executes first, it gives up its ownership before
+    # `resize` executes, so `resize` can side-effect `a`.
+
+    action unown_func_args(args:vector[expr],st:tocppst) returns (st:tocppst) = {
+        var idx := args.begin;
+        while idx < args.end {
+            var arg := args.value(idx);
+            var path : access_path;
+            var ok : bool;
+            (path,ok) := lvalue_path(arg,path);
+            if ok {
+                st := unown_path(path,st);
+            };
+            idx := idx.next
+        }
+    }
+        
+    
+    # Translate an action call to C++. This is complicated, because we have
+    # to apply the action prototype and deal with call-by-reference.
+    #
+    # In-place optimization. There are two cases when a call can modify
+    # an argument in-place:
+    #
+    # (1) Borrowing. This is an in/out parameter given an lvalue
+    # that is returned by the expression and has exactly one alias in the
+    # expression.
+    #
+    # (2) Return by reference. This is an out parameter given an
+    # lvalue that is returned by the expression and has no aliases in
+    # the expression.
+    #
+    # In both of these cases, we simply pass the lvalue by non-const
+    # reference. Any other non-const reference parameter is copied
+    # to/from a temporary to preserve value semantics.
+    #
+    # If the call is return-by-value, then we return the translated
+    # function call. If return-by-reference, we emit the function call
+    # and return the lvalue passed to the output parameter, which may
+    # be a temporary. If the call is the expression root and it
+    # is return-by-value, then we we assign the outputs as a side
+    # effect, by copying any temporaries back to the original lvalues,
+    # and we return ().
+    #
+
+    action call_to_cpp (func:expr, inputs:vector[expr], ann:annot, st:tocppst)
+        returns (res:cpp.expr,st:tocppst) =
+    {
+        var proto := st.protos.value(func.get_arg(0).get_name);
+	
+        # First evaluate all of the inputs.
+        
+        var inpvals : vector[cpp.expr];
+        var idx := proto.args.begin;
+        while idx < proto.args.end {
+            var inp : cpp.expr;
+            var parg := proto.args.value(idx);
+            if parg.is_input {
+                var save_outputs := st.outputs;
+                st.outputs := vector[expr].empty;
+                (inp,st) := inputs.value(parg.inpos).to_cpp(st);
+                st.outputs := save_outputs;
+            };
+            inpvals := inpvals.append(inp);
+            idx := idx.next
+        };
+        
+
+        # Evaluate all of the arguments
+
+        var args : vector[cpp.expr];
+        idx := proto.args.begin;
+        var rets : vector[cpp.stmt];
+        var ret_vals : vector[cpp.expr];
+        var kdx := inpvals .begin;
+        while idx < proto.args.end {
+            var parg := proto.args.value(idx);
+            var inp := inpvals.value(kdx);
+            var out : cpp.expr;
+            if parg.is_output & st.outputs.end > 0 {
+                (out,st) := st.outputs.value(parg.outpos).to_cpp(st);
+                if ~is_dead(out,st, 1 if parg.is_input else 0) {
+		    var orig := out;
+                    (st,out) := make_temp(st,parg.name.get_arg(1),ann);
+                    rets := rets.append(cpp.asgn.make(orig,out,ann));
+                }
+            } else if parg.is_ref & ~parg.is_const {
+                if is_dead(inp,st,1) {
+                    out := inp;  # if input is a dead lvalue, side-effect it
+                } else {
+                    (st,out) := make_temp(st,parg.name.get_arg(1),ann);
+                };
+		ret_vals := ret_vals.append(out);
+            };
+	    if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
+                st := st.add_stmt(cpp.asgn.make(out,inp,ann));
+                inp := out;
+            } else if parg.is_output {
+                inp := out
+            };
+            args := args.append(inp);
+            idx := idx.next;
+            kdx := kdx.next
+        };
+        (res,st) := make_cpp_call(func,args,ann,st);
+        st := unown_func_args(inputs,st);
+        if ret_vals.end > 0 | rets.end > 0 | ~proto.has_ret {
+            st := st.add_stmt(cpp.asgn.make(cpp.empty.make(ann),res,ann));
+	    var jdx := rets.begin;
+	    while jdx < rets.end {
+                st := st.add_stmt(rets.value(jdx));
+		jdx := jdx.next;
+	    };
+            res := cpp.comma.fold_left(ret_vals,ann);
+        }
+    }
+
+    action make_cast_to_bool(s:cpp.expr) returns (s:cpp.expr) = {
+	s := cpp.app.make1(cpp.symbol.makestr("ivy::native_bool",s.get_ann),s,s.get_ann);
+    }
+
+    action make_isa(s:cpp.expr,ty:cpp.expr) returns (s:cpp.expr) = {
+	s := cpp.app.make1(cpp.symbol.makestr1("ivy::isa",ty.get_name,s.get_ann),s,s.get_ann);
+    }
+
+    # Translate a function application to C++. 
+
+    object app = { ...
+        action to_cpp(s:this,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+
+	    if s.is(verb.colon) {
+                
+                # Generally, type decorations are not emitted to
+                # C++. However, in case of a numeral, we need to cast
+                # the numeral to the appropriate type. If a string
+                # literal, we use the template function
+                # `ivy::from_str<t>` to convert to type `t`.
+                #
+                # If a symbol is an action and its type is not a
+                # function type, we have to add () for C++.
+
+                var arg := s.args.value(0);
+		(res,st) := arg.to_cpp(st);
+                if (arg isa symbol) {
+		    if arg.get_verb = verb.truev | arg.get_verb = verb.falsev {
+                        res := cpp.app.make1(cpp.symbol.makestr("ivy::native_bool",s.get_ann),res,s.get_ann);
+		    } else if arg.get_verb = verb.numeral | st.constructors.mem(arg.get_name) {
+                        var ty : cpp.expr;
+		        (ty,st) := s.args.value(1).to_cpp(st);
+                        res := cpp.app.make1(ty,res,s.get_ann);
+                    } else if arg.get_verb = verb.string {
+                        var ty : cpp.expr;
+                        (ty,st) := s.args.value(1).to_cpp(st);
+                        res := make_from_string(ty,res,s.get_ann);
+                    } else if st.globals.is_action.mem(arg.get_name) {
+                        if ~(s.args.value(1).is(verb.arrow)) {
+                            var args : vector[cpp.expr];
+                            res := cpp.app.make(res,args,res.get_ann);
+                        }
+                    }
+                }
+            } else if s.is(verb.arrow) {
+
+                # Function types need special translation to C++
+
+		var tmp : expr := s;  # workaround
+		(res,st) := function_type(tmp,st)
+            } else if s.is(verb.isav) {
+
+		# `x isa t` is translated to `x.isa<t>()`
+
+		var arg0 : cpp.expr;
+		var arg1 : cpp.expr;
+		(arg0,st) := s.args.value(0).to_cpp(st);
+		(arg1,st) := s.args.value(1).to_cpp(st);
+		if is_cpp_this(arg0) {
+		    res := make_isa(arg0,arg1);
+		} else {
+		    var isam : cpp.strident;
+		    isam.val := "isa";
+		    isam.subscrs := isam.subscrs.append(arg1.get_name);
+		    var id : cpp.ident := isam;
+		    res := cpp.symbol.make(id,s.ann);
+		    res := cpp.dot.make(arg0,res,s.ann);
+		    res := cpp.app.make0(res,s.ann);
+		}
+	    } else if s.func.is(verb.colon) & s.func.get_arg(0).get_verb = verb.castv {
+
+                # A cast operator looks like (cast : (t->u))(x). This may indicate
+                # a need for an upcast in C++. 
+
+                var ty := s.func.get_arg(1).get_arg(1);  # the range type of the cast operator
+                (res,st) := upcast(ty,s.args.value(0),st)
+	    } else {
+
+                # Detect whether a function application is an action call.
+                
+                var func : expr;
+                var args : vector[expr];
+                (func,args) := get_app(s);
+
+                if st.globals.is_action.mem(func.get_arg(0).get_name) {
+                    
+                    # An action call needs special treatment
+                    
+                    (res,st) := call_to_cpp(func,args,s.ann,st);
+
+                
+                } else {    
+
+                    # This is the normal case of function application. We
+                    # translate the function and all the arguments and
+                    # then apply.
+
+                    var capp : cpp.app;
+                    (capp.func,st) := s.func.to_cpp(st);
+                    {
+                        var save_outputs := st.outputs;
+                        st.outputs := vector[expr].empty;
+                        var idx := s.args.begin;
+                        while idx < s.args.end {
+                            var arg : cpp.expr;
+			    if s.func.get_verb = verb.dot & idx = 1 { st.dot_rhs := true; };
+                            (arg,st) := s.args.value(idx).to_cpp(st);
+			    st.dot_rhs := false;
+                            capp.args := capp.args.append(arg);
+                            idx := idx.next
+                        };
+                        st.outputs := save_outputs;
+
+                        # For ternary operators, we need to permute the arguments
+
+                        if capp.is(cpp.verb.ite) {
+                            var tmp := capp.args.value(0);
+                            capp.args := capp.args.set(0,capp.args.value(1));
+                            capp.args := capp.args.set(1,tmp);
+                        };
+
+                        # If of the form (x:t).f, where t is a variant
+                        # type, convert to x->f, since variant types are
+                        # represented with smart pointers.
+
+                        if s.func.get_verb = verb.dot {
+                            var lhs := s.args.value(0);
+                            if lhs.is(verb.colon) {
+                                var ty := lhs.get_arg(1);
+                                if is_variant_type(ty,st) & ~is_cpp_this(capp.args.value(0)){
+                                    capp.func := cpp.symbol.makestr("->",capp.func.get_ann)
+                                }
+                            }
+                        }
+                    };
+                    capp.ann := s.ann;
+                    res := capp;
+                    st := unown_func_args(s.args,st);
+
+                    # If of the form x.f where is a member action of input arity zero,
+                    # add empty parentheses for C++.
+
+                    # if s.is(verb.dot) {
+                    #     var lhs := s.args.value(0);
+                    #     var ty := lhs.get_type;
+                    #     var fid := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
+                    #     if st.globals.is_action.mem(fid) {
+                    #         if ~(s.args.value(1).get_arg(1).get_arg(1).is(verb.arrow)) {
+                    #             var args : vector[cpp.expr];
+                    #             res := cpp.app.make(res,args,res.get_ann);
+                    #         }
+                    #     }
+                    # }
+                }
+	    }
+        }
+    }
+
+    object stmt = { ...
+        action to_cpp(s:stmt,st:tocppst) returns (res:cpp.stmt,st:tocppst)
+    }
+
+    object skipst = { ...
+        instantiate generic_to_cpp(ivy.skipst,cpp.skipst,cpp.stmt)
+        action to_cpp_int(s:ivy.skipst,st:tocppst) returns (res:cpp.skipst,st:tocppst) = {
+        }
+    }
+
+    action upcast(lhsty:expr,rhs:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+        (res,st) := rhs.to_cpp(st);
+        if false & rhs.is(verb.colon) {
+            var rhsty := rhs.get_arg(1);
+            if st.subtype_rel.is_subtype(rhsty,lhsty) {
+		var crhsty : cpp.expr;
+		(crhsty,st) := rhsty.to_cpp(st);
+                res := cpp.new.make(cpp.app.make1(crhsty,res,rhs.get_ann),rhs.get_ann);
+		var clhsty : cpp.expr;
+		(clhsty,st) := fix_variant_type(lhsty,st);
+		res := cpp.app.make1(clhsty,res,rhs.get_ann)
+            }
+        }
+    }
+
+    action unown_path(path:access_path,st:tocppst) returns (st:tocppst) = {
+        var idx := st.dead.begin;
+        while idx < st.dead.end {
+            var lc := st.dead.value(idx);
+            if path_may_alias(path,lc.path) {
+                lc.cnt := lc.cnt.prev;
+                st.dead := st.dead.set(idx,lc);
+            };
+            idx := idx.next
+        }
+    }
+    
+    action kill_lvalue(e:expr,st:tocppst,paths:vector[access_path]) returns (st:tocppst) = {
+        var path : access_path;
+        var ok : bool;
+        (path,ok) := lvalue_path(e,path);
+        if ok {
+            var alias_count : pos := 0;
+            var idx := paths.begin;
+            while idx < paths.end {
+                if path_may_alias(path,paths.value(idx)) {
+                    alias_count := alias_count.next;
+                };
+                idx := idx.next
+            };
+            var lc : lvalue_count;
+            (lc.lvalue,st) := e.to_cpp(st);
+            lc.path := path;
+            lc.cnt := alias_count;
+            st.dead := st.dead.append(lc);
+        }
+    }
+
+    action kill_lvalues(es:vector[expr],st:tocppst,paths:vector[access_path])
+        returns (st:tocppst) =
+    {
+        var idx := es.begin;
+        while idx < es.end {
+            st := kill_lvalue(es.value(idx),st,paths);
+            idx := idx.next
+        }
+    }
+
+    # If the "this" argument of a member function is assign to a
+    # variable or passed as an argument, and if "this" is of a
+    # supertype, then we have to use the virtual `__upcast` method of
+    # the object to get a C-o-W pointer to the object. Otherwise C++
+    # will slice the object.
+
+    action fix_variant_arg(s:expr,rhs:cpp.expr,st:tocppst) returns (rhs:cpp.expr) = {
+	if ~s.is_typed(verb.castv) & is_cpp_this(rhs) {
+	    var ty := s.get_type;
+	    if is_variant_type(ty,st) {
+		var ann := rhs.get_ann;
+		rhs := cpp.dot.make(rhs,cpp.app.make0(cpp.symbol.makestr("__upcast",ann),ann),ann);
+	    }
+	}
+    }
+    
+    # Handling of assignments. For each lvalue on the lhs, we count
+    # the number of possibly aliasing references on the rhs, and
+    # record this information in `st.outputs`. We then translate the
+    # rhs. If the rhs is a call to an action with return by reference,
+    # then this will have the side effect of assigning the outputs.
+    # If so, the return value will be ().  Otherwise, we generate an
+    # assigment of the return values to the outputs.  Finally, we
+    # assemble the generated code and restore the context.
+
+    object asgn = { ...
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+            var paths : vector[access_path];
+            paths := lvalue_paths(s.rhs,paths,false);
+            var res : cpp.asgn;
+            res.ann := s.ann;
+            (res.lhs,st) := s.lhs.to_cpp(st);
+            st.outputs := comma.unfold_left(s.lhs);
+            st := kill_lvalues(st.outputs,st,paths);
+	    (res.rhs,st) := s.rhs.to_cpp(st);
+	    if res.rhs.get_verb ~= cpp.verb.empty {
+		res.rhs := fix_variant_arg(s.rhs,res.rhs,st);
+		st := st.add_stmt(res);  # Don't generate () = ();
+	    };
+	    (st,resd) := st.get_code(s.ann);
+            st.outputs := vector[expr].empty;
+            st.dead := vector[lvalue_count].empty;
+        }
+    }
+
+    object sequence = { ...
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+            var res : cpp.sequence;
+            res.ann := s.ann;
+            st.locals := st.locals.push_stmt(s.lhs);
+            (res.lhs,st) := s.lhs.to_cpp(st);
+            (res.rhs,st) := s.rhs.to_cpp(st);
+            st.locals := st.locals.pop;
+            resd := res;
+        }
+    }
+
+    # Translate "while" statement. We have to account for any side effects in
+    # the condition evaluation. For example, suppose we have `if f(x) (s1) else {s2}`
+    # where `f(x)` is return-by-reference. This will translate to:
+    #
+    #     bool __tmpXXX = x;
+    #     f(__tmpXXX);
+    #     if (__tmpXXX) {s1} else {s2}
+
+    object ifst = { ...
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+	    var res : cpp.ifst;
+	    res.ann := s.ann;
+            (res.cond,st) := s.cond.to_cpp(st);
+            var code := st.code;  # side effects of cond evaluation
+	    st.code := vector[cpp.stmt].empty;
+            (res.thenst,st) := s.thenst.to_cpp(st);
+            (res.elsest,st) := s.elsest.to_cpp(st);
+	    resd := res;
+            st.code := code;  
+	    (st,resd) := st.wrap_stmt(resd,s.ann);
+        }
+    }
+
+    # Translate "while" statement. We have to account for any side effects in
+    # the condition evaluation. For example, suppose we have `while f(x) {s1}`
+    # where `f(x)` is return-by-reference. This will translate to:
+    #
+    #     while (true) {
+    #         bool __tmpXXX = x;
+    #         f(__tmpXXX);
+    #         if (!__tmpXXX) break;
+    #         s1
+    #     }
+
+    object whilest = { ...
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+	    var res : cpp.whilest;
+	    res.ann := s.ann;
+            (res.cond,st) := s.cond.to_cpp(st);
+            var code := st.code;  # side effects of cond evaluation
+	    st.code := vector[cpp.stmt].empty;
+            (res.body,st) := s.body.to_cpp(st);
+	    if code.end > 0 {
+		st.code := code;
+		var brkcond := cpp.not.make(res.cond,s.ann);
+		var brkif := cpp.breakst.make(s.ann);
+		var brkelse := cpp.skipst.make(s.ann);
+		var brkst := cpp.ifst.make(brkcond,brkif,brkelse,s.ann);
+		st := st.add_stmt(brkst);
+		res.cond := cpp.symbol.makestr("true",s.ann);
+		(st,res.body) := st.wrap_stmt(res.body,s.ann);
+	    };
+	    resd := res;
+	    (st,resd) := st.wrap_stmt(resd,s.ann);
+        }
+    }
+
+    object varst = { ...
+        instantiate generic_to_cpp(ivy.varst,cpp.varst,cpp.stmt)
+        action to_cpp_int(s:varst,st:tocppst) returns (res:cpp.varst,st:tocppst) = {
+            (res.vtype._type,st) := fix_variant_type(s.name.get_arg(1),st);
+            (res.vtype.name,st) := s.name.get_arg(0).to_cpp(st);
+        }
+    }
+
+    object decl = { ...
+        action to_cpp(s:this,st:tocppst) returns (res:cpp.decl,st:tocppst)
+        action reg_member(s:this,st:tocppst) returns (st:tocppst)
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := true;
+        }
+	action record_prototypes(s:this,st:tocppst) returns (st:tocppst)
+    }
+
+    # The full name of a C++ function depends on whether it is a member function.
+    # If so, we find take the full name of the class and append the member name.
+    # The full name of the class can differ from the name of Ivy type because of
+    # object name clashes.
+
+    action full_action_name(name:expr,is_member : bool,st:tocppst)
+        returns (res:cpp.expr,st:tocppst) =
+    {
+        if is_member {
+            var pref : ident := name.get_name.get_namesp;
+            var clsid := fix_object_clash(pref,st);
+            var funid := name.get_name.get_member.prefix(clsid);
+            res := cpp.symbol.make(funid.to_cpp(false),name.get_ann);
+        } else {
+            (res,st) := name.to_cpp(st) 
+        }
+    }
+
+    action is_input_param(s:actdc,p:expr) returns (res:bool) = {
+        var idx := s.inputs.begin;
+        while ~res & idx < s.inputs.end {
+            res := expr.eq(s.inputs.value(idx),p);
+            idx := idx.next
+        }
+    }
+
+    object actdc = { ...
+
+	action record_prototypes(s:this,st:tocppst) returns (st:tocppst) = {
+            var proto := s.get_proto;
+            st.protos := st.protos.set(s.name.get_name,proto);
+	}
+
+        # Here, we translate an Ivy action declaration to a C++
+        # function declaration. The C++ function declarations depends
+        # on the action prototype.  If the action is a member action,
+        # we drop the first input and replace it with `*this`.
+        
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
+            var res : cpp.funcdecl;
+            res.ann := s.ann;
+	    var proto := st.protos.value(s.name.get_name);
+            var has_output := proto.has_ret;
+            if has_output {
+                (res.ftype.base._type,st) := fix_variant_type(s.outputs.value(proto.ret.outpos).get_arg(1),st);
+            } else {
+                res.ftype.base._type := cpp.voidtype(s.ann);
+            };
+            var cprot := st.proto_only;
+            var is_member := s.is_member;
+            var full_name : cpp.expr;
+            (full_name,st) := full_action_name(s.name,is_member,st);
+	    res.ftype.base.name := member_name(full_name) if (cprot | st.in_class) else full_name; 
+            var idx := proto.args.begin;
+            st.is_member := is_member;
+            if st.is_member {
+                idx := idx.next;   # skip the first input "this" if a member
+                st.this_ident := proto.args.value(0).name.get_arg(0).get_name;
+                res.ftype.is_const := proto.args.value(0).is_const;
+		if cprot & is_variant_type(proto.args.value(0).name.get_arg(1),st) {
+		    res.is_virtual := true
+		}
+            };
+            st.locals := st.locals.push;
+            while idx < proto.args.end {
+                var parg := proto.args.value(idx);
+                var arg := parg.name;
+                var argt : cpp.simpletype;
+                argt.is_const := parg.is_const;
+                argt.is_ref := parg.is_ref;
+                (argt._type,st) := fix_variant_type(arg.get_arg(1),st);
+                st.locals := st.locals.add_var(arg);
+                (argt.name,st) := arg.get_arg(0).to_cpp(st);
+                res.ftype.args := res.ftype.args.append(argt);
+                idx := idx.next
+            };
+            res.has_body := ~cprot;
+	    if res.has_body {
+		if s.has_body {
+		    var body :cpp.stmt;
+		    (body,st) := s.body.to_cpp(st);
+		    res.body := body;
+		} else {
+		    res.body := cpp.skipst.make(s.ann);
+		};
+		if has_output {
+		    var rvar : cpp.expr;
+		    (rvar,st) := s.outputs.value(0).get_arg(0).to_cpp(st);
+		    var ret := cpp.retst.make(rvar,s.ann);
+		    res.body := cpp.sequence.make(res.body,ret,s.ann);
+		    if ~is_input_param(s,s.outputs.value(0)) {
+			var vs := cpp.varst.make(res.ftype.base._type,rvar,s.ann);
+			res.body := cpp.sequence.make(vs,res.body,s.ann);
+		    }
+		}
+	    };
+            st.locals := st.locals.pop;
+            st.is_member := false;
+            resd := res;
+            if ~st.in_class & cprot {
+                resd := add_namespaces(resd,s.name.get_name);
+            }
+        }
+
+        # Here, we register actions as members of types. These will be emitted
+        # as members of the corresponding C++ class. 
+
+        action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+            if s.is_member {
+                var actd := s;
+                actd.has_body := false;
+                st := st.add_member(s.member_type,actd);
+            }
+        }
+
+        # An action declaration is not emitted if it is a member and
+        # does not have a body. External actions are never emitted.
+
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := (~s.is_member | ~st.proto_only) & s.kind ~= action_kind.external;
+        }
+    }
+
+    # Init declarations are not emitted
+
+    object initdc = { ...
+        
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := false;
+        }
+    }
+
+    action add_namespaces_rec(d:cpp.decl,id:ident) returns(d:cpp.decl) = {
+        var nd : cpp.namespacedecl;
+        nd.ann := d.get_ann;
+        var name := id.get_member if (id isa dotident) else id;
+        nd.name := cpp.symbol.make(name.to_cpp(false),d.get_ann);
+        nd.members := nd.members.append(d);
+        d := nd;
+        if id isa dotident {
+            d := add_namespaces_rec(d,id.get_namesp);
+        }
+    }
+
+    action add_namespaces(d:cpp.decl,id:ident) returns(d:cpp.decl) = {
+        if id isa dotident {
+            d := add_namespaces_rec(d,id.get_namesp);
+        }
+    }        
+
+    action member_name(s:cpp.expr) returns(s:cpp.expr) = {
+        if (s.get_name) isa cpp.dotident {
+            s := cpp.symbol.make(s.get_name.get_member,s.get_ann)
+        }
+    }        
+
+    # Instantiate a standard template. This produces a type name of
+    # the form `ivy.tpl[ty]`.
+
+    action make_std_tpl(tpl:str, ty:str, ann:annot) returns (res:cpp.expr) = {
+	var vid : cpp.strident;
+	vid.val := tpl;
+	vid.subscrs := vid.subscrs.append(cpp.strident.make(ty));
+	var tname := cpp.dotident.make(cpp.strident.make("ivy"),vid);
+        res := cpp.symbol.make(tname,ann);
+    }
+    
+    # Make the name of the C++ enum that corresponds to an Ivy enumerated
+    # type. The name is `__enum_name` where `name is the Ivy name.
+
+    action enum_name(name : cpp.expr) returns (res:str) = {
+        res := "__enum_";
+        res := res.extend(name.get_name.to_str)
+    }
+        
+    # Unfortunately, enumerated types can't be classes in C++.  To
+    # represent one an enumerated type `t`, we declared a C++ enum
+    # named `__enum_t`. We then instantiate a template
+    # `ivy::native_enum<__enum_t>` defined in the standard header.
+    # This wraps the enum in a class with the necessary standard
+    # traits.  The form of an enum type `name` in the C++ code is:
+    #
+    #     enum __enum_name  {elem1,...elemN};
+    #
+    #     struct name : ivy::native_enum< __enum_name > {
+    #         name() : ivy::native_enum< __enum_name >() {}
+    #         name(long long value) : 
+    #         name(__enum_name value) : ivy::native_enum< __enum_name >(value) {}
+    #     };
+    #
+    # Note we have to promote the constructors of the base class to
+    # the derived class. The parameter `sd` is the struct declaration.
+    # This action prepends the C++ enum declaration.
+    
+    action enum_to_cpp(name:cpp.expr,spec:typespec,sd:cpp.decl,st:tocppst)
+        returns(res:cpp.decl,st:tocppst) =
+    {
+
+        # Delcare the enum `__enum_t`.
+
+        var ed : cpp.enumdecl;
+        ed.ann := name.get_ann;
+        ed.name := cpp.symbol.makestr(enum_name(name),ed.ann);
+        var cnstrs := spec.get_elems;
+        var idx := cnstrs.begin;
+        while idx < cnstrs.end {
+            var e : cpp.expr;
+            (e,st) := cnstrs.value(idx).to_cpp(st);
+            ed.elems := ed.elems.append(member_name(e));
+            idx := idx.next
+        };
+        var gd : cpp.groupdc;
+        gd.ann := name.get_ann;
+        gd.decls := gd.decls.append(ed);
+        gd.decls := gd.decls.append(sd);
+        res := gd;
+    }
+    
+    # All the delcared classes have to have certain standard traits.
+    # These are:
+    #
+    # (1) A default constructor
+    # (2) A constructor from (signed or unsigned) long long.
+    # (3) A conversion to size_t
+    # (4) A static predicate __is_seq
+    # (5) A == overload
+    # (6) A != overload
+    # (7) A predicate __is_zero
+    # (8) A class __hash of hashers
+    #
+    # Here, we add the standard traits to a C++ structure.
+
+    # Make a C++ constructor for a struct
+    # Default constructor does nothing:
+    #     name() {};
+
+    action make_cpp_cons(t:cpp.structdecl) returns (s:cpp.funcdecl) = {
+        s.ftype.base.name := t.name;
+        s.has_body := true;
+        s.body := cpp.skipst.make(t.ann);
+    }
+
+    action make_virt_destr(t:cpp.structdecl) returns (s:cpp.funcdecl) = {
+	var name : str;
+	name := name.extend("~");
+	name := name.extend(t.name.get_name.to_str);
+        s.ftype.base.name := cpp.symbol.makestr(name,t.ann);
+        s.has_body := true;
+        s.body := cpp.skipst.make(t.ann);
+	s.is_virtual := true;
+    }
+
+    action make_upcast_method(t:cpp.structdecl) returns (s:cpp.funcdecl) = {
+        s.ftype.base.name := cpp.symbol.makestr("__upcast",t.ann);
+	var ty := t.super if t.has_super else t.name;
+	s.ftype.base._type := cpp.symbol.makestr1("ivy::ptr",ty.get_name,t.ann);
+        s.has_body := true;
+        s.body := cpp.retst.make(cpp.symbol.makestr("(*this)",t.ann),t.ann);
+	s.is_virtual := true;
+	s.ftype.is_const := true;
+    }
+
+    # Numeric constructor does nothing (so that 0 gives default value):
+    #     name(long long) {};
+
+    action add_numeric_cons(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var ncons := make_cpp_cons(s);
+        var nconsarg0 : cpp.simpletype;
+        nconsarg0._type := cpp.symbol.makestr("long long",s.ann);
+        nconsarg0.name := cpp.symbol.makestr("value",ncons.ann);
+        ncons.ftype.args := ncons.ftype.args.append(nconsarg0);
+        s.members := s.members.append(ncons);
+    }
+        
+    # Conversion to size_t returns zero:
+    #     operator size_t() const { return 0; }
+    
+    action add_sizet_conv(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        
+        var tosizet : cpp.funcdecl;
+        tosizet.ftype.base.name := cpp.symbol.makestr("operator std::size_t",s.ann);
+        tosizet.ftype.is_const := true;
+        tosizet.has_body := true;
+        tosizet.body := cpp.retst.make(cpp.symbol.makestr("0",s.ann),s.ann);
+        s.members := s.members.append(tosizet);
+    }        
+
+    # __is_seq returns zero:
+    #     static bool __is_seq() {return false;}
+    
+    action add_is_seq_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var isseq : cpp.funcdecl;
+        isseq.ftype.base._type := cpp.symbol.makestr("bool",s.ann);
+        isseq.ftype.base.name := cpp.symbol.makestr("__is_seq",s.ann);
+        isseq.is_static := true;
+        isseq.has_body := true;
+        isseq.body := cpp.retst.make(cpp.symbol.makestr("false",s.ann),s.ann);
+        s.members := s.members.append(isseq);
+    }
+
+    # Equality comparison yields member-wise equality: 
+    #     bool operator==(const name &other) const { return f1==other.f1 & ...; }
+    
+    action add_eq_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var eq : cpp.funcdecl;
+        eq.ftype.base._type := cpp.symbol.makestr("ivy::native_bool",s.ann);
+        eq.ftype.base.name := cpp.symbol.makestr("operator ==",s.ann);
+        eq.ftype.is_const := true;
+        var eqarg0 : cpp.simpletype;
+        eqarg0._type := s.name;
+        eqarg0.is_const := true;
+        eqarg0.is_ref := true;
+        eqarg0.name := cpp.symbol.makestr("other",eq.ann);
+        eq.ftype.args := eq.ftype.args.append(eqarg0);
+        eq.has_body := true;
+        var eqs : vector[cpp.expr];
+        var idx := s.members.begin;
+        while idx < s.members.end {
+            var d := s.members.value(idx);
+            if d isa cpp.vardecl {
+                var f0 := d.get_name;
+                var f1 := cpp.dot.make(eqarg0.name,d.get_name,s.ann);
+                var e := cpp.equals.make(f0,f1,s.ann);
+                eqs := eqs.append(e);
+            };
+            idx := idx.next
+        };
+        var retexp := cpp.symbol.makestr("true",s.ann);
+        if eqs.end > 0 {
+            retexp := cpp.and.fold_left(eqs,s.ann);
+        };
+        eq.body := cpp.retst.make(retexp,s.ann);
+        s.members := s.members.append(eq);
+    }
+
+    # Disequality is just negation of equality
+    #     bool operator!=(const name &other) const { return !((*this)==other); }
+
+    action add_diseq_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var diseq : cpp.funcdecl;
+        diseq.ftype.base._type := cpp.symbol.makestr("ivy::native_bool",s.ann);
+        diseq.ftype.base.name := cpp.symbol.makestr("operator !=",s.ann);
+        diseq.ftype.is_const := true;
+        var diseqarg0 : cpp.simpletype;
+        diseqarg0._type := s.name;
+        diseqarg0.is_const := true;
+        diseqarg0.is_ref := true;
+        diseqarg0.name := cpp.symbol.makestr("other",diseq.ann);
+        diseq.ftype.args := diseq.ftype.args.append(diseqarg0);
+        diseq.has_body := true;
+        var f0 := cpp.symbol.makestr("(*this)",s.ann);
+        var diseqret := cpp.not.make(cpp.equals.make(f0,diseqarg0.name,s.ann),s.ann);
+        diseq.body := cpp.retst.make(diseqret,s.ann);
+        s.members := s.members.append(diseq);
+    }
+    
+    # __is_zero is conjunction of __is_zero for members.
+    #    bool __is_zero() const { return f1.is_zero() & ...; }
+    
+    action add_is_zero_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var iszero : cpp.funcdecl;
+        iszero.ftype.base._type := cpp.symbol.makestr("bool",s.ann);
+        iszero.ftype.base.name := cpp.symbol.makestr("__is_zero",s.ann);
+        iszero.ftype.is_const := true;
+        iszero.has_body := true;
+        var iszeros : vector[cpp.expr];
+        var idx := s.members.begin;
+        while idx < s.members.end {
+            var d := s.members.value(idx);
+            if d isa cpp.vardecl {
+                var f0 := d.get_name;
+                var f1 := cpp.dot.make(d.get_name,iszero.ftype.base.name,s.ann);
+                var f2 : vector[cpp.expr];
+                var e := cpp.app.make(f1,f2,s.ann);
+                iszeros := iszeros.append(e);
+            };
+            idx := idx.next
+        };
+        var iszeroret := cpp.symbol.makestr("true",s.ann);
+        if iszeros.end > 0 {
+            iszeroret := cpp.and.fold_left(iszeros,s.ann);
+        };
+        iszero.body := cpp.retst.make(iszeroret,s.ann);
+        s.members := s.members.append(iszero);
+    }
+
+    action add_hasher(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+
+        # Hash function adds hashes of members:
+        #     struct __hash { size_t operator()(const name &x) {returns t1::__hash(f1) + ...; } };
+            
+        var hashstr : cpp.structdecl;
+        hashstr.ann := s.ann;
+        hashstr.name := cpp.symbol.makestr("__hash",s.ann);
+        hashstr.has_members := true;
+        var hash : cpp.funcdecl;
+        hash.ftype.base._type := cpp.symbol.makestr("std::size_t",s.ann);
+        hash.ftype.base.name := cpp.symbol.makestr("operator ()",s.ann);
+        hash.ftype.is_const := true;
+        var hasharg0 : cpp.simpletype;
+        hasharg0._type := s.name;
+        hasharg0.is_const := true;
+        hasharg0.is_ref := true;
+        hasharg0.name := cpp.symbol.makestr("x",hash.ann);
+        hash.ftype.args := hash.ftype.args.append(hasharg0);
+        hash.has_body := true;
+        var hashs : vector[cpp.expr];
+        var idx := s.members.begin;
+        while idx < s.members.end {
+            var d := s.members.value(idx);
+            if d isa cpp.vardecl {
+                var f0 := d.get_name;
+                var f1 := hashstr.name.prefix(d.get_type.get_name);
+                var f2 := cpp.dot.make(hasharg0.name,f0,s.ann);
+                var e := cpp.app.make1(cpp.app.make0(f1,s.ann),f2,s.ann);
+                hashs := hashs.append(e);
+            };
+            idx := idx.next
+        };
+        var hashret := cpp.symbol.makestr("0",s.ann);
+        if hashs.end > 0 {
+            hashret := cpp.plus.fold_left(hashs,s.ann);
+        };
+        hash.body := cpp.retst.make(hashret,s.ann);
+        hashstr.members := hashstr.members.append(hash);
+        s.members := s.members.append(hashstr);
+    }
+
+    # Add the standard traits to a struct.
+
+    action add_standard_traits(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+
+        s.members := s.members.append(make_cpp_cons(s));
+        s := add_numeric_cons(s);
+        s := add_sizet_conv(s);
+        s := add_is_seq_pred(s);
+        s := add_eq_pred(s);
+        s := add_diseq_pred(s);
+        s := add_is_zero_pred(s);
+        s := add_hasher(s);
+    }
+
+    # Add a virtual upcast and destructor to a base class.
+
+    action add_virtual_destructor(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+	s.members := s.members.append(make_upcast_method(s));
+        s.members := s.members.append(make_virt_destr(s));
+    }
+
+    # Add an virtual upcast derived class.
+
+    action add_upcast_method(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+	s.members := s.members.append(make_upcast_method(s));
+    }
+
+    # Add a constructor that uses the base class constructor.
+    #
+    #     derived(t value) : base(value) {}
+    #     derived(const t& value) : base(value) {}
+    #
+    # The latter is produced if the `constref` parameter is true
+    
+    action add_derived_cons(s:cpp.structdecl,t:cpp.expr,constref:bool) returns (s:cpp.structdecl) = {
+        var dcons := make_cpp_cons(s);
+        var dconsarg0 : cpp.simpletype;
+        dconsarg0._type := t;
+        dconsarg0.name := cpp.symbol.makestr("value",dcons.ann);
+        dconsarg0.is_const := constref;
+        dconsarg0.is_ref := constref;
+        dcons.ftype.args := dcons.ftype.args.append(dconsarg0);
+        dcons.ftype.has_initializer := true;
+        dcons.ftype.initializer := cpp.app.make1(s.super,dconsarg0.name,s.ann);
+        s.members := s.members.append(dcons);
+    }
+
+    # Add a conversion of a derived struct to its base struct
+    #
+    #     operator base () const { return (*this); }
+    #
+
+    action add_base_conversion(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        
+        var abc : cpp.funcdecl;
+        var op : str;
+        op := op.extend("operator ");
+        op := op.extend(s.super.get_name.to_str);
+        abc.ftype.base.name := cpp.symbol.makestr(op,s.ann);
+        abc.ftype.is_const := true;
+        abc.has_body := true;
+        abc.body := cpp.retst.make(cpp.symbol.makestr("(*this)",s.ann),s.ann);
+        s.members := s.members.append(abc);
+    }        
+
+    # Subclasses of native c++ classes inherit the standard traits from those classes.
+    # In order to allow them to use the overloads of the native classes, we add this
+    # boilerplate to the class:
+    #
+    # struct ivytype : cpptype {
+    #    ivytype(long long value) : cpptype(value) {}
+    #    ivytype(const cpptype &x) : cpptype(x) {}
+    #    operator cpptype() { return (*this); }
+    #  };
+    #
+    # That is, we provide a constructor from the base class and a conversion to the
+    # base class. THe latte is used by the C++ compiler when interpreting an expression
+    # like `x+y`, where `x` and `y` are of the derived class. Since the only available
+    # conversion is to the base class, the `+` operator of the base class is used. On
+    # assignment, the constructor is used.
+
+    action add_derived_traits(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+
+        s.members := s.members.append(make_cpp_cons(s));
+        s := add_derived_cons(s,cpp.symbol.makestr("long long",s.ann),false);
+        s := add_derived_cons(s,s.super,true);
+        s := add_base_conversion(s);
+    }
+
+
+    # Native types occur on the right-hand side of `interpret` declarations.
+    # They need special processing, because we do *not* want to avoid clashes
+    # with C++ reserved words.
+
+    action native_type_to_cpp(ty:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+        st.native := true;
+        (res,st) := ty.to_cpp(st);
+        st.native := false;
+    }
+
+    # Translate a type declaration to C++. All Ivy types translate to
+    # C++ structs.
+
+    object typedc = { ...
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
+            var res : cpp.structdecl;
+            res.ann := s.ann;
+            var cls : cpp.expr;
+            (cls,st) := s.sort.to_cpp(st);
+            res.name := member_name(cls);
+            if ~st.forward {
+                if s.has_super {
+                    res.has_super := true;
+                    (res.super,st) := s.super.to_cpp(st)
+                } else if s.has_spec & (s.spec isa enumspec) {
+                    res.has_super := true;
+                    res.super := make_std_tpl("native_enum",enum_name(res.name),res.ann);
+                } else if st.cppclasses.mem(s.sort.get_name) {
+                    res.has_super := true;
+                    var itype := st.cppclasses.value(s.sort.get_name);
+                    (res.super,st) := native_type_to_cpp(itype,st);
+                };
+                res.has_members := true;  # This is not a forward declaration
+                var members := st.members.get(s.sort.get_name,vector[decl].empty);
+                var idx := members.begin;
+                st.in_class := true;
+                while idx < members.end {
+                    var d : cpp.decl;
+                    (d,st) := members.value(idx).to_cpp(st);
+                    res.members := res.members.append(d);
+                    idx := idx.next
+                };
+                st.in_class := false;
+                if res.has_super & ~s.has_super {  # derived from native
+                    res := add_derived_traits(res);
+                } else {
+                    res := add_standard_traits(res);
+                };
+		if s.has_super {
+		    res := add_upcast_method(res);
+		};
+		if is_variant_type(s.sort,st) {
+                    res := add_virtual_destructor(res);
+		};
+                resd := res; 
+                if s.has_spec & (s.spec isa enumspec) {
+                    (resd,st) := enum_to_cpp(res.name,s.spec,resd,st);
+                };
+            } else {
+                resd := res;
+            };
+            resd := add_namespaces(resd,fix_object_clash(s.sort.get_name,st)); 
+	}
+	    
+	# Here, we register the constructors of enumerated types
+
+	import action tocpp_show_str(s:str)
+
+	action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+	    if s.has_spec {
+		if s.spec isa enumspec {
+		    var conss := s.spec.get_elems;
+		    var idx := conss.begin;
+		    while idx < conss.end {
+			var cons := conss.value(idx);
+			st.constructors := st.constructors.set(cons.get_name,true);
+			idx := idx.next
+		    }
+		}
+	    }
+        }
+	    
+
+    }
+	
+    action is_variant_type(t:expr,st:tocppst) returns (res:bool) = {
+        if t isa symbol {
+            if st.subtype_rel.subtypes_of.mem(t.get_name) {
+		res := true;
+	    }
+	}
+    }
+
+    # When storing values of variant types we use smart pointers. That is,
+    # type `t` becomes `ivy.ptr<t>`.
+
+    action fix_variant_type(t:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+        if is_variant_type(t,st) {
+	    var cppty : cpp.expr;
+	    (cppty,st) := t.to_cpp(st);
+            var s : cpp.strident;
+            s.val := "ptr";
+            s.subscrs := s.subscrs.append(cppty.get_name);
+            res := cpp.symbol.make(s.prefix(cpp.strident.make("ivy")),t.get_ann);
+        } else {
+	    (res,st) := t.to_cpp(st);
+	}
+    }
+
+    # Translate a function definition to an action
+
+    object decl = { ...
+        action func_to_action(s : this) returns (res : decl) = {
+            res := s;
+        }
+    }   
+            
+    object vardc = { ...
+        action func_to_action(s : vardc) returns (dres : decl) = {
+            if s.has_def {
+                var res : actdc;
+                res.ann := s.ann;
+                var lhs := s.typing;
+                var ty : expr;
+                if lhs isa app {
+                    res.name := lhs.get_func.get_arg(0);
+                    res.inputs := lhs.get_args;
+                    ty := lhs.get_func.get_arg(1).get_arg(1);
+                } else if lhs isa symbol {
+                    res.name := lhs.get_arg(0);
+                    ty := lhs.get_arg(1);
+                };
+                var retv := symbol.makestr("__out",s.ann);
+                var retty := colon.make(retv,ty,s.ann);
+                res.outputs := res.outputs.append(retty);
+                res.has_body := true;
+                res.body := asgn.make(retty,s.def,s.ann);
+                dres := res;
+            } else {
+                dres := s;
+            }
+        }
+    }
+
+    # Translate a local variable declaration to C++. 
+
+    object vardc = { ...
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
+            var res : cpp.vardecl;
+            res.ann := s.ann;
+            var ty := s.typing.get_arg(1);
+            if s.is_destructor {
+                ty := ty.curry.get_arg(1);
+            };
+	    (res.vtype._type,st) := fix_variant_type(ty,st);
+            var name : cpp.expr;
+            (name,st) := s.typing.get_arg(0).to_cpp(st);
+            res.vtype.name := member_name(name);
+            resd := res; # workaround
+            if ~st.in_class {
+                resd := add_namespaces(resd,s.typing.get_arg(0).get_name);
+            }
+	}
+
+        # A type destructor is translated to a data member of the class;
+
+        action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+            if s.is_destructor {
+                var dom := times.unfold_left(s.typing.get_arg(1).get_arg(0));
+                var type_ident := dom.value(0).get_name;
+                st := st.add_member(type_ident,s);
+            }
+        }
+
+        # An variable declaration is not emitted if it is a destructor.
+
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := ~s.is_destructor;
+        }
+
+    }
+
+    # Translate a header declaration to C++
+    
+    object header = { ...
+        instantiate generic_to_cpp(this,cpp.header,cpp.decl)
+        
+	action to_cpp_int(s:this,st:tocppst) returns (res:cpp.header,st:tocppst) = {
+            res.filename := s.filename
+	}
+    }
+    
+    # Translate an interpret declaration to C++. 
+
+    object interpdc = { ...
+
+        # An interpret declararation determines the C++ superclass of the type.
+
+        action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+            st.cppclasses := st.cppclasses.set(s.itype.get_name,s.ctype);
+        }
+
+        # Interpret declarations are never emitted
+        
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := false;
+        }
+
+    }
+
+    # Translate an object declaration to C++. 
+
+    object objectdc = { ...
+
+        # An object declaration corresponds to a namespace in C++. However,
+        # we emit namespace declarations for the object members, not here.
+        # Here, we just record the object identifiers, so we know when they
+        # clash with type identifiers.
+
+        action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+            st.objects := st.objects.set(s.name.get_name,true);
+        }
+
+        # Object declarations are never emitted
+        
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := false;
+        }
+
+    }
+
+    # Translate an Ivy program to C++. 
+
+    object prog = { ...
+	action to_cpp(sp:this) returns (res:cpp.prog) = {
+            var s := sp;  # workaround
+            var st:tocppst;
+
+            # Get the subtyping relation
+            
+            st.subtype_rel := s.get_subtypes;
+
+            # A pass to convert function defs to actions
+
+            var idx := s.decls.begin;
+	    while idx < s.decls.end {
+                var d := s.decls.value(idx).func_to_action;
+                s.decls := s.decls.set(idx,d);
+		idx := idx.next
+	    };
+
+            # Get the global typing
+
+            st.globals := s.get_global_types(true);
+
+            # A pass to register all of the type members
+            
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+                st := s.decls.value(idx).reg_member(st);
+		idx := idx.next
+	    };
+
+            # A pass to emit the forward declarations of classes
+
+            st.forward := true;
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+                var ivyd := s.decls.value(idx);
+                if ivyd isa typedc {
+                    var d : cpp.decl;
+                    (d,st) := ivyd.to_cpp(st);
+		    res.decls := res.decls.append(d);
+                };
+		idx := idx.next
+	    };
+            st.forward := false;
+
+	    # A pass to record all of the C++ function prototypes
+	    
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+		st := s.decls.value(idx).record_prototypes(st);
+		idx := idx.next
+	    };
+	    
+            # A pass to emit the C++ prototypes and class declarations
+            
+            st.proto_only := true;
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+                if s.decls.value(idx).emitted(st) {
+                    var d : cpp.decl;
+                    (d,st) := s.decls.value(idx).to_cpp(st);
+		    res.decls := res.decls.append(d);
+                };
+		idx := idx.next
+	    };
+
+            # A pass to emit the C++ function implementations
+            
+            st.proto_only := false;
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+                var ivyd := s.decls.value(idx);
+                if (ivyd isa actdc) & s.decls.value(idx).emitted(st) {
+                    var d : cpp.decl;
+                    (d,st) := ivyd.to_cpp(st);
+		    res.decls := res.decls.append(d);
+                };
+		idx := idx.next
+	    };
+            
+            
+            # Emit a main function by concatenating the init
+            # declaration bodies.
+
+            var main : cpp.funcdecl;
+            main.ftype.base._type := cpp.inttype(main.ann);
+            main.ftype.base.name := cpp.symbol.makestr("main",main.ann);
+            var mainarg0 : cpp.simpletype;
+            var mainarg1 : cpp.simpletype;
+            mainarg0._type := cpp.inttype(main.ann);
+            mainarg0.name := cpp.symbol.makestr("argc",main.ann);
+            mainarg1._type := cpp.symbol.makestr("char **",main.ann);
+            mainarg1.name := cpp.symbol.makestr("argv",main.ann);
+            main.ftype.args := main.ftype.args.append(mainarg0);
+            main.ftype.args := main.ftype.args.append(mainarg1);
+            main.has_body := true;
+            main.body := cpp.retst.make(cpp.symbol.makestr("0",main.ann),main.ann);
+            idx := s.decls.end;
+	    while idx > s.decls.begin {
+                idx := idx.prev;
+                var decl := s.decls.value(idx);
+                if decl isa initdc {
+                    var cbody : cpp.stmt;
+                    (cbody,st) := decl.get_body.to_cpp(st);
+                    main.body := cpp.sequence.make(cbody,main.body,decl.get_ann);
+                }
+            };
+	    var argv := cpp.asgn.make(cpp.symbol.makestr("ivy::__argv",main.ann),cpp.symbol.makestr("argv",main.ann),main.ann);
+	    main.body := cpp.sequence.make(argv,main.body,main.ann);
+	    var argc := cpp.asgn.make(cpp.symbol.makestr("ivy::__argc",main.ann),cpp.symbol.makestr("argc",main.ann),main.ann);
+	    main.body := cpp.sequence.make(argc,main.body,main.ann);
+            res.decls := res.decls.append(main);
+	}
+
+	import action show_prog(s:str)
+
+        action file_to_cpp(name:str) = {
+
+            # Read the program
+
+            var p := prog.read_file(name);
+#	    var p := prog.dec(name);
+
+            # Flattening pass
+
+            if errors.end = 0 {
+                p := p.flat;
+            };
+
+#	    call show_prog(p.enc);
+
+	    # Type inference pass
+
+            if errors.end = 0 {
+	        p := p.typeinfer;
+            };
+
+            # Translate to C++
+
+            var cpp_prog : cpp.prog;
+            if errors.end = 0 {
+                 cpp_prog := p.to_cpp;
+            };
+
+            # Pretty-print the C++
+
+            if errors.end = 0 {
+                var cpp_name := path.change_extension(name,"cpp");
+                call write_file(cpp_name,cpp_prog.enc);
+            }
+        }
+    }
+
+	
+
+}
+

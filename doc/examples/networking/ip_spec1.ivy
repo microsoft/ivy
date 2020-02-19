@@ -40,7 +40,7 @@
 # `bool`. There are, however, various templates we can use to create
 # datatypes. These are found in the Ivy standard libraries.  Here, we
 # include the `order` library, to get ordered datatypes like integers
-# and natural numbers. We also ins the `collections` library to get
+# and natural numbers. We also include the `collections` library to get
 # arrays.
 
 include order
@@ -82,7 +82,7 @@ object ip = {
     # describe the actual layout of the datagram at the byte
     # level. Instead, this structure gives a more high-level
     # description of the datagram's content. We will worry later about
-    # the byte-level representation. IN particular, our high-level
+    # the byte-level representation. In particular, our high-level
     # struct has no checksum field because that is added when the
     # header is encoded into bytes. For the same reason, there are no
     # fields describing payload length of total length of the
@@ -105,7 +105,7 @@ object ip = {
     # An internetwork consists of a collection of networks and
     # hosts. A host that is connected to more than one network is a
     # router. For the moment, we don't want to think about what the actual
-    # hosts and networks are in put internet. Instead we will declare
+    # hosts and networks are in our internet. Instead we will declare
     # *uninterpreted types* to act as identifiers for hosts and networks.
     # These types are a bit like forward class references in C++. 
 
@@ -113,14 +113,14 @@ object ip = {
     type host
 
     # Our internet and the IP protocol have state. In Ivy, state
-    # infomration is stored in relations, which you can think of as
+    # information is stored in relations, which you can think of as
     # database tables (there are also functions, which we will deal
     # with later).
     #
     # Each host in out internet is connected to some networks by a network
     # interface with a given IP address. We describe this configuration using
     # a relation `intf`. That is, `intf(H,N,A)` holds if host `H` is
-    # connected to network `N` with an interface havinf address
+    # connected to network `N` with an interface having address
     # `A`. Notice that this allows a host to have multiple interfaces
     # to the same network.
     #
@@ -131,7 +131,7 @@ object ip = {
     
     relation intf(H:host,N:network,A:addr)
 
-    # We do allow interfaces with the same address connected to two
+    # We do not allow interfaces with the same address connected to two
     # distinct hosts or networks. That is, the network configuration
     # must satisfy the following invariant:
 
@@ -155,7 +155,7 @@ object ip = {
     action transmit(h:host,src:addr,dst:addr,n:network,d:datagram)
     action forward(h:host,src:addr,dst:addr,n:network,d:datagram)
 
-    # The action has five parameters (these are the inpouts of our
+    # The action has five parameters (these are the inputs of our
     # specification).  The parameters give the identify of the sender,
     # the sending and receiving interfaces, the network identifier and
     # the datagram being transmitted. Notice we have simply assumed
@@ -260,7 +260,7 @@ object ip = {
 export ip.transmit
 export ip.forward
 
-# Notice that since we our now outside the scope `ip`, we need to
+# Notice that since we are now outside the scope `ip`, we need to
 # refer to `transmit` using its full name, which includes the object
 # `ip`.
 #

@@ -1,0 +1,534 @@
+#lang ivy1.7
+
+include arith
+include order
+include string
+include collections
+include io
+
+# Characters
+# ----------
+#
+# Programs are strings of characters. A character is represented by its unicode code point,
+# expressed by a numeric type `char`. Characters are classes as `alphanum`, `bracket` or
+# `punct`, as follows:
+#
+# - `alphanum`: `_A-Za-z0-9`
+# - `bracket`: `()[]{},;`
+# - `punct`: all other printing characters
+#
+# The `bracket` characters are never combined into tokens, whereas `punct` characters
+# not separated by whitespace form multigraphs, such as `<=`. The whitespace characters
+# are space, tab, carriage return and newline. The `non_printing` characters are the
+# control codes and the delete character.
+
+object char = {
+    instantiate arith_char
+    type kinds = {alphanum,bracket,punct}
+    function is_alphanum(X:char)
+        = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123) | (X = 95)
+    function is_bracket(X:char)
+        = (X = 40 | X = 41 | X = 91 | X = 93 | X = 123 | X = 125 | X = 59 | X = 44)
+    function is_white(X:char)
+        = (X = 9 | X = 10 | X = 13 | X = 32)
+    function kind(X:char) =
+        alphanum if is_alphanum(X:char)
+        else (bracket if is_bracket(X) else punct)
+    function non_printing(X:char) = (X < 32 | X = 127)
+    function is_digit(X:char) = (48 <= X & X < 58)
+    function is_capital(X:char) =  (65 <= X & X < 91)
+}
+    
+# Character strings
+# -----------------
+
+# Strings of characters are represented by a string type over `char`,
+# whose index type is `pos`.
+
+instance pos : unbounded_sequence
+instance str : string(pos,char)
+
+# Pretty printing
+# ---------------
+#
+# Strings can be pretty-printed. The type object `pretty` represents
+# the state of a pretty printer. It has the following parameters:
+#
+# - `maxline`: the maximum length of a text line
+# - `indent`: the number of spaces to indent
+#
+# A lexical token or a space is added to the pretty printer with the
+# `extend` action. The `nest` and `unnest` actions are used to begin
+# and end a lexical scope. When the pretty printer inserts a newline,
+# it indents by a number of spaces equal to `indent` times the depth
+# of nesting of scopes. The `newline` action forces a newline to occur at a
+# particular point in the stream. The `flush` actions causes the
+# pretty-printed result to appear in the `output` field.
+#
+
+object pretty = {
+
+    type token = struct {
+	pair : bool,
+        tdepth : pos,
+	first : str,
+	second : pos
+    }
+
+    var foo : vector[token]
+
+    type state = struct {
+	begin : vector[token].domain,
+	total : pos
+    }
+    
+
+    type this = struct {
+        tokens : vector[token],
+	st : state,
+        maxline : pos,
+	indent : pos,
+	whitespace : str,
+	states : vector[state],
+	stack : vector[pos],
+	output : str,
+	space : pos,
+        depth : pos,
+        cppstyle : bool,
+	annots : (str * pos -> bool)
+    }
+    
+    action make(maxline:pos,indent:pos) returns (res:this) = {
+	res.maxline := maxline;
+	res.indent := indent;
+	res.whitespace := " ";
+	res.space := maxline;
+	res.stack := res.stack.append(maxline);
+    }
+
+    action do_indent (self:this) returns (self:this) = {
+	self.output := self.output.append(10);  # newline
+        var idx := self.maxline-self.space;
+        while idx > 0 {
+            self.output := self.output.append(32);  # space
+            idx := idx.prev;
+        }
+    }
+
+    action print (self:this,tok:token) returns (self:this) = {
+	if tok.pair {
+	    if tok.second <= self.space | self.space = self.maxline {
+                self.output := self.output.extend(tok.first);
+                self.space := self.space - tok.first.end
+	    } else {
+                self.space := self.maxline - tok.tdepth * self.indent;
+                self := self.do_indent
+	    }
+	} else {
+            self.output := self.output.extend(tok.first);
+            self.space := self.space - tok.first.end
+	}
+    }
+
+    action flush (self:this) returns (self:this) = {
+	var idx := self.tokens.begin;
+	while idx < self.tokens.end {
+	    self := self.print(self.tokens.value(idx));
+	    idx := idx.next
+	};
+	self.tokens := vector[token].empty;
+    }
+
+    action add_length(self:this, len:pos, at:vector[token].domain) returns (self:this) = {
+        if at > self.st.begin {
+            var prev := self.tokens.value(at.prev);
+            if prev.pair {
+		var newtok := prev;
+		newtok.second := newtok.second + len;
+                self.tokens := self.tokens.set(at.prev,newtok)
+	    }
+	};
+    }
+	
+    action extend(self:this, string:str) returns (self:this) = {
+	var tok : token;
+	tok.pair := false;
+        tok.tdepth := self.depth;
+	tok.first := string;
+	if true & string = self.whitespace {   # true = breakable
+	    tok.pair := true;
+	    tok.second := string.end;
+	} else {
+	    self := add_length(self,string.end,self.tokens.end)
+	};
+        self.tokens := self.tokens.append(tok);
+	self.st.total := self.st.total + string.end
+    }    
+
+    action newline(self:this) returns (self:this) = {
+	var tok : token;
+	tok.pair := true;
+        tok.tdepth := self.depth;
+        tok.second := self.maxline + 1;
+        self.tokens := self.tokens.append(tok);
+    }        
+        
+
+    action nest(self:this) returns (self:this) = {
+        self.stack := self.stack.append(self.space);
+	self.states := self.states.append(self.st);
+        self.st.total := 0;
+	self.st.begin := self.tokens.end;
+        self.depth := self.depth + 1
+    }
+
+    action unnest(self:this) returns (self:this) = {
+	var oldst := self.st;
+	# Tricky: don't count any terminal white space in length of scope
+#	if self.tokens.end > oldst.begin & self.tokens.back.pair {
+#	    oldst.total := oldst.total - self.tokens.back.second;
+#            self.tokens.end > oldst.begin & self.tokens.back.pair
+#	};
+	self.stack := self.stack.pop_back;
+	self.st := self.states.back;
+	self.states := self.states.pop_back;
+	self := self.add_length(oldst.total,oldst.begin);
+	self.st.total := self.st.total + oldst.total;
+        self.depth := self.depth - 1
+    }
+
+}
+
+# For printing purposes, each AST type is equiped with an
+# action `encode` that sends it to a pretty printer. This
+# is the `encode` action for character strings.
+
+object str = { ...
+    action encode(s:this,b:pretty) returns (b:pretty) = {
+	b := b.extend(s)
+    }    
+}
+
+# Annotations
+# -----------
+
+# An AST object contains an annotation field that gives information
+# about the textual location of the object, and also any comments that
+# precede it. This allows error messages to refer to the source text,
+# and also allows code to be emitted including the original source
+# comments. The type `annot` represents annotations. The `strip`
+# operator removes comments from an annotation, keeping the source
+# reference.
+
+object annot = {
+    type this
+    action encode(s:this,b:pretty) returns (b:pretty)
+    action strip(s:this) returns (res:this)
+    action to_str(s:this) returns (res:str)
+}
+
+# For now, there is only one variant of `annot`. We use a variant
+# so the annotations will be stored by shared reference. This reduces
+# the overhead of copying annotations when transforming AST's. 
+
+object annot_i = {
+    variant this of annot = struct {
+        comments : vector[str],
+        line : pos,
+	file : str
+    }
+    action encode(s:this,b:pretty) returns (b:pretty) = {
+        if 0 < s.comments.end {
+	    if ~b.annots(s.file,s.line) {
+		b := b.newline;
+		var idx := s.comments.begin;
+		while idx < s.comments.end {
+		    b := b.extend("//" if b.cppstyle else "#");
+		    b := b.extend(s.comments.value(idx));
+		    b := b.newline;
+		    idx := idx.next;
+		}
+		b := b.newline;
+		b.annots(s.file,s.line) := true;
+	    }
+	}
+    }    
+    action strip(s:this) returns (res:annot) = {
+	var news := s;
+        news.comments := vector[str].empty;
+	res := news;
+    }
+
+    # Convert an annotation to a string for error reporting
+    # purposes. We count line internally from zero, but in messages
+    # they start from one.
+
+    action to_str(s:this) returns (res:str) = {
+	res := s.file;
+	res := res.extend(": line ");
+	res := res.extend(s.line.next.to_str);
+    }
+
+}
+
+# Parser state
+# ------------
+
+# A `pstate` object encodes the state of a parser. It includes the
+# input buffer `b`, represented as a character string, the position
+# `p` of the next token to be read, the current token `tok`, the
+# annotation `ann` of the current token, and a flag `ok` that is false
+# if a syntax error has occurred. The parser state has an action
+# `consume` that consumes the current token and reads the next.  If
+# there is no further token, the `tok` field is empty. The action
+# `make` creates a new parser state with a given input string.  It is
+# initialized so the `tok` contains the first token of the stream, or
+# the empty string if there are no tokens. The `get_ann` action
+# gets the current annotation and clears the comments.
+
+object pstate = {
+    type this = struct {
+	b : str,
+	p : pos,
+	tok : str,
+        ann : annot_i,
+	ok : bool
+    }
+    action consume(st:pstate) returns(st:pstate) = {
+	st := lex(st);
+    }	
+
+    action make(s:str) returns (st:pstate) = {
+        st.b := s;
+        st.p := s.begin;
+        st.ok := true;
+        st := st.consume
+    }
+
+    action get_ann(st:pstate) returns (st:pstate,ann:annot) = {
+        ann := st.ann;
+        st.ann.comments := vector[str].empty
+    }
+}
+
+
+# Lexical analyzer. Read tokens from the input stream 
+# ---------------------------------------------------
+#
+# A token is one of the following:
+#
+# - A singleton characeter in the bracket set
+# - A maximal sequence of characters in the alphanumeric set
+# - A maximal sequence of characters in the punctuation set
+# - A string literal
+#
+# Tokens may be separated by whitespace, which consists of space,
+# tab, carriage return and newline characters as well as comments. A
+# comment is a hash character up to and including the next newline or
+# the end of stream, whichever comes first.
+#
+# A string literal consists of printing characters enclosed in double
+# quote characters. The following escape sequences are recognized:
+#
+# - \n : newline character
+#
+# A backslash followed by any other printing character is interpreted
+# as that character. 
+#
+# Any non-printing character other than carriage return and newline
+# is considered a syntax error.
+# 
+
+action skip_space(st:pstate) returns (st:pstate) = {
+    # Skip space, tab, carriage return and newline characters
+    while st.p < st.b.end & st.b.value(st.p).is_white {
+        if st.b.value(st.p) = 10 {
+            st.ann.line := st.ann.line.next
+        };
+	st.p := st.p.next
+    }
+}
+
+action get_line(st:pstate) returns (st:pstate,line:str) = {
+    # Read until a newline or end of input.
+    var start := st.p;
+    while st.p < st.b.end & st.b.value(st.p) ~= 10 { # newline
+        st.p := st.p.next
+    };
+    line := st.b.segment(start,st.p);
+    if st.p < st.b.end {
+        st.ann.line := st.ann.line.next;
+        st.p := st.p.next
+    };
+}
+
+action get_annot(st:pstate) returns (st:pstate) = {
+    # Skip whitespace and comments, setting the annotation field
+    st := skip_space(st);
+    while st.p < st.b.end & st.b.value(st.p) = 35 { # hash sign
+        st.p := st.p.next; # skip the hash sign
+        var comment :str;
+        (st,comment) := get_line(st);
+        st.ann.comments := st.ann.comments.append(comment);
+        st := skip_space(st);
+    }
+}
+
+
+action read_string_literal(st:pstate) returns (st:pstate) = {
+    st.tok := "";
+    st.tok := st.tok.append(34);  # workaround
+    st.p := st.p.next;
+    while st.ok & st.p < st.b.end & st.b.value(st.p) ~= 34 {
+        var chr := st.b.value(st.p);
+        if chr = 92 {  # backslash
+            st.tok := st.tok.append(92);
+	    st.p := st.p.next;
+            if st.p < st.b.end {
+                chr := st.b.value(st.p);
+                if ~chr.non_printing {
+                    st.tok := st.tok.append(chr);  # newline
+	            st.p := st.p.next;
+                } else {
+                    st.ok := false;
+                };
+            } else { st.ok := false }
+        } else {
+            if ~chr.non_printing {
+                st.tok := st.tok.append(chr);
+	        st.p := st.p.next;
+            } else { st.ok := false } 
+        } 
+    }; 
+    if st.ok & st.p < st.b.end {
+        st.tok := st.tok.append(34);  # double quote
+	st.p := st.p.next;
+    } else { st.ok := false }
+}
+
+action lex(st:pstate) returns (st:pstate) = {
+    # Get the next lexical token in the stream
+    st := get_annot(st);
+    var start := st.p;
+    if st.p < st.b.end & st.b.value(st.p) = 34 { # double quote
+        st := read_string_literal(st);
+    } else {
+        var last : char := 32;
+        while st.p < st.b.end & ~st.b.value(st.p).is_white
+            & (last = 32 | (char.kind(st.b.value(st.p)) = char.kind(last)))
+            & char.kind(last) ~= char.bracket
+        {
+            last := st.b.value(st.p);
+            if last.non_printing {
+                st.ok := false;
+            };
+            st.p := st.p.next;
+        };
+        st.tok := st.b.segment(start,st.p);
+    }
+}
+
+# Tuples
+# ------
+#
+# Tuples are common in program syntax. This module represents tuples
+# over a type `t`, with left bracket `lb`, right bracket `rb` and elements
+# seprated by commas. TODO: the separator might also be a parameter.
+#
+# The type 'verb' is used to represent operator precedence.
+#
+
+module tuple(t,lb,rb,verb) = {
+    action encode(s:vector[t],b:pretty,prio:priority) returns (b:pretty) = {
+        if s.end > 0 {
+            b := b.extend(" ");
+            b := b.extend(lb);
+            b := s.value(0).encode(b,0);
+            var idx := s.begin.next;
+            while idx < s.end {
+                b := b.extend(",");
+                b := s.value(idx).encode(b,0);
+                idx := idx.next;
+            };
+            b := b.extend(rb);
+        }
+    }
+    action parse(st : pstate, prio:priority) returns(st : pstate, res:vector[t]) = {
+        if st.tok = lb {
+            st := st.consume;
+            var s : t;
+            (st,s) := t.parse(st,prio);
+            res := res.append(s);
+            while st.ok & st.tok = "," {
+                st := st.consume;
+                (st,s) := t.parse(st,prio);
+                res := res.append(s);
+            };
+            if st.ok & st.tok = rb {
+                st := st.consume;
+            } else {st.ok := false}
+        } else {st.ok := false}
+    }
+}
+
+# Number/string conversions
+
+module numconv(str) = {
+    action to_str(num:this) returns (res:str) = {
+	var x := num;
+        if (x < 0) {
+            res := res.extend("-");
+            x := 0 - x;
+        };
+        if x = 0 {
+            res := res.extend("0");
+        } else {
+            var tmp : str;
+            while x > 0 {
+                var y := x - ((x / 10) * 10);
+
+                # workaround: v1.7 compiler can't cast between numeric types
+
+                var digit:char := 48;
+                while y > 0 {
+                    y := y - 1;
+                    digit := digit + 1;
+                };
+                tmp := tmp.append(digit);
+                x := x / 10;
+            };
+            var idx := tmp.end;
+            while idx > tmp.begin {
+                idx := idx.prev;
+                res := res.append(tmp.value(idx));
+            }
+        }
+    }
+    action from_str(x:str) returns (res:this) = {
+        var idx := x.begin;
+        var neg := false;
+        if idx < x.end & x.value(idx) = 45 {
+            neg := true;
+            idx := idx.next;
+        };
+        while idx < x.end {
+            res := res * 10;
+            var digit := x.value(idx);
+
+            # workaround: v1.7 compiler can't cast between numeric types
+
+            while digit > 48 {
+                digit := digit - 1;
+                res := res + 1;
+            };
+            idx := idx.next;
+        }
+    }
+}
+
+object pos = { ...
+    instantiate numconv(str)
+}
+
+instance stdio : io_stdio(str,pos,char)
+

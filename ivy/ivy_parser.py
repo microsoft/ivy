@@ -143,7 +143,7 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             vpref = substitute_ast(pref,map1)
             vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
             idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined,static=module.static)
-            idecl = substitute_constants_ast(idecl,vvsubst)
+            idecl = substitute_constants_ast2(idecl,vvsubst)
         else:
             idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined,static=module.static)
         if isinstance(idecl,ActionDecl):
@@ -338,6 +338,10 @@ def addtemporal(lf):
     lf.temporal = True
     return lf
 
+def addexplicit(lf):
+    lf.explicit = True
+    return lf
+
 label_counter = 0
 
 def newlabel(pref):
@@ -358,7 +362,7 @@ def addlabel(lf,pref):
 if iu.get_numeric_version() <= [1,6]:
     def p_top_axiom_labeledfmla(p):
         'top : top opttemporal AXIOM labeledfmla'
-        p[0] = check_non_temporal(p[1])
+        p[0] = p[1]
         lf = addlabel(p[4],'axiom')
         d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
         d.lineno = get_lineno(p,3)
@@ -379,11 +383,12 @@ else:
         p[0] = lf
 
     def p_top_axiom_optlabel_gprop(p):
-        'top : top opttemporal AXIOM lgprop'
-        p[0] = check_non_temporal(p[1])
-        lf = addlabel(p[4],'axiom')
-        d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
-        d.lineno = get_lineno(p,3)
+        'top : top optexplicit opttemporal AXIOM lgprop'
+        p[0] = p[1]
+        lf = addlabel(p[5],'axiom')
+        lf = addexplicit(lf) if p[2] else lf
+        d = AxiomDecl(addtemporal(lf) if p[3] else check_non_temporal(lf))
+        d.lineno = get_lineno(p,4)
         p[0].declare(d)
 
 def p_optskolem(p):
@@ -396,16 +401,18 @@ def p_optskolem_symbol(p):
     p[0].lineno = get_lineno(p,1)
 
 def p_top_property_labeledfmla(p):
-    'top : top opttemporal PROPERTY labeledfmla optskolem optproof'
+    'top : top optexplicit opttemporal PROPERTY labeledfmla optskolem optproof'
     p[0] = p[1]
-    lf = addlabel(p[4],'prop')
-    d = PropertyDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
-    d.lineno = get_lineno(p,3)
+    lf = addlabel(p[5],'prop')
+    lf = addtemporal(lf) if p[3] else check_non_temporal(lf)
+    lf = addexplicit(lf) if p[2] else lf
+    d = PropertyDecl(lf)
+    d.lineno = get_lineno(p,4)
     p[0].declare(d)
-    if p[5] is not None:
-        p[0].declare(NamedDecl(p[5]))
     if p[6] is not None:
-        p[0].declare(ProofDecl(p[6]))
+        p[0].declare(NamedDecl(p[6]))
+    if p[7] is not None:
+        p[0].declare(ProofDecl(p[7]))
 
 def p_top_conjecture_labeledfmla(p):
     'top : top CONJECTURE labeledfmla'
@@ -414,16 +421,17 @@ def p_top_conjecture_labeledfmla(p):
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
+def p_optexplicit(p):
+    'optexplicit : '
+    p[0] = False
+
+def p_optexplicit_explicit(p):
+    'optexplicit : EXPLICIT'
+    p[0] = True
+
 # from version 1.7, "invariant" replaces "conjecture"
 if not iu.get_numeric_version() <= [1,6]:
 
-    def p_optexplicit(p):
-        'optexplicit : '
-        p[0] = False
-
-    def p_optexplicit_explicit(p):
-        'optexplicit : EXPLICIT'
-        p[0] = True
 
     def p_top_invariant_labeledfmla(p):
         'top : top optexplicit INVARIANT labeledfmla optproof'
@@ -890,6 +898,13 @@ else:
         a.lineno = get_lineno(p,2)
         p[0] = SpoilTactic(a)
         p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_tactic(p):
+        'proofstep : TACTIC SYMBOL opttacticwith'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = TacticTactic(a,p[3])
+        p[0].lineno = get_lineno(p,1)
     
     def p_proofstep_property(p):
         'proofstep : opttemporal PROPERTY labeledfmla optskolem optproofgroup'
@@ -1000,6 +1015,27 @@ else:
         p[0] = IfTactic(p[2],p[3],p[5])
         p[0].lineno = get_lineno(p,1)
 
+    def p_opttacticwith(p):
+        'opttacticwith : '
+        p[0] = TacticWith()
+
+    def p_opttacticwith_with_tacticwithlist(p):
+        'opttacticwith : WITH tacticwithlist'
+        p[0] = TacticWith(*p[2])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_tacticwithelem_invariant(p):
+        'tacticwithelem : INVARIANT labeledfmla'
+        p[0] = addlabel(p[2],'invar')
+        
+    def p_tactwithlist_tacticwithelem(p):
+        'tacticwithlist : tacticwithelem'
+        p[0] = [p[1]]
+
+    def p_tactwithlist_tactwithlist_tacticwithelem(p):
+        'tacticwithlist : tacticwithlist tacticwithelem'
+        p[0] = p[1]
+        p[0].append(p[2])
 
 def p_proofseq_proofstep(p):
     'proofseq : proofstep'
@@ -1120,6 +1156,14 @@ def p_top_update_terms_from_terms_upaxes(p):
                                                SymbolList(*deps),
                                                UpdatePatternList(*p[6]))))
 
+def p_optfinite(p):
+    'optfinite : '
+    p[0] = False
+
+def p_optfinite_finite(p):
+    'optfinite : FINITE'
+    p[0] = True
+
 def p_optghost(p):
     'optghost : '
     p[0] = False
@@ -1138,21 +1182,25 @@ def p_typesymbol_this(p):
     p[0].lineno = get_lineno(p,1)
 
 def p_top_type_symbol(p):
-    'top : top optghost TYPE typesymbol'
+    'top : top optfinite optghost TYPE typesymbol'
     p[0] = p[1]
-    scnst = Atom(p[4])
-    scnst.lineno = get_lineno(p,4)
-    tdfn = (GhostTypeDef if p[2] else TypeDef)(scnst,UninterpretedSort())
-    tdfn.lineno = get_lineno(p,3)
+    scnst = Atom(p[5])
+    scnst.lineno = get_lineno(p,5)
+    tdfn = (GhostTypeDef if p[3] else TypeDef)(scnst,UninterpretedSort())
+    if p[2]:
+        tdfn.finite = True
+    tdfn.lineno = get_lineno(p,4)
     p[0].declare(TypeDecl(tdfn))
 
 def p_top_type_symbol_eq_sort(p):
-    'top : top optghost TYPE typesymbol EQ sort'
+    'top : top optfinite optghost TYPE typesymbol EQ sort'
     p[0] = p[1]
-    scnst = Atom(p[4])
-    scnst.lineno = get_lineno(p,4)
-    tdfn = (GhostTypeDef if p[2] else TypeDef)(scnst,p[6])
-    tdfn.lineno = get_lineno(p,5)
+    scnst = Atom(p[5])
+    scnst.lineno = get_lineno(p,5)
+    tdfn = (GhostTypeDef if p[3] else TypeDef)(scnst,p[7])
+    if p[2]:
+        tdfn.finite = True
+    tdfn.lineno = get_lineno(p,6)
     p[0].declare(TypeDecl(tdfn))
 
 def p_tsyms_tsym(p):

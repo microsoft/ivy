@@ -1,0 +1,99 @@
+#lang ivy
+
+################################################################################
+#
+# Hash maps
+#
+# Hash maps represent partial maps from any type "domain" to any type "range".
+#
+#    instance thing : hash_map(domain,range)
+#
+# 
+
+module hash_map(domain,range) = {
+
+    type rec = struct {
+	full : bool,
+	val : range
+    }
+    
+    type this = struct {
+	map(X:domain) : rec
+    }
+
+    # return an empty map
+
+    action empty returns (a:this) = {
+    }
+
+    # mutate a map a so that x in maps to y
+    action set(a:this,x:domain,y:range) returns (a:this) = {
+	var z : rec;
+	z.full := true;
+	z.val := y;
+	a.map(x) := z;
+    }
+
+    # get the value y such that x maps to z in a, else
+    # leave y unchanged.
+    action get(a:this,x:domain,y:range) returns (y:range) = {
+	var z := a.map(x);
+	if z.full {
+	    y := z.val
+	}
+    }
+
+    # return true if x maps to some value
+    action mem(a:this,x:domain) returns (res:bool) = {
+	res := a.map(x).full;
+    }
+
+    # remove a key x from the map
+    action remove(a:this,x:domain) returns (a:this) = {
+	var z : rec;
+	a.map(x) := z;
+    }
+
+    action value(a:this,x:domain) returns (y:range) = {
+	y := a.map(x).val;
+    }
+
+}
+
+################################################################################
+#
+# Hash relations
+#
+# Hash maps represent a relation from any type "domain" to any type "range".
+#
+#    instance thing : hash_rel(domain,range)
+#
+# 
+
+module hash_rel(domain,range) = {
+
+    type this = struct {
+	value(X:domain) : vector[range]
+    }
+
+    # return an empty map
+
+    action empty returns (a:this) = {
+    }
+
+    # mutate a relation map a so that x is related to y
+    action add(a:this,x:domain,y:range) returns (a:this) = {
+	a.value(x) := a.value(x).append(y);
+    }
+
+    # get a vector of values y such that x maps to y in a
+    
+    action get(a:this,x:domain) returns (res:vector[range]) = {
+	res := a.value(x);
+    }
+
+    # return true if x maps to some value
+    action mem(a:this,x:domain) returns (res:bool) = {
+	res := (a.value(x).end > 0);
+    }
+}

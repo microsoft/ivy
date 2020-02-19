@@ -128,6 +128,8 @@
     "around"
     "parameter"
     "autoinstance"
+    "temporal"
+    "tactic"
 ))
 
 (defconst ivy-types '("bool" "int" "bv"))

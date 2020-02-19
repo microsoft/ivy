@@ -71,8 +71,8 @@ op_pairs = [
     (ivy_ast.And,ivy_logic.And),
     (ivy_ast.Or,ivy_logic.Or),
     (ivy_ast.Not,ivy_logic.Not),
-    (ivy_ast.Globally,ivy_logic.Globally),
-    (ivy_ast.Eventually,ivy_logic.Eventually),
+    (ivy_ast.Globally,lambda x: ivy_logic.Globally(None,x)),
+    (ivy_ast.Eventually,lambda x: ivy_logic.Eventually(None,x)),
     (ivy_ast.And,ivy_logic.And),
     (ivy_ast.Definition,ivy_logic.Definition),
     (ivy_ast.Implies,ivy_logic.Implies),
@@ -394,6 +394,7 @@ ivy_ast.Quantifier.cmpl = compile_quantifier
 ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
     self.name,
     [v.compile() for v in self.bounds],
+    None,
     self.args[0].compile()
 )
 
@@ -921,6 +922,10 @@ def compile_property_tactic(self):
         
 ivy_ast.PropertyTactic.compile = compile_property_tactic
 
+def compile_tactic_tactic(self):
+    return self.clone(self.args)
+    
+ivy_ast.TacticTactic.compile = compile_tactic_tactic
 
 def resolve_alias(name): 
     if name in im.module.aliases:
@@ -930,7 +935,7 @@ def resolve_alias(name):
         return resolve_alias(parts[0]) + iu.ivy_compose_character + parts[1]
     return name
 
-defined_attributes = set(["weight","test","method","separate","iterable","cardinality","radix","override","cppstd","libspec"])
+defined_attributes = set(["weight","test","method","separate","iterable","cardinality","radix","override","cppstd","libspec","macro_finder"])
 
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
@@ -1113,6 +1118,8 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.sort_order.append(typedef.name)
         if isinstance(typedef,ivy_ast.GhostTypeDef):
             self.domain.ghost_sorts.add(typedef.name)
+        if typedef.finite:
+            self.domain.finite_sorts.add(typedef.name)
         if isinstance(typedef.value,ivy_ast.StructSort):
             sort = ivy_logic.ConstantSort(typedef.name)
             self.domain.sig.sorts[typedef.name] = sort
@@ -1165,6 +1172,8 @@ class IvyDomainSetup(IvyDeclInterp):
             if lhs in interp or lhs in self.domain.native_types :
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             self.domain.native_types[lhs] = thing.formula.args[1]
+            if thing.formula.args[1].args[0].code.strip() == 'int':
+                compile_theory(self.domain,lhs,'int')
             return
         rhs = thing.formula.args[1].rep
         self.domain.interps[lhs].append(thing)
@@ -1401,6 +1410,19 @@ def BalancedChoice(choices):
         return choices[0]
     return ChoiceAction(BalancedChoice(choices[0:len(choices)/2]),
                         BalancedChoice(choices[len(choices)/2:]))
+
+def get_file_version(filename):
+    try:
+        f = open(filename,'rU')
+    except:
+        raise IvyError(None,"not found: %s" % filename)
+    header = f.readline()
+    header = string.strip(header)
+    if header.startswith('#lang ivy'):
+        version = header[len('#lang ivy'):]
+        if version.strip() != '':
+            return iu.string_version_to_numeric_version(version)
+    return None
 
 def ivy_new(filename = None):
 #    d = Interp()
@@ -1749,7 +1771,9 @@ def check_properties(mod):
     prover = ivy_proof.ProofChecker(mod.labeled_axioms,mod.definitions,mod.schemata)
 
     for prop in props:
-        if prop.id in pmap:
+        if prop.temporal:
+            mod.labeled_props.append(prop)
+        elif prop.id in pmap:
 #            print 'checking {}...'.format(prop.label)
             subgoals = prover.admit_proposition(prop,pmap[prop.id])
             prop = named_trans(prop)
@@ -1773,7 +1797,6 @@ def check_properties(mod):
                     else:
                         mod.labeled_props.append(prop)
             mod.subgoals.append((prop,subgoals))
-        # elif prop.temporal:
         #     from ivy_l2s import l2s
         #     print "=================" + "\n" * 10
         #     l2s(mod, prop)
@@ -1822,6 +1845,7 @@ def compile_theories(mod,**kwargs):
 # exported by its most nearly containing isolate. This is only needed
 # from version 1.7, where we introduce the concept of object
 # invariant.
+#
 
 def create_conj_actions(mod):
     if iu.version_le(iu.get_string_version(),"1.6"):
@@ -1869,6 +1893,57 @@ def create_conj_actions(mod):
                                     if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
                                         raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
                 
+# This handles the modular semantics of temporal properties. Each
+# temporal operator is labeled with an isolate (which could be
+# 'this'). If the user does not give a label for an operator, then the
+# isolate in which the property is verified is used. For now, it is an
+# error if the property is verified in more than one
+# isolate. Additionally, we label each action with the list of
+# isolates in which is is present [1]. The modular semantics says that
+# a temporal operator refers only to time instants when execution is
+# *not* in the indicated isolate. In particular, this means that
+# "temporal property globally p" has the same semantics as "invariant
+# p".
+#
+# TODO: this does not handle temporal axioms.
+
+def handle_temporals(mod):
+    imap = iso.get_isolate_map(mod,verified=True,present=False)
+    new_props = []
+    for prop in mod.labeled_props:
+        isonames = imap[prop.name]
+        if prop.temporal:
+            assert len(isonames) > 0  # should at least be verified in isolate 'this'!
+            if len(isonames) > 1:
+                raise IvyError(prop,'Temporal property belongs to more than one isolate: {}'.format(','.join(str(x) for x in isonames)))
+            new_props.append(prop.clone([prop.label,ivy_logic.label_temporal(prop.formula,isonames[0])]))
+        else:
+            new_props.append(prop)
+            
+    for prop,proof in mod.proofs:
+        if prop.temporal:
+            isonames = imap[prop.name]
+            add_labels_to_proof(proof,isonames)
+    mod.labeled_props = new_props
+    imap = iso.get_isolate_map(mod,verified=True,present=True)
+    for actname,action in mod.actions.iteritems():
+        action.labels = imap[actname]
+
+def add_labels_to_proof(proof,labels):
+    if isinstance(proof,ivy_ast.ComposeTactics):
+        return proof.clone(map(add_labels_to_proof,proof.args))
+    if isinstance(proof,ivy_ast.IfTactic):
+        return proof.clone([proof.args[0]] + map(add_labels_to_proof,proof.args[1:]))
+    if isinstance(proof,ivy_ast.TacticTactic):
+        proof.labels = list(labels)
+    return proof
+        
+        
+def add_action_label(action,label):
+    if not hasattr(action,'labels'):
+        action.labels = []
+    action.labels.append(label)
+
 def show_call_graph(cg):
     for caller,callees in cg.iteritems():
         print '{} -> {}'.format(caller,','.join(callees))
@@ -1917,6 +1992,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
         check_definitions(mod)
         check_properties(mod)
         create_conj_actions(mod)
+        handle_temporals(mod)
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
             im.module.labeled_axioms.extend(im.module.labeled_props)

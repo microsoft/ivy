@@ -3,6 +3,10 @@
 #include <iostream>
 #include <unordered_map>
 #include <memory>
+#include <typeinfo>
+#include <string>
+#include <fcntl.h>
+#include <unistd.h>
 
 namespace ivy {
 
@@ -31,6 +35,50 @@ namespace ivy {
     // The predicate __is_seq gives true for unsigned integer types.
     
 
+    // This struct implements the Ivy boolean type based on the native
+    // C++ bool type. It provides the standard traits for Ivy values,
+    // plus overloads for the standard boolean operations and
+    // converstions to and from bool.
+
+    struct native_bool {
+        bool value;
+        native_bool() : value(false) {}
+        native_bool (bool value) : value(value) {}
+        native_bool(long long value) : value(value) {}
+        operator bool() const {
+            return value;
+        }
+        operator std::size_t() const {
+            return 0;
+        }
+        static bool __is_seq() {
+            return false;
+        }
+        native_bool operator==(const native_bool &other) const {
+            return native_bool(value == other.value);
+        }
+        native_bool operator!=(const native_bool &other) const {
+            return native_bool(value != other.value);
+        }
+        bool __is_zero() const {
+            return !value;
+        }
+        struct __hash {
+            std::size_t operator()(const native_bool &x) const {
+                return (std::size_t)(x.value);
+            }
+        };
+        native_bool operator&(const native_bool & other) const {
+            return native_bool(value && other.value);
+        }
+        native_bool operator|(const native_bool & other) const {
+            return native_bool(value || other.value);
+        }
+        native_bool operator!() const {
+            return native_bool(!value);
+        }
+    };
+
     // This is the basic (signed) integer type. In principle, this
     // should be implement with a multiprecision integer (e.g., GMP).
     // For now, it is just a wrapper around long long.
@@ -53,11 +101,11 @@ namespace ivy {
         static bool __is_seq() {
             return false;
         }
-        bool operator==(const integer &other) const {
-            return value == other.value;
+        native_bool operator==(const integer &other) const {
+            return native_bool(value == other.value);
         }
-        bool operator!=(const integer &other) const {
-            return value != other.value;
+        native_bool operator!=(const integer &other) const {
+            return native_bool(value != other.value);
         }
         bool __is_zero() const {
             return value == 0;
@@ -91,11 +139,11 @@ namespace ivy {
         static bool __is_seq() {
             return true;
         }
-        bool operator==(const natural &other) const {
-            return value == other.value;
+        native_bool operator==(const natural &other) const {
+            return native_bool(value == other.value);
         }
-        bool operator!=(const natural &other) const {
-            return value != other.value;
+        native_bool operator!=(const natural &other) const {
+            return native_bool(value != other.value);
         }
         bool __is_zero() const {
             return value == 0;
@@ -212,8 +260,8 @@ namespace ivy {
         }
 
         bool __value_eq(const PrimaryD &idx, const T &v) const {
-            if (PrimaryD::__is_seq() && idx < data.size()) {
-                return data[idx] == v;
+            if (PrimaryD::__is_seq() && ((std::size_t)idx) < data.size()) {
+                return data[((std::size_t)idx)] == v;
             }
             if (map) {
                 auto it = map->find(idx);
@@ -223,7 +271,7 @@ namespace ivy {
             return v.__is_zero();
         }
         
-        bool operator==(const vector &other) const {
+        native_bool operator==(const vector &other) const {
             if (PrimaryD::__is_seq()) {
                 for (std::size_t idx = 0; idx < data.size(); ++idx) {
                     if (!other.__value_eq(idx,data[idx])) return false;
@@ -235,21 +283,21 @@ namespace ivy {
             if (map) {
                 for (auto it = map->begin(); it != map->end(); ++it) {
                     const PrimaryD &idx = it->first;
-                    if (!PrimaryD::__is_seq() || idx >= data.size())
-                        if (!other.__value_eq(idx,it->second)) return false;
+                    if (!PrimaryD::__is_seq() || ((std::size_t)idx) >= data.size())
+                        if (!other.__value_eq(((std::size_t)idx),it->second)) return false;
                 }
             }
             if (other.map) {
                 for (auto it = other.map->begin(); it != other.map->end(); ++it) {
                     const PrimaryD &idx = it->first;
-                    if (!PrimaryD::__is_seq() || idx >= other.data.size())
+                    if (!PrimaryD::__is_seq() || ((std::size_t)idx) >= other.data.size())
                         if (!__value_eq(idx,it->second)) return false;
                 }
             }
             return true;
         }
 
-        bool operator!=(const vector &other) const {
+        native_bool operator!=(const vector &other) const {
             return !((*this) == other);
         }
 
@@ -262,7 +310,7 @@ namespace ivy {
             if (map) {
                 for (auto it = map->begin(); it != map->end(); ++it) {
                     const PrimaryD &idx = it->first;
-                    if (!PrimaryD::__is_seq() || idx >= data.size())
+                    if (!PrimaryD::__is_seq() || ((std::size_t)idx) >= data.size())
                         if (!it->second.__is_zero()) return false;
                 }
             }                        
@@ -282,7 +330,7 @@ namespace ivy {
                 if (x.map) {
                     for (auto it = x.map->begin(); it != x.map->end(); ++it) {
                         const PrimaryD &idx = it->first;
-                        if (!PrimaryD::__is_seq() || idx >= x.data.size()) {
+                        if (!PrimaryD::__is_seq() || ((std::size_t)idx) >= x.data.size()) {
                             typename T::__hash h;
                             res += h(it->second);
                         }
@@ -296,8 +344,8 @@ namespace ivy {
 
         const T& operator() (PrimaryD idx) const {
             if (PrimaryD::__is_seq()) {
-                if (idx < data.size())
-                    return data[idx];
+                if (((std::size_t)idx) < data.size())
+                    return data[((std::size_t)idx)];
             }
             if (map) {
                 typename map_type::const_iterator it = map->find(idx);
@@ -309,12 +357,19 @@ namespace ivy {
         }
         
         T& operator() (PrimaryD idx) {
-            if (T::__is_seq()) {
-                if (idx < data.size())
-                    return data[idx];
+            if (PrimaryD::__is_seq()) {
+                if (((std::size_t)idx) < data.size())
+                    return data[((std::size_t)idx)];
                 else if (((std::size_t)idx) == data.size()) {
+                    if (map) {
+                        map_type &m = *map;
+                        typename map_type::iterator it = m.find(idx);
+                        if (it != m.end()) {
+                            return it->second;
+                        }
+                    }
                     data.resize(((std::size_t)idx)+1);
-                    return data[idx];
+                    return data[((std::size_t)idx)];
                 }
             }
             if (!map) {
@@ -324,7 +379,7 @@ namespace ivy {
         }
 
         static void resize(vector &x, std::size_t size) {
-            if (T::__is_seq()) {
+            if (PrimaryD::__is_seq()) {
                 std::size_t old_size = x.data.size();
                 x.data.resize(size);
                 if (x.map) {
@@ -346,6 +401,7 @@ namespace ivy {
     // one argument. 
 
     template<class T, class PrimaryD, class ... RestD > struct vector<T, PrimaryD, RestD...> {
+        typedef PrimaryD index_type;
         typedef typename vector<T, RestD...>::type OneDimensionDownVectorT;
         typedef vector<OneDimensionDownVectorT,PrimaryD> type;
         type data;
@@ -364,11 +420,11 @@ namespace ivy {
             return false;
         }
 
-        bool operator==(const vector &other) const {
+        native_bool operator==(const vector &other) const {
             return data == other.data;
         }
 
-        bool operator!=(const vector &other) const {
+        native_bool operator!=(const vector &other) const {
             return data != other.data;
         }
 
@@ -395,7 +451,7 @@ namespace ivy {
         }
     };
 
-    // This template implements numeric types based on native C++
+    // This template implements signed numeric types based on native C++
     // numeric types. It provides the standard traits for Ivy values,
     // plus overloads for the standard arithmetic operations.
 
@@ -409,11 +465,11 @@ namespace ivy {
         static bool __is_seq() {
             return true;
         }
-        bool operator==(const native_int &other) const {
-            return value == other.value;
+        native_bool operator==(const native_int &other) const {
+            return native_bool(value == other.value);
         }
-        bool operator!=(const native_int &other) const {
-            return value != other.value;
+        native_bool operator!=(const native_int &other) const {
+            return native_bool(value != other.value);
         }
         bool __is_zero() const {
             return value == 0;
@@ -435,58 +491,84 @@ namespace ivy {
         native_int operator/(const native_int & other) const {
             return native_int(value / other.value);
         }
+        native_bool operator<(const native_int & other) const {
+            return native_bool(value < other.value);
+        }
+        native_bool operator<=(const native_int & other) const {
+            return native_bool(value <= other.value);
+        }
+        native_bool operator>(const native_int & other) const {
+            return native_bool(value > other.value);
+        }
+        native_bool operator>=(const native_int & other) const {
+            return native_bool(value >= other.value);
+        }
     };
 
-    // This struct implements the Ivy boolean type based on the native
-    // C++ bool type. It provides the standard traits for Ivy values,
-    // plus overloads for the standard boolean operations and
-    // converstions to and from bool.
 
-    struct native_bool {
-        bool value;
-        native_bool() : value(false) {}
-        native_bool(long long value) : value(false) {}
-        operator bool() const {
+    // This template implements unsigned numeric types based on native C++
+    // numeric types. The unsigned versions use saturation arithmetic, so
+    // `0 - 1 = 0`. It provides the standard traits for Ivy values,
+    // plus overloads for the standard arithmetic operations.
+
+    template <typename T> struct native_unsigned {
+        T value;
+        native_unsigned() : value(0) {}
+        native_unsigned(long long value) : value(value) {}
+        operator std::size_t() const {
             return value;
         }
-        operator std::size_t() const {
-            return 0;
-        }
         static bool __is_seq() {
-            return false;
+            return true;
         }
-        bool operator==(const native_bool &other) const {
-            return value == other.value;
+        native_bool operator==(const native_unsigned &other) const {
+            return native_bool(value == other.value);
         }
-        bool operator!=(const native_bool &other) const {
-            return value != other.value;
+        native_bool operator!=(const native_unsigned &other) const {
+            return native_bool(value != other.value);
         }
         bool __is_zero() const {
-            return !value;
+            return value == 0;
         }
         struct __hash {
-            std::size_t operator()(const native_bool &x) const {
-                return (std::size_t)(x.value);
+            std::size_t operator()(const native_unsigned &x) const {
+                return x.value;
             }
         };
-        native_bool operator&(const native_bool & other) const {
-            return native_bool(value && other.value);
+        native_unsigned operator+(const native_unsigned & other) const {
+            return native_unsigned(value + other.value);
         }
-        native_bool operator|(const native_bool & other) const {
-            return native_bool(value || other.value);
+        native_unsigned operator-(const native_unsigned & other) const {
+            return native_unsigned((other.value > value) ? 0 : (value - other.value));
         }
-        native_bool operator!() const {
-            return native_bool(!value);
+        native_unsigned operator*(const native_unsigned & other) const {
+            return native_unsigned(value * other.value);
+        }
+        native_unsigned operator/(const native_unsigned & other) const {
+            return native_unsigned(value / other.value);
+        }
+        native_bool operator<(const native_unsigned & other) const {
+            return native_bool(value < other.value);
+        }
+        native_bool operator<=(const native_unsigned & other) const {
+            return native_bool(value <= other.value);
+        }
+        native_bool operator>(const native_unsigned & other) const {
+            return native_bool(value > other.value);
+        }
+        native_bool operator>=(const native_unsigned & other) const {
+            return native_bool(value >= other.value);
         }
     };
+
 
     // This template implements enumerated types based on native C++
     // enum types. It provides the standard traits for Ivy values.
 
     template <typename T> struct native_enum {
         T value;
-    native_enum() : value((T)0) {}
-    native_enum(long long value) : value((T)0) {}
+        native_enum() : value((T)0) {}
+        native_enum(long long value) : value((T)value) {}
         native_enum(T value) : value(value) {}
         operator std::size_t() const {
             return (std::size_t)value;
@@ -494,10 +576,10 @@ namespace ivy {
         static bool __is_seq() {
             return true;
         }
-        bool operator==(const native_enum &other) const {
+        native_bool operator==(const native_enum &other) const {
             return value == other.value;
         }
-        bool operator!=(const native_enum &other) const {
+        native_bool operator!=(const native_enum &other) const {
             return value != other.value;
         }
         bool __is_zero() const {
@@ -510,6 +592,151 @@ namespace ivy {
         };
     };
 
+    // This class template implements a copy-on-write pointer.
+    //
+    // Instances of class `ptr<T>` contain a pointer to a wrapper
+    // object that in turn contains a reference count, and an object
+    // of some derived class `S` of `T`. When the pointer is copied,
+    // the reference count is increased. When it is deleted, the
+    // reference count is decreased. The operator `->` returns a
+    // pointer to the contained object of type `S`. If a non-const
+    // pointer is reqruied, the pointer is first replaces by a pointer
+    // to a copy of the wrapper, whose reference count is one, while
+    // the reference count of the original wrapper is decremented. In
+    // this way. we guarantee that the an object is modified through
+    // a pointer, there is only one reference to that object.
+    //
+    // Copy-on-write pointers are one mechanism used by the Ivy
+    // compiler to avoid deep copying, as the overhead of copying
+    // a C-O-W pointer is just incrementing the reference count.
+    //
+    // TODO: The implementation is sub-optimal in that it used a
+    // virtual function call to implement dereferencing, when simply
+    // adding a constant to the pointer to offset into the wrapper
+    // would be sufficient. Also, this and other Ivy classes should
+    // have move constructors that would allow the compiler in some
+    // cases to avoid the reference counting overhead.
+    
+
+    template <class T> struct ptr {
+
+    // This is the base class for reference-counting wrappers.
+
+        struct wrap {
+            unsigned refs;
+            wrap() : refs(1) {}
+            wrap *dup() {refs++; return this;}
+            bool deref() {return (--refs) != 0;}
+            virtual wrap *clone() = 0;
+            virtual const T *get() const = 0;
+            virtual T *get() = 0;
+            virtual std::size_t __hash() const = 0;
+            virtual bool eq(const wrap &) const = 0;
+            virtual ~wrap() {}
+        };
+
+        template <typename S> struct twrap : public wrap {
+
+            S item;
+
+            twrap() {}
+
+            twrap(const S &item) : item(item) {}
+
+            virtual wrap *clone() {return new twrap(item);}
+
+            virtual const T *get() const {return &item;} 
+
+            virtual T *get() {return &item;} 
+
+            virtual std::size_t __hash() const {
+                return typename S::__hash()(item);
+            }
+
+            virtual bool eq(const wrap &other) const {
+                const twrap *p = dynamic_cast<const twrap *>(&other);
+                return p && (item == p->item);
+            }
+        };
+
+        wrap *p;
+
+        ptr(){
+            p = new twrap<T>();
+        }
+
+        //        ptr(wrap *p) : p(p) {}
+
+        template <class S> ptr(const S& x) {
+                p = new twrap<S>(x);
+        }
+
+        ptr(std::size_t) {
+        }
+
+        ptr(const ptr &other){
+            p = other.p->dup();
+        };
+
+        ptr& operator=(const ptr &other){
+            if (!p->deref()) delete p;
+            p = other.p->dup();
+            return *this;
+        };
+
+        const T* operator-> () const {
+            return p->get();
+        }
+
+        T* get () {
+            if (p->refs <= 1) {
+                return p->get();
+            } else {
+                p->deref();
+                p = p->clone();
+                return p->get();
+            }   
+        }
+
+        ~ptr() {
+            if (!p->deref()) delete p;
+        }
+
+        operator std::size_t() const {
+            return 0;
+        }
+        static bool __is_seq() {
+            return false;
+        }
+        native_bool operator==(const ptr &other) const {
+            return p->eq(*other.p);
+        }
+        native_bool operator!=(const ptr &other) const {
+            return !((*this) == other);
+        }
+        bool __is_zero() const {
+            const twrap<T> *q = dynamic_cast<const twrap<T> *>(p);
+            return q && q->item.__is_zero();
+        }
+        struct __hash {
+            std::size_t operator()(const ptr &x) const {
+                return x.p->__hash();
+            }
+        };
+
+        template <class S> native_bool isa() const {
+            return dynamic_cast<const twrap<S> *>(p);
+        }
+    };
+
+    template <class T> const T* to_ptr (const T &x) {
+        return &x;
+    }
+    
+    template <class T,class S> native_bool isa(const S& x) {
+        return dynamic_cast<const T *>(&x);
+    }
+
     /* template<typename T> T __num(long long x) { */
     /*     T res; */
     /*     res.value = x; */
@@ -521,6 +748,80 @@ namespace ivy {
 
     static inline void put(int c) {
         std::cout.put(c);
+    }
+
+    // Get a character from standard in.
+
+    static inline int get() {
+        return std::cin.get();
+    }
+
+    // Get an environment variable
+
+    template <class T> static inline T getenv(const T &name) {
+        std::string sname;
+        for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
+            sname.push_back(name.value(idx));
+        }
+        const char *cres = ::getenv(sname.c_str());
+        T res;
+        if (cres) {
+            for (; *cres; ++cres) {
+                res.append(*cres);
+            }
+        }
+        return res;
+    }
+
+    template <class N, class D> static inline void read_file(const N &name, D &data, __bool &ok) {
+        std::string sname;
+        for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
+            sname.push_back(name.value(idx));
+        }
+        int fd = ::open(sname.c_str(),0);
+        if (fd < 0) {
+            ok = false;
+        } else {
+            std::vector<char> tmp;
+            tmp.resize(2048);
+            int len;
+            while ((len = ::read(fd,&tmp[0],2048)) > 0) {
+                for (std::size_t i = 0; i < len; i++)
+                    data.append(tmp[i]);
+            }
+            ok = (len >= 0);
+            ::close(fd);
+        }
+    }
+    
+    template <class N, class D> static inline bool __write_file(const N &name, const D &data) {
+        bool ok;
+        std::string sname;
+        for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
+            sname.push_back(name.value(idx));
+        }
+        int fd = ::creat(sname.c_str(),0660);
+        if (fd < 0) {
+            ok = false;
+        } else {
+            std::vector<char> tmp;
+            tmp.resize(data.end);
+            for (std::size_t i = 0; i < tmp.size(); i++) {
+                tmp[i] = data.value(i);
+            }
+            std::size_t bytes = ::write(fd,&tmp[0],tmp.size());
+            ok = (bytes == tmp.size());
+            ::close(fd);
+        }
+        return ok;
+    }
+
+    template <class N> static inline bool file_exists(const N &name) {
+        std::string sname;
+        for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
+            sname.push_back(name.value(idx));
+        }
+        return ::access(sname.c_str(),F_OK) != -1;
     }
 
     // Resize a function.
@@ -540,5 +841,20 @@ namespace ivy {
         }
         return x;
     }
+
+    // Globals to hold the arguments to main
+
+    int __argc;
+    char **__argv;
+
+    template <class N, class D> static inline void get_argv(const N &idx, D &data) {
+        const char* p = __argv[(std::size_t)idx];
+        for (; *p; ++p) 
+            data.append(*p);
+    }
+    static inline int get_argc() {
+        return __argc;
+    }
+
 }
 

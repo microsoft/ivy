@@ -18,7 +18,7 @@ case $1 in
         echo "# to the environment."
         echo "export PATH=$gitroot/submodules/z3/build:\$PATH"
         echo "export LD_LIBRARY_PATH=$gitroot/submodules/z3/build:\$LD_LIBRARY_PATH"
-        echo "export PYTHONPATH=$gitroot/submodules/z3/build:\$PYTHONPATH"
+        echo "export PYTHONPATH=$gitroot/submodules/z3/build/python:\$PYTHONPATH"
         ;;
     "build")
         # show what's happening.

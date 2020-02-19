@@ -21,6 +21,11 @@ import ivy_solver as islv
 import ivy_fragment as ifc
 import ivy_proof
 import ivy_trace
+import ivy_temporal as itmp
+import ivy_printer
+import ivy_l2s
+import ivy_mc
+import ivy_bmc
 
 import sys
 from collections import defaultdict
@@ -95,24 +100,32 @@ def has_temporal_stuff(f):
     return any(True for x in lut.temporals_ast(f)) or any(True for x in lut.named_binders_ast(f))
 
     
+# This is a little tricky. We know that the current module is a valid abstraction of the
+# program, thus module |= prop implies prop. We tell the prover to trust us and admit
+# prop if module |= prop holds.
+
 def check_temporals():
-    props = im.module.labeled_props
-    proved = []
+    mod = im.module
+    props = mod.labeled_props
+    pmap = dict((prop.id,p) for prop,p in mod.proofs)
+    pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
     for prop in props:
+        print '\n    The following temporal property is being proved:\n'
+        print pretty_lf(prop)
         if prop.temporal:
-            from ivy_l2s import l2s
-            mod = im.module.copy()
-            mod.labeled_axioms.extend(proved)
-            mod.labeled_props = []
-            l2s(mod, prop)
-            mod.concept_spaces = []
-            mod.update_conjs()
-            with mod:
-                check_isolate()
-        proved.append(prop)
-    # filter out any temporal stuff from conjectures and concept spaces
-    im.module.labeled_conjs = [x for x in im.module.labeled_conjs if not has_temporal_stuff(x.formula)]
-    im.module.concept_spaces = [x for x in im.module.concept_spaces if not has_temporal_stuff(x[1])]
+            proof = pmap.get(prop.id,None)
+            model = itmp.normal_program_from_module(im.module)
+            subgoal = prop.clone([prop.args[0],itmp.TemporalModels(model,prop.args[1])])
+            subgoals = [subgoal]
+            subgoals = pc.admit_proposition(prop,proof,subgoals)
+            check_subgoals(subgoals)
+            
+        # else:
+        #     # Non-temporal properties have already been proved, so just
+        #     # admit them here without proof (in other words, ignore the
+        #     # generated subgoals).
+
+        #     pc.admit_proposition(prop,ivy_ast.ComposeTactics())
 
 
 def usage():
@@ -313,11 +326,11 @@ def check_fcs_in_state(mod,ag,post,fcs):
             failed = [c for c in ffcs if c.failed]
             mclauses = lut.and_clauses(*([clauses] + [c.cond() for c in failed]))
             vocab = lut.used_symbols_clauses(mclauses)
-            handler = MatchHandler(mclauses,model,vocab) if opt_trace.get() else ivy_trace.Trace(mclauses,model,vocab)
+#            handler = MatchHandler(mclauses,model,vocab) if opt_trace.get() else ivy_trace.Trace(mclauses,model,vocab)
+            handler = ivy_trace.Trace(mclauses,model,vocab)
             assert all(x is not None for x in history.actions)
             # work around a bug in ivy_interp
             actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
-#            iu.dbg('actions')
             action = act.Sequence(*actions)
             act.match_annotation(action,clauses.annot,handler)
             handler.end()
@@ -326,6 +339,8 @@ def check_fcs_in_state(mod,ag,post,fcs):
                               else None)
             if not opt_trace.get():
                 gui_art(handler)
+            else:
+                print str(handler)
             exit(0)
     else:
         res = history.satisfy(axioms,gmc,filter_fcs(fcs))
@@ -352,7 +367,7 @@ opt_summary = iu.BooleanParameter("summary",False)
 # This gets the pre-state for inductive checks. Only implicit conjectures are used.
 
 def get_conjs(mod):
-    fmlas = [lf.formula for lf in mod.labeled_conjs if not lf.explicit]
+    fmlas = [lf.formula for lf in mod.labeled_conjs + mod.assumed_invariants if not lf.explicit]
     return lut.Clauses(fmlas,annot=act.EmptyAnnotation())
 
 def apply_conj_proofs(mod):
@@ -381,7 +396,7 @@ def summarize_isolate(mod):
 #    print 'check_lineno: {}'.format(check_lineno)
     check = not opt_summary.get()
     subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
-    axioms = [m for m in mod.labeled_axioms if m.id not in subgoalmap]
+    axioms = [m for m in mod.labeled_axioms if m.id not in subgoalmap] 
     schema_instances = [m for m in mod.labeled_axioms if m.id in subgoalmap]
     if axioms:
         print "\n    The following properties are assumed as axioms:"
@@ -408,8 +423,8 @@ def summarize_isolate(mod):
             for lf in schema_instances + mod.labeled_props:
                 print pretty_lf(lf)
 
-    # after checking properties, make them axioms
-    im.module.labeled_axioms.extend(im.module.labeled_props)
+    # after checking properties, make them axioms, except temporals
+    im.module.labeled_axioms.extend(p for p in im.module.labeled_props if not p.temporal)
     im.module.update_theory()
 
 
@@ -551,16 +566,17 @@ def summarize_isolate(mod):
 def check_isolate():
     temporals = [p for p in im.module.labeled_props if p.temporal]
     mod = im.module
-    if temporals:
-        if len(temporals) > 1:
-            raise IvyError(None,'multiple temporal properties in an isolate not supported yet')
-        from ivy_l2s import l2s
-        l2s(mod, temporals[0])
-        mod.concept_spaces = []
-        mod.update_conjs()
+    # if temporals:
+    #     if len(temporals) > 1:
+    #         raise IvyError(None,'multiple temporal properties in an isolate not supported yet')
+    #     from ivy_l2s import l2s
+    #     l2s(mod, temporals[0])
+    #     mod.concept_spaces = []
+    #     mod.update_conjs()
     ifc.check_fragment()
     with im.module.theory_context():
         summarize_isolate(mod)
+        check_temporals()
         return
         check_properties()
         some_temporals = any(p.temporal for p in im.module.labeled_props)
@@ -601,6 +617,49 @@ def check_isolate():
                 act.checked_assert.value = old_checked_assert
 
 
+# This is a little bit backward. When faced with a subgoal from the prover,
+# we check it by constructing fake isolate.
+                
+def check_subgoals(goals):
+    mod = im.module
+    for goal in goals:
+        # print 'goal: {}'.format(goal)
+        conc = ivy_proof.goal_conc(goal)
+        if isinstance(conc,itmp.TemporalModels):
+            model = conc.model
+            fmla = conc.fmla
+            if not lg.is_true(fmla):
+                raise IvyError(goal,
+                  """The temporal subgoal {} has not been reduced to an invariance property. 
+                     Try using a tactic such as l2s.""")
+            mod = im.module.copy()
+            # mod.labeled_axioms.extend(proved)
+            mod.labeled_props = []
+            mod.concept_spaces = []
+            mod.labeled_conjs = model.invars
+            mod.public_actions = set(model.calls)
+            mod.actions = model.binding_map
+            mod.initializers = [('init',model.init)]
+            mod.labeled_axioms = list(mod.labeled_axioms)
+            mod.assumed_invars = model.asms
+            for prem in ivy_proof.goal_prems(goal):
+                if prem.temporal:
+                    mod.labeled_axioms.append(prem)
+            # ivy_printer.print_module(mod)
+        else:
+            goal = ivy_compiler.theorem_to_property(goal)
+            mod = im.module.copy()
+            # mod.labeled_axioms.extend(proved)
+            mod.labeled_props = [goal]
+            mod.concept_spaces = []
+            mod.conjs = []
+            mod.public_actions = set()
+            mod.actions = dict()
+            mod.initializers = []
+        with mod:
+            check_isolate()
+                
+
 def all_assert_linenos():
     mod = im.module
     all = []
@@ -635,20 +694,19 @@ def check_separately(isolate):
         return opt_separate.get()
     return get_isolate_attr(isolate,'separate','false') == 'true'
 
-def mc_isolate(isolate):
+def mc_isolate(isolate,meth=ivy_mc.check_isolate):
     if im.module.labeled_props:
         raise IvyError(im.module.labeled_props[0],'model checking not supported for property yet')
-    import ivy_mc
     if not check_separately(isolate):
         with im.module.theory_context():
-            ivy_mc.check_isolate()
+            meth()
         return
     for lineno in all_assert_linenos():
         with im.module.copy():
             old_checked_assert = act.checked_assert.get()
             act.checked_assert.value = lineno
             with im.module.theory_context():
-                ivy_mc.check_isolate()
+                meth()
             act.checked_assert.value = old_checked_assert
     
 def get_isolate_method(isolate):
@@ -678,20 +736,37 @@ def check_module():
         raise iu.IvyError(None,"Some assertions are not checked")
 
     for isolate in isolates:
-        if isolate != None and isolate in im.module.isolates:
+        if isolate is not None and isolate in im.module.isolates:
             idef = im.module.isolates[isolate]
             if len(idef.verified()) == 0 or isinstance(idef,ivy_ast.TrustedIsolateDef):
                 continue # skip if nothing to verify
         if isolate:
             print "\nIsolate {}:".format(isolate)
+        if isolate is not None and iu.compose_names(isolate,'macro_finder') in im.module.attributes:
+            save_macro_finder = islv.opt_macro_finder.get()
+            if save_macro_finder:
+                print "Turning off macro_finder"
+                islv.set_macro_finder(False)
         with im.module.copy():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
                 continue
-            if get_isolate_method(isolate) == 'mc':
+            method_name = get_isolate_method(isolate)
+            if method_name == 'mc':
                 mc_isolate(isolate)
+            elif method_name.startswith('bmc['):
+                global some_bounded
+                some_bounded = True
+                _,prms = iu.parse_int_subscripts(method_name)
+                if len(prms) != 1:
+                    raise IvyError(None,'BMC method specifier should be bmc[<steps>]. Got "{}".'.format(method_name))
+                mc_isolate(isolate,lambda : ivy_bmc.check_isolate(prms[0]))
             else:
                 check_isolate()
+        if isolate is not None and iu.compose_names(isolate,'macro_finder') in im.module.attributes:
+            if save_macro_finder:
+                print "Turning on macro_finder"
+                islv.set_macro_finder(True)
     print ''
     if failures > 0:
         raise iu.IvyError(None,"failed checks: {}".format(failures))
@@ -709,11 +784,17 @@ def main():
     ivy_init.read_params()
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()
+    global some_bounded
+    some_bounded = False
+
     with im.Module():
         with utl.ErrorPrinter():
             ivy_init.source_file(sys.argv[1],ivy_init.open_read(sys.argv[1]),create_isolate=False)
             check_module()
-    print "OK"
+    if some_bounded:
+        print "BOUNDED"
+    else:
+        print "OK"
 
 
 if __name__ == "__main__":

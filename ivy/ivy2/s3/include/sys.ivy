@@ -1,0 +1,37 @@
+#lang ivy
+
+# This file contains modules to access system resources such as
+# processes and environment variables.
+
+# This module gives access to environement variable, where `str` is a
+# type with string traits.
+
+module environment(str) = {
+
+    # The `get` action gets the value of an environment variable
+    # `name` or returns the empty string if `name` is undefined.
+
+    action get(name:str) returns (res:str) = {
+	res := cast(ivy.getenv(cast(name)))
+    }
+}    
+
+module sys_argv(pos,str) = {
+    action end returns (res:pos) = {
+	res := cast(ivy.get_argc);
+    }
+    action value(idx:pos) returns (res:str) = {
+	res := cast(ivy.get_argv(cast(idx),cast(res)));
+    }
+}
+
+object sys = {
+    module command(pid,cmd,retcode) = {
+	action command(s:cmd) returns (res:pid) = {
+	    res := cast(ivy.subproc(cast(s)));
+	}
+	action wait(s:pid) returns (res:retcode) = {
+	    res := cast(ivy.wait(cast(s)));
+	}
+    }
+}

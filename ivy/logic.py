@@ -227,28 +227,32 @@ class Not(recstruct('Not', [], ['body'])):
             return 'Not({})'.format(self.body)
 
 
-class Globally(recstruct('Globally', [], ['body'])):
+class Globally(recstruct('Globally', ['environ'], ['body'])):
     __slots__ = ()
     sort = Boolean
     @classmethod
-    def _preprocess_(cls, body):
+    def _preprocess_(cls, environ, body):
+        assert environ is None or isinstance(environ,str)
         if body.sort not in (Boolean, TopS):
             raise SortError("Globally body must be Boolean: {}".format(body))
-        return (body,)
+        return environ,body
     def __str__(self):
-        return 'Globally({})'.format(self.body)
+        environ = self.environ
+        return 'globally{}({})'.format('' if environ is None else '['+str(environ)+']',self.body)
 
 
-class Eventually(recstruct('Eventually', [], ['body'])):
+class Eventually(recstruct('Eventually', ['environ'], ['body'])):
     __slots__ = ()
     sort = Boolean
     @classmethod
-    def _preprocess_(cls, body):
+    def _preprocess_(cls, environ, body):
+        assert environ is None or isinstance(environ,str)
         if body.sort not in (Boolean, TopS):
             raise SortError("Eventually body must be Boolean: {}".format(body))
-        return (body,)
+        return environ,body
     def __str__(self):
-        return 'Eventually({})'.format(self.body)
+        environ = self.environ
+        return 'eventually{}({})'.format('' if environ is None else '['+str(environ)+']',self.body)
 
 
 class And(recstruct('And', [], ['*terms'])):
@@ -373,17 +377,20 @@ class Lambda(recstruct('Lambda', ['variables'], ['body'])):
             self.body)
 
 
-class NamedBinder(recstruct('NamedBinder', ['name', 'variables'], ['body'])):
+class NamedBinder(recstruct('NamedBinder', ['name', 'variables', 'environ'], ['body'])):
     __slots__ = ()
     @classmethod
-    def _preprocess_(cls, name, variables, body):
+    def _preprocess_(cls, name, variables, environ, body):
+        assert environ is None or isinstance(environ,str)
         if not all(type(v) is Var for v in variables):
             raise IvyError("Can only abstract over variables")
         # TODO: check the name after we decide on valid names
-        return name, tuple(variables), body
+        return name, tuple(variables), environ, body
     def __str__(self):
-        return '(${} {}. {})'.format( # TODO: change after we decide on the syntax for this
+        environ = self.environ
+        return '(${}{} {}. {})'.format( # TODO: change after we decide on the syntax for this
             self.name,
+            '' if environ is None else '['+str(environ)+']',
             ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
             self.body)
     def __call__(self, *terms):
@@ -429,12 +436,12 @@ if __name__ == '__main__':
     assert not contains_topsort(g)
     assert contains_topsort(h)
 
-    b = NamedBinder('mybinder', [X,Y,Z], Implies(And(f(X,Y), f(X,Z)), Eq(Y,Z)))
+    b = NamedBinder('mybinder', [X,Y,Z], None, Implies(And(f(X,Y), f(X,Z)), Eq(Y,Z)))
     print b
     print b.sort
     print
 
-    b = NamedBinder('mybinder', [X,Y,Z], Z)
+    b = NamedBinder('mybinder', [X,Y,Z], None, Z)
     print b
     print b.sort
 

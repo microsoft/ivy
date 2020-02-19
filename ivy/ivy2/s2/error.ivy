@@ -1,0 +1,269 @@
+#lang ivy1.7
+
+#
+# Here we have a collection of type variants indicating different
+# sorts of errors. Each variant has an action to print itself. We collect them
+# here for reference.
+#
+
+include ivylang
+
+object ivy = { ...
+    
+    object error = {
+        type this
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("unknown error")
+        }
+    }
+    
+    var errors : vector[error]
+
+    # Reports an error and returns
+
+    action report_error(e:error,ann:annot) = {
+        var b := pretty.make(100,4);
+        b := b.extend(ann.to_str);
+        b := b.extend(":");
+        b := b.extend(" ");
+        b := e.encode(b);
+        b := b.flush;
+        call stdio.write(b.output);
+        errors := errors.append(e);
+    }
+
+    # - Error `type_clash(e,t1,t2)` indicates that in sub-expression `e`,
+    #   types `t1` and `t2` could not be unified.
+
+    object type_clash = {
+        variant this of error = struct {
+            e : expr,
+            t1 : expr,
+            t2 : expr
+        }
+        action make(e:expr,t1:expr,t2:expr) returns (res:this) = {
+            res.e := e;
+            res.t1 := t1;
+            res.t2 := t2;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Cannot unify types");
+            b := b.extend(" ");
+            b := e.t1.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend("and");
+            b := b.extend(" ");
+            b := e.t2.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend("when typing this expression:");
+            b := b.extend(" ");
+            b := b.newline;
+            b := e.e.encode(b,0);
+        }
+    }
+
+    # - Error `type_conversion(e,t1,t2)` indicates that in sub-expression `e`,
+    #   types `t1` and `t2` could not be unified.
+
+    object type_conversion = {
+        variant this of error = struct {
+            e : expr,
+            t1 : expr,
+            t2 : expr
+        }
+        action make(e:expr,t1:expr,t2:expr) returns (res:this) = {
+            res.e := e;
+            res.t1 := t1;
+            res.t2 := t2;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Cannot cast the expression");
+            b := b.extend(" ");
+            b := e.e.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend("of type");
+            b := b.extend(" ");
+            b := e.t1.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend("to type");
+            b := b.extend(" ");
+            b := e.t2.encode(b,0);
+        }
+    }
+
+    # - Error `untyped(e,t1)` indicates that subexpression `e` could not be
+    #   fully typed, and gives a partial type for `e` containing
+    #   undetermined type variables.
+
+    object untyped = {
+        variant this of error = struct {
+            e : expr,
+            t1 : expr
+        }
+        action make(e:expr,t1:expr) returns (res:this) = {
+            res.e := e;
+            res.t1 := t1;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Cannot infer the type of this term:");
+            b := b.extend(" ");
+            b := b.newline;
+            b := e.e.encode(b,0);
+	    if e.t1.get_verb ~= verb.empty {
+		b := b.extend(" ");
+		b := b.newline;
+		b := b.extend("Incomplete type:");
+		b := b.extend(" ");
+		b := e.t1.encode(b,0);
+	    }
+        }
+    }
+
+    # - Error `not_first_order(e,t1)` indicates that subexpression `e` should have
+    #   had first order type but instead had type `t1`.
+
+    object not_first_order = {
+        variant this of error = struct {
+            e : expr,
+            t1 : expr
+        }
+        action make(e:expr,t1:expr) returns (res:this) = {
+            res.e := e;
+            res.t1 := t1;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Expression should have simple type:");
+            b := b.newline;
+            b := e.e.encode(b,0);
+            b := b.newline;
+            b := b.extend("Actual type:");
+            b := b.extend(" ");
+            b := e.t1.encode(b,0);
+        }
+    }
+
+    # - Error `file_not_found(n)` indicates that file named `n` was not found.
+
+    object file_not_found = {
+        variant this of error = struct {
+            n : str
+        }
+        action make(n:str) returns (res:this) = {
+            res.n := n;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("File not found:");
+            b := b.extend(" ");
+            b := b.extend(e.n);
+            b := b.newline;
+        }
+    }
+
+    # - Error `cannot_write(n)` indicates that file named `n` cannot be written.
+
+    object cannot_write = {
+        variant this of error = struct {
+            n : str
+        }
+        action make(n:str) returns (res:this) = {
+            res.n := n;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Failed to write file:");
+            b := b.extend(" ");
+            b := b.extend(e.n);
+            b := b.newline;
+        }
+    }
+
+    # - Error `undefined(n)` indicates that identifier `n` is undefined
+
+    object undefined = {
+        variant this of error = struct {
+            n : ident
+        }
+        action make(n:ident) returns (res:this) = {
+            res.n := n;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Undefined:");
+            b := b.extend(" ");
+            b := e.n.encode(b,0);
+            b := b.newline;
+        }
+    }
+    
+    # - Error `redefining(n,ann)` indicates that identifier `n` is redefined,
+    # and `ann` is the location of the original definition.
+
+    object redefining = {
+        variant this of error = struct {
+            n : ident,
+	    ann : annot
+        }
+        action make(n:ident,ann:annot) returns (res:this) = {
+            res.n := n;
+	    res.ann := ann
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Redefining ");
+            b := e.n.encode(b,0);
+            b := b.newline;
+            b := b.extend(e.ann.to_str);
+            b := b.extend(": previous definition");
+            b := b.newline;
+        }
+    }
+
+    # - Error `wrong_number_params(n)` indicates that `n` parameters were expected,
+    #   but a different number was given.
+
+    object wrong_number_params = {
+        variant this of error = struct {
+            n : vector[expr].domain
+        }
+        action make(n:vector[expr].domain) returns (res:this) = {
+            res.n := n;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Wrong number of parameters given.");
+            b := b.newline;
+        }
+    }
+
+    # - Error `syntax_error(tok)` indicates that a syntax error occurred at token `tok`.
+
+    object syntax_error = {
+        variant this of error = struct {
+            tok : str
+        }
+        action make(tok:str) returns (res:this) = {
+            res.tok := tok;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Syntax error at token");
+            b := b.extend(" ");
+            b := b.extend(e.tok);
+            b := b.newline;
+        }
+    }
+    
+    # - Error `bad_syntax(e)` indicates bad syntax at expression `e`.
+
+    object bad_syntax = {
+        variant this of error = struct {
+	    e : expr
+	}
+        action make(e:expr) returns (res:this) = {
+	    res.e := e
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Syntax error at expression");
+            b := b.extend(" ");
+            b := e.e.encode(b,0);
+            b := b.newline;
+        }
+    }
+
+
+}

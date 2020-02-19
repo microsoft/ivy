@@ -374,6 +374,8 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
         new_action = strip_action(action,strip_map,strip_binding,is_init=is_init,init_params=init_params)
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
+        if hasattr(action,'labels'):
+            new_action.labels = action.labels
         new_actions[name] = new_action
     mod.actions.clear()
     mod.actions.update(new_actions)
@@ -398,6 +400,21 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
         new_symbols[name] = sym
     ivy_logic.sig.symbols.clear()
     ivy_logic.sig.symbols.update(new_symbols)
+    
+    # strip the parameters
+    old_params = list(mod.params)
+    mod.params = []
+    for sym in old_params:
+        name = sym.name
+        strip_params = strip_map_lookup(name,strip_map)
+        if strip_params:
+            if not (len(sym.sort.dom) >= len(strip_params)):
+                raise iu.IvyError(None,"cannot strip isolate parameters from {}".format(name))
+            new_sort = strip_sort(sym.sort,strip_params)
+            sym =  ivy_logic.Symbol(name,new_sort)
+        mod.params.append(sym)
+
+
 
     if iu.version_le(iu.get_string_version(),"1.6"):
         del mod.params[:]
@@ -794,8 +811,7 @@ def follow_definitions(ldfs,all_syms):
 def empty_clone(action):
     res = ia.Sequence()
     res.lineno = action.lineno
-    res.formal_params = action.formal_params
-    res.formal_returns = action.formal_returns
+    action.copy_formals(res)
     return res
 
 def collect_sort_destructors(sort,res,memo):
@@ -957,7 +973,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 mod.isolate_info.monitors.append((mixin.mixer(),mixin.mixee(),mod.actions[mixin.mixer()]))
             
 
-
     # figure out what is exported:
     exported = set()
     export_preconds = defaultdict(list)
@@ -1053,6 +1068,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     
     proved,not_proved = get_props_proved_in_isolate(mod,isolate)
     mod.labeled_axioms.extend(not_proved)
+    mod.labeled_axioms = [m for m in mod.labeled_axioms if not m.explicit]
     mod.labeled_props = proved
 
     # filter natives
@@ -1121,6 +1137,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         for dfn in mod.definitions:
             if ivy_logic.is_deterministic_fmla(dfn.formula.args[1]):
                 determined.add(dfn.formula.defines())
+        determined.update(mod.params)
         for a in dropped_axioms:
             for x in lu.used_symbols_ast(a.formula):
                 if x in all_syms and not ivy_logic.is_interpreted_symbol(x) and x not in determined:
@@ -1144,9 +1161,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
     mod.native_definitions = [c for c in mod.native_definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
-
-
-
 
     # After checking, we can put in place the new action definitions
 
@@ -1279,7 +1293,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     init_cond = ivy_logic.And(*(lf.formula for lf in mod.labeled_inits))
     mod.init_cond = lu.formula_to_clauses(init_cond)
-
 
 
 class SortOrder(object):
@@ -1862,3 +1875,14 @@ def get_isolate_exports(mod,cg,iso):
     exports = set(act for act in actions if act in mod_exports
                   or any((x not in actions) for x in cg[act]))
     return exports
+
+# This creates a map that takes each name in the hierarchy to
+# a list of the isolates in which it is present/verified
+
+def get_isolate_map(mod,verified=True,present=True):
+    res = defaultdict(list)
+    for ison,isol in mod.isolates.iteritems():
+        def fun(name):
+            res[name].append(ison)
+        iter_isolate(mod,isol,fun,verified,present)
+    return res

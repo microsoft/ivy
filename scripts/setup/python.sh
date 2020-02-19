@@ -20,6 +20,8 @@ pip install --user --upgrade $force --editable $gitroot
 # see <https://github.com/pygraphviz/pygraphviz/issues/71> for more information.
 pip install --user --upgrade --force-reinstall pygraphviz --install-option="--include-path=/usr/include/graphviz" --install-option="--library-path=/usr/lib/graphviz/"
 
+# required by ivy_graphviz, which is imported when running the ivy executable
+pip install pydot
 # begin: ipython support (unmaintainted)
 ## `ipython[notebook]` requires a version of pip >= 9.0.1 to function properly
 ## with python 2.7. see <https://github.com/ipython/ipython/blob/master/README.rst>

@@ -1,0 +1,1038 @@
+#lang ivy1.7
+
+# The flattening pass lowers module instantiations and
+# and `.` operators.
+
+include ivylang
+include logic
+include error
+
+module generic_flat(ivytype,ivyclass) = {
+    action flat(s:ivytype,st:flatst) returns (st:flatst) = {
+        var t : ivytype;
+        (t,st) := s.flat_int(st);
+        t.ann := s.ann;
+        st.decls := st.decls.append(t);
+    }
+}
+
+module generic_flat_stmt(ivytype,ivyclass) = {
+    action flat(s:ivytype,st:flatst) returns (res:ivyclass,st:flatst) = {
+        var t : ivytype;
+        (t,st) := s.flat_int(st);
+        t.ann := s.ann;
+        res := t;
+    }
+}
+
+# A `def_map` is a map from identifiers to a range type. I has the same
+# interface as `hash_map`, plus an action `get_def` that looks up the value of
+# an identifier and reports an error if it is not found.
+
+module def_map(range) = {
+    instantiate hash_map(ident,range)
+    action get_def(m:this,x:ident,ann:annot) returns (y:range) = {
+        if ~m.mem(x) {
+            call report_error(undefined.make(x),ann);
+        } else {
+            y := m.get(x,y)
+        }
+    }
+}
+
+object ivy = { ...
+
+
+    instance ident_to_moduledc : def_map(moduledc)
+    instance ident_to_ident : hash_map(ident,ident)
+    instance ident_to_instantiatedc : hash_map(ident,instantiatedc)
+    instance ident_to_annot : hash_map(ident,annot)
+    
+    object flatst = {
+        type this = struct {
+
+            # Accumulated declarations
+
+            decls : vector[decl],
+
+            # The module parameter valuations
+
+            prmvals : ident_to_ident,
+
+            # The module declarations, by name
+
+            moddecls : ident_to_moduledc,
+
+            # The set of defined identifiers
+
+            defs : ident_set,
+            
+            # The locations of definitions of traits (non-objects)
+
+            non_objects : ident_to_annot,
+
+            # True if the hierarchy root is set
+
+            has_root : bool,
+
+            # The current hierarchy root
+
+            root : ident,
+
+            # The current local variables as a set
+
+            locals : ident_set,
+
+	    # The set of global variables
+
+	    globals : ident_set,
+
+            # True if we are defining an identifier
+
+            defining : bool,
+
+            # True if we are on an absolute identifier
+
+            absolute : bool,
+
+            # True if we are on rhs of a dot operator
+
+            dot_rhs : bool,
+
+	    # Maps autoinstance keys to instantiations
+
+	    autodefs : ident_to_instantiatedc,
+
+	    # Auto instantiations that are pending
+
+	    autos_pending : ident_set,
+
+	    # True if we don't want to check undefined
+
+	    no_undefined : bool
+
+	    
+
+        }
+    }
+
+    action prm_map(fml:vector[expr],act:vector[expr],ann:annot) returns (res:ident_to_ident) = {
+        if fml.end ~= act.end {
+            call report_error(wrong_number_params.make(fml.end),ann);
+        } else {
+            var idx := fml.begin;
+            while idx < fml.end {
+                res := res.set(fml.value(idx).get_name,act.value(idx).get_name);
+                idx := idx.next;
+            }
+        }
+    }
+
+    object expr = { ...
+        action flat(s:this,st:flatst) returns (res:expr,st:flatst)
+    }
+
+    # A dot operator has two possible interpretations: it indicates a
+    # member of an object, or an application of a destructor or member
+    # action. When defining a name, it is always the former. When not
+    # defining, we check whether the lhs of the dot is defined. If it is,
+    # we treat the dot as an object member reference.
+
+    action applydot(arg:expr,member:ident,ann:annot,st:flatst) returns (res:expr) = {
+	if arg isa symbol {
+            var name := member.prefix(arg.get_name);
+            if st.absolute | st.defining
+	       | (st.defs.get(arg.get_name,false) & ~st.locals.mem(arg.get_name) & ~st.globals.mem(arg.get_name))
+	    {
+		res := symbol.make(name,ann);
+		call check_defined(name,st,ann);
+            } else {
+		res := dot.make(arg,symbol.make(member,ann),ann);
+            }
+	} else {
+	    res := dot.make(arg,symbol.make(member,ann),ann);
+	}
+    }
+    
+    action find_ident(root:ident,s:ident,st:flatst) returns (s:ident) = {
+        var cand := s.prefix(root);
+        if st.defs.mem(cand) {
+            s := cand
+        } else if root isa dotident {
+            s := find_ident(root.get_namesp,s,st)
+        }
+    }
+
+    object ident = { ...
+        action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
+            res := s
+        }
+    }
+
+    object strident = { ...
+        action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
+            var s2 := s;  # workaround
+            var idx := s2.subscrs.begin;
+            while idx < s2.subscrs.end {
+                var t := s2.subscrs.value(idx);
+                t := t.flat(false,st);
+                s2.subscrs := s2.subscrs.set(idx,t);
+                idx := idx.next
+            };         
+            if st.has_root & s2.val = "this" & s2.subscrs.end = 0 {
+                res := st.root
+            } else {
+                res := s2;
+                if ~rhs {
+                    res := st.prmvals.get(res,res);
+                    if st.has_root {
+                        if st.defining {
+                            res := res.prefix(st.root)
+                        } else {
+                            res := find_ident(st.root,res,st);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    object dotident = { ...
+        action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
+            res := dotident.make(s.namesp.flat(rhs,st),s.member);
+        }
+    } 
+
+
+    action add_def_id(id:ident,st:flatst,is_global:bool,is_object:bool,ann:annot) returns (st:flatst) = {
+        st.defs := st.defs.set(id,true);
+	if ~is_object {
+	    if st.non_objects.mem(id) {
+		call report_error(redefining.make(id,st.non_objects.value(id)),ann);
+	    }
+	}
+	if ~is_object {
+	    st.non_objects := st.non_objects.set(id,ann);
+	}
+	if is_global {
+            st.globals := st.globals.set(id,true);
+	}	    
+    }
+
+    action add_def(s:expr,st:flatst,is_global:bool,is_object:bool) returns (st:flatst) = {
+        st.defining := true;
+#        var id := s.get_name.flat(false,st);
+	var e : expr;
+	(e,st) := s.flat(st);
+        st.defining := false;
+	call check_syntax_symbol(e);
+	var id := e.get_name;
+	st := add_def_id(id,st,is_global,is_object,s.get_ann);
+    }
+
+    action check_defined(name:ident,st:flatst,ann:annot) = {
+	if ~st.defs.mem(name) & ~st.absolute & ~st.defining & ~st.no_undefined {
+	    call report_error(undefined.make(name),ann);
+	}
+    }
+
+    object symbol = { ...
+        action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
+            var f := s;
+	    if s.vrb = verb.none {
+		if ~st.locals.mem(f.name) {
+                    f.name := f.name.flat(false,st);
+		    f.vrb := f.name.get_verb;  # name subst could change verb
+		    if f.vrb = verb.none {
+			call check_defined(f.name,st,s.ann)
+		    }
+		}
+            };
+            res := f
+        }
+    }
+
+    object app = { ...
+        action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
+            var arg0 : expr;
+            (arg0,st) := s.args.value(0).flat(st);
+            if s.is(verb.dot) {
+                res := applydot(arg0,s.args.value(1).get_name.flat(true,st),s.ann,st)
+            } else if s.is(verb.varv) {
+		(res,st) := flat_formal(s.args.value(0),st);
+		res := varv.make(res,s.ann);
+	    } else {
+                var args : vector[expr];
+                args := args.append(arg0);
+                var idx := s.args.begin.next;
+                while idx < s.args.end {
+                    var arg : expr;
+                    (arg,st) := s.args.value(idx).flat(st);
+                    args := args.append(arg);
+                    idx := idx.next
+                };
+                var func : expr;
+                (func,st) := s.func.flat(st);
+                res := app.make(func,args,s.ann);
+            }
+        }
+    }
+
+    object stmt = { ...
+        action flat(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s
+        }
+        action get_ident(s:this) returns (res:ident)
+    }
+
+    action setup_local_vars(s:stmt, st:flatst) returns (del: vector[ident], st:flatst) = {
+	var alhs := s.get_lhs;
+	var lhs := comma.unfold_left(alhs);
+	var idx := lhs.begin;
+	while idx < lhs.end {
+	    var e := lhs.value(idx);
+	    if e.is(verb.varv) {
+		var id := formal_ident(e.get_arg(0));
+		if ~st.locals.mem(id) {
+		    del := del.append(id);
+		    st.locals := st.locals.set(id,true);
+		}
+	    };
+	    idx := idx.next
+	}
+    }
+    
+    action remove_local_vars(del: vector[ident], st:flatst) returns (st:flatst) = {
+	var idx := del.begin;
+	while idx < del.end {
+	    var id := del.value(idx);
+	    st.locals := st.locals.remove(id);
+	    idx := idx.next
+	}
+    }    
+
+    object asgn = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.lhs,st) := res.lhs.flat(st);
+            (res.rhs,st) := res.rhs.flat(st);
+        }
+    }
+
+    object sequence = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            if res.lhs isa asgn {
+		var del : vector[ident];
+		(del,st) := setup_local_vars(res.lhs,st);
+		(res.lhs,st) := res.lhs.flat(st);
+                (res.rhs,st) := res.rhs.flat(st);
+		st := remove_local_vars(del,st);
+            } else {
+		(res.lhs,st) := res.lhs.flat(st);
+		if res.lhs isa varst {
+		    var del: vector[ident];
+		    var id := formal_ident(res.lhs.get_expr);
+		    if ~st.locals.mem(id) {
+			del := del.append(id);
+			st.locals := st.locals.set(id,true);
+		    };
+		    (res.rhs,st) := res.rhs.flat(st);
+		    st := remove_local_vars(del,st);
+		} else {
+		    (res.rhs,st) := res.rhs.flat(st);
+		}
+            }
+        }
+    }
+
+    object ifst = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.cond,st) := res.cond.flat(st);
+            (res.thenst,st) := res.thenst.flat(st);
+            (res.elsest,st) := res.elsest.flat(st);
+        }
+    }
+
+    object whilest = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.cond,st) := res.cond.flat(st);
+            (res.body,st) := res.body.flat(st);
+        }
+    }
+
+    action flat_formal(s:expr,st:flatst) returns (res:expr,st:flatst) = {
+        res := s;
+        if res.is(verb.colon) {
+            var ty : expr;
+            (ty,st) := res.get_arg(1).flat(st);
+            res := colon.make(res.get_arg(0),ty,res.get_ann)
+        }
+    }
+    
+    action formal_ident(s:expr) returns (res:ident) = {
+        res := s.get_arg(0).get_name if (s.is(verb.colon)) else s.get_name
+    }
+
+    object varst = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.name,st) := flat_formal(res.name,st);
+        }
+        action get_ident(s:this) returns (res:ident) = {
+            res := formal_ident(s.name)
+        }
+    }
+
+    object decl = { ...
+        action flat(s:this,st:flatst) returns (st:flatst)
+        action defd(s:this,st:flatst) returns (st:flatst)
+    }
+
+    action flat_exprvec(es:vector[expr],st:flatst) returns (es:vector[expr],st:flatst) = {
+        var idx := es.begin;
+        while idx < es.end {
+            var e := es.value(idx);
+            (e,st) := e.flat(st);
+            es := es.set(idx,e);
+            idx := idx.next;
+        }
+    }
+
+    action flat_formalvec(es:vector[expr],st:flatst) returns (es:vector[expr],st:flatst) = {
+        var idx := es.begin;
+        while idx < es.end {
+            var e := es.value(idx);
+            (e,st) := flat_formal(e,st);
+            es := es.set(idx,e);
+            idx := idx.next;
+        }
+    }
+
+    action local_vec(es:vector[expr],val:bool,st:flatst) returns (st:flatst) = {
+        var idx := es.begin;
+        while idx < es.end {
+            var e := es.value(idx);
+	    var fe := formal_ident(e);
+	    if val {
+		st.locals := st.locals.set(fe,true);
+	    } else {
+		st.locals := st.locals.remove(fe);
+	    };
+            idx := idx.next;
+        }
+    }
+
+
+    object actdc = { ...
+        instantiate generic_flat(this,decl)
+        action flat_int(s:actdc,st:flatst) returns (res:this,st:flatst) = {
+	    if s.kind = action_kind.external {
+		st.absolute := true;
+	    };
+            (res.name,st) := s.name.flat(st);
+	    st.absolute := false;
+            res.kind := s.kind;
+            (res.inputs,st) := flat_formalvec(s.inputs,st);
+            (res.outputs,st) := flat_formalvec(s.outputs,st);
+            st := local_vec(res.inputs,true,st);
+            st := local_vec(res.outputs,true,st);
+	    res.has_body := s.has_body;
+            (res.body,st) := s.body.flat(st);
+            st := local_vec(res.inputs,false,st);
+            st := local_vec(res.outputs,false,st);
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+	    if s.kind = action_kind.external {
+		st.absolute := true;
+	    };
+            st := add_def(s.name,st,false,false);
+	    st.absolute := false;
+        }
+    }
+
+    object initdc = { ...
+        instantiate generic_flat(this,decl)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            (res.body,st) := s.body.flat(st);
+        }
+    }
+
+    object typespec = { ...
+        action flat(s:this,st:flatst) returns (res:typespec,st:flatst)
+        action defd(s:this,st:flatst,id:ident) returns (st:flatst)
+        action to_destrs(s:this,st:flatst,ty:expr) returns (st:flatst)
+        action auto_flat_spec(s:this,st:flatst,ty:expr) returns (st:flatst)
+    }
+
+    object enumspec = { ...
+        action flat(s:this,st:flatst) returns (res:typespec,st:flatst) = {
+            var t := s;
+            var idx := t.constructors.begin;
+            while idx < t.constructors.end {
+                var e := t.constructors.value(idx);
+		call check_syntax_symbol(e);
+                (e,st) := e.flat(st);
+                t.constructors := t.constructors.set(idx,e);
+                idx := idx.next;
+            };
+            res := t;
+        }
+        action defd(s:this,st:flatst,id:ident) returns (st:flatst) = {
+            var idx := s.constructors.begin;
+            while idx < s.constructors.end {
+                st := add_def(s.constructors.value(idx),st,false,false);
+                idx := idx.next;
+            }
+        }
+    }
+
+    action canon_typing(typing:expr) returns(typing:expr) = {
+        if typing.is(verb.colon) {
+            var lhs := typing.get_arg(0);
+            if lhs isa app {
+                var args := lhs.get_args;
+                var dom : vector[expr];
+                var idx := args.begin;
+                while idx < args.end {
+                    dom := dom.append(args.value(idx).get_arg(1));
+                    idx := idx.next
+                };
+                var domty := times.fold_left(dom,lhs.get_ann);
+                var ty := arrow.make(domty,typing.get_arg(1),typing.get_ann);
+                typing := colon.make(lhs.get_func,ty.uncurry,typing.get_ann)
+            }
+        } else {
+            if typing isa app {
+                typing := canon_typing(typing.get_func);
+            }
+        }
+    }
+
+    action make_auto_key(id:ident, rev:bool) returns (key:ident,pmap:symeval) = {
+	var skey := id.get_last;
+	var idx := skey.subscrs.begin;
+	var num : pos := 0;
+	while idx < skey.subscrs.end {
+	    var nv := numident.make(num);
+	    var ann : annot;
+	    if rev {
+		pmap := pmap.set(nv,symbol.make(skey.subscrs.value(idx),ann));
+	    } else {
+		pmap := pmap.set(skey.subscrs.value(idx),symbol.make(nv,ann));
+	    };
+	    skey.subscrs := skey.subscrs.set(idx,nv);
+	    idx := idx.next;
+	    num := num.next;
+	};
+	key := skey;
+	if id isa dotident {
+	    key := key.prefix(id.get_namesp);
+	}
+    }
+
+    action find_auto_inst(id:ident,st:flatst) returns (idc:instantiatedc, ok:bool) = {
+	var key : ident;
+	var pmap : symeval;
+	(key,pmap) := make_auto_key(id,true);
+	if st.autodefs.mem(key) {
+	    idc := st.autodefs.value(key);
+	    var foo : decl := idc;
+	    idc.prms := subst_vector(idc.prms,pmap);
+	    ok := true;
+	}
+    }
+
+    action auto_defd_rec(s:expr,st:flatst) returns(st:flatst) = {
+	if s.is(verb.dot) {
+	    st := auto_defd_rec(s.get_arg(0),st);
+	};
+	if s.is(verb.dot) | (s isa symbol) {
+	    var e : expr;
+	    st.no_undefined := true;
+	    (e,st) := s.flat(st);
+	    st.no_undefined := false;
+	    var id := e.get_name;
+	    if ~st.defs.mem(id) {
+		var ok : bool;
+		var idc: instantiatedc;
+		(idc,ok) := find_auto_inst(id,st);
+		if ok {
+		    st.defs := st.defs.set(id,true);
+		    var odc : objectdc;
+		    odc.name := symbol.make(id,idc.ann);
+		    odc.ann := idc.ann;
+		    st.decls := st.decls.append(odc);
+		    st.autos_pending := st.autos_pending.set(id,true);
+		    var old_has_root := st.has_root;
+		    var old_root := st.root;
+		    st.has_root := true;
+		    st.root := id;
+		    st := idc.defd(st);
+		    st.has_root := old_has_root;
+		    st.root := old_root;
+		}
+	    }
+	}
+    }
+
+    action auto_defd(s:expr,st:flatst) returns(st:flatst) = {
+	if s.is(verb.colon) {
+	    st := auto_defd_rec(s.get_arg(1),st);
+	}
+    }
+
+    action auto_flat_rec(s:expr,st:flatst) returns(st:flatst) = {
+	if s.is(verb.dot) {
+	    st := auto_flat_rec(s.get_arg(0),st);
+	};
+	if s.is(verb.dot) | (s isa symbol) {
+	    var e : expr;
+	    st.no_undefined := true;
+	    (e,st) := s.flat(st);
+	    st.no_undefined := false;
+	    var id := e.get_name;
+	    if st.autos_pending.mem(id) {
+		st.autos_pending := st.autos_pending.remove(id);
+		var ok : bool;
+		var idc: instantiatedc;
+		(idc,ok) := find_auto_inst(id,st);
+		if ok {
+		    var old_has_root := st.has_root;
+		    var old_root := st.root;
+		    st.has_root := true;
+		    st.root := id;
+		    st := idc.flat(st);
+		    st.has_root := old_has_root;
+		    st.root := old_root;
+		}
+	    }
+	}
+    }
+	
+    action auto_flat(s:expr,st:flatst) returns(st:flatst) = {
+	if s.is(verb.colon) {
+	    st := auto_flat_rec(s.get_arg(1),st);
+	}
+    }
+    
+    
+    object structspec = { ...
+        action defd(s:this,st:flatst,id:ident) returns (st:flatst) = {
+            var idx := s.destructors.begin;
+            while idx < s.destructors.end {
+		var e := s.destructors.value(idx);
+		st := auto_defd(e,st);
+                var lhs := e.get_arg(0);
+                if lhs isa app {
+                    lhs := lhs.get_func;
+                };
+		st := add_def_id(lhs.get_name.prefix(id),st,false,false,lhs.get_ann);
+                idx := idx.next;
+            }
+        }
+        action auto_flat_spec(s:this,st:flatst,ty:expr) returns (st:flatst) = {
+            var idx := s.destructors.begin;
+            while idx < s.destructors.end {
+                var e := s.destructors.value(idx);
+		st := auto_flat(e,st);
+                idx := idx.next;
+            }
+        }
+        action to_destrs(s:this,st:flatst,ty:expr) returns (st:flatst) = {
+            var idx := s.destructors.begin;
+            while idx < s.destructors.end {
+                var e := s.destructors.value(idx);
+		var old_has_root := st.has_root;
+		var old_root := st.root;
+		st.root := ty.get_name;
+		st.has_root := true;
+                (e,st) := e.flat(st);
+		call check_syntax_typing(e,false);
+		st.has_root := old_has_root;
+		st.root := old_root;
+                e := canon_typing(e);
+                var fty := arrow.make(ty,e.get_arg(1),e.get_ann);
+                var typing := colon.make(e.get_arg(0),fty.uncurry,e.get_ann);
+                var dstr := vardc.make(typing,true,e.get_arg(0).get_ann);
+                st.decls := st.decls.append(dstr);
+                idx := idx.next;
+            }
+        }
+    }
+
+    # Uncurry a function type, that is, translate type `t1 -> (t2 * ... * tn -> s)` to
+    # type `t1 * ... tn -> s`.
+
+    object expr = { ...
+        action uncurry(ty:expr) returns (res:expr) = {
+            var dom := times.unfold_left(ty.get_arg(0));
+            var rng := ty.get_arg(1);
+            if rng.is(verb.arrow) {
+                var dom2 := times.unfold_left(rng.get_arg(0));
+                dom := dom.extend(dom2);
+                rng := rng.get_arg(1);
+            };
+            res := arrow.make(times.fold_left(dom,ty.get_ann),rng,ty.get_ann);
+        }
+    }
+
+    action check_syntax_symbol(e:expr) = {
+	if ~(e isa symbol) {
+	    call report_error(bad_syntax.make(e),e.get_ann);
+	}
+    }
+	
+
+    object typedc = { ...
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            var res := s;
+            (res.sort,st) := s.sort.flat(st);
+            res.has_super := s.has_super;
+            if res.has_super {
+                (res.super,st) := s.super.flat(st);
+		call check_syntax_symbol(res.super);
+            };
+            if res.has_spec {
+                if s.spec isa structspec {
+                    res.has_spec := false;  # will emit destructors
+                } else {
+                    (res.spec,st) := s.spec.flat(st);
+                }
+            };
+	    if s.has_spec {
+		st := s.spec.auto_flat_spec(st,res.sort);  # emit the auto instances before the type
+	    };
+            st.decls := st.decls.append(res);
+            if s.has_spec {
+                st := s.spec.to_destrs(st,res.sort);
+            }
+	}
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            st := add_def(s.sort,st,false,false);
+            if s.has_spec {
+		st.defining := true;
+		var id := s.sort.get_name.flat(false,st);
+		st.defining := false;
+		st := s.spec.defd(st,id);
+            }
+        }
+    }
+	
+    # Get the symbol that is typed in a typing. Examples:
+    #
+    # - in `x : t`, the typed symbol is `x`
+    # - in `f(X:u) : t`, the typed symbol is `f`
+    # - in `f(X:u)` the typed symbol is `f'
+    
+    action get_typed_symbol(typing : expr) returns(res:expr) = {
+	if typing isa app {
+	    if typing.is(verb.colon) {
+		res := get_typed_symbol(typing.get_arg(0))
+	    } else if typing.is(verb.dot) {
+		res := typing
+	    } else {
+		res := get_typed_symbol(typing.get_func)
+	    }
+	} else {
+	    res := typing
+	}
+    }
+
+    action is_typing_lhs_syntax(lhs:expr) returns (res:bool,bad:expr) = {
+	res := false;
+	bad := lhs;
+	if lhs isa symbol {
+	    res := true
+	} else if lhs isa app {
+	    if lhs.get_func isa symbol {
+                res := true;
+                var args := lhs.get_args;
+                var idx := args.begin;
+                while res & idx < args.end {
+		    bad := args.value(idx);
+                    if ~bad.is(verb.colon) {
+                        res := false;
+                    } else {
+			var v := bad.get_arg(0);
+			if ~(v isa symbol & v.get_verb = verb.logvar & (bad.get_arg(1) isa symbol)) {
+                            res := false;
+			}
+                    };
+		    idx := idx.next
+                }
+	    }
+	}
+    }
+
+    action is_typing_rhs_syntax(rhs:expr) returns (res:bool,bad:expr) = {
+	res := false;
+	bad := rhs;
+	if rhs isa symbol {
+	    res := true;
+	} else if rhs.is(verb.arrow) {
+	    res := true;
+	    var dom := times.unfold_left(rhs.get_arg(0));
+            var idx := dom.begin;
+            while res & idx < dom.end {
+		bad := dom.value(idx);
+                if ~(bad isa symbol) {
+                    res := false;
+                };
+		idx := idx.next
+	    }
+	    if res & ~(rhs.get_arg(1) isa symbol) {
+		res := false;
+		bad := rhs.get_arg(1);
+	    }
+	} else {
+	    bad := rhs
+	}
+    }
+    
+    action check_syntax_typing(typing:expr,has_def:bool) = {
+	var ok : bool;
+	var bad : expr;
+        if typing.is(verb.colon) {
+	    (ok,bad) := is_typing_lhs_syntax(typing.get_arg(0));
+	    if ok {
+		if typing.get_arg(1).is(verb.arrow) & ~(typing.get_arg(0) isa symbol) {
+		    ok := false;
+		    bad := typing.get_arg(1);
+		} else {
+		    (ok,bad) := is_typing_rhs_syntax(typing.get_arg(1));
+		}
+	    }
+	} else if has_def {
+	    (ok,bad) := is_typing_lhs_syntax(typing);
+	} else {
+	    ok := false;
+	    bad := typing;
+	};
+	if ~ok {
+	    call report_error(bad_syntax.make(bad),bad.get_ann);
+	}
+    }
+
+    object vardc = { ...
+        instantiate generic_flat(this,decl)
+	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+	    st := auto_flat(s.typing,st);
+            res.is_destructor := s.is_destructor;
+            (res.typing,st) := s.typing.flat(st);
+            res.has_def := s.has_def;
+	    call check_syntax_typing(res.typing,res.has_def);
+            if res.has_def {
+                (res.def,st) := s.def.flat(st);
+            } else {
+		res.typing := canon_typing(res.typing)
+	    }
+	}
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+	    st := auto_defd(s.typing,st);
+            st := add_def(get_typed_symbol(s.typing),st,true,false);
+        }
+    }
+
+    object header = { ...
+        instantiate generic_flat(this,decl)
+	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res.filename := s.filename;
+	}
+    }
+
+    object interpdc = { ...
+        instantiate generic_flat(this,decl)
+	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            (res.itype,st) := s.itype.flat(st);
+	    call check_syntax_symbol(res.itype);
+	    st.absolute := true;
+            (res.ctype,st) := s.ctype.flat(st);
+	    call check_syntax_symbol(res.ctype);
+	    st.absolute := false;
+	}
+    }
+
+    action check_syntax_symbol_vec(s:vector[expr]) = {
+	var idx := s.begin;
+	while idx < s.end {
+	    call check_syntax_symbol(s.value(idx));
+	    idx := idx.next
+	}
+    }
+    
+    object moduledc = { ...
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            var name : expr;
+            st.defining := true;
+            (name,st) := s.name.flat(st);
+	    var idx := s.prms.begin;
+	    call check_syntax_symbol_vec(s.prms);
+            st.defining := false;
+            st.moddecls := st.moddecls.set(name.get_name,s);
+            st := add_def(s.name,st,false,false);
+        }
+    }
+
+    object instantiatedc = { ...
+        action setup(s:this,st:flatst,check:bool) returns (mod:moduledc,st:flatst) = {
+            var name : expr;
+            var prms : vector[expr];
+            (name,st) := s.name.flat(st);
+            (prms,st) := flat_exprvec(s.prms,st);
+	    if check {
+		call check_syntax_symbol(name);
+		call check_syntax_symbol_vec(prms);
+	    };
+	    if name isa symbol {
+		mod := st.moddecls.get_def(name.get_name,s.ann);
+		st.prmvals := prm_map(mod.prms,prms,s.ann);
+	    }
+        }
+
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            var mod : moduledc;
+            var old_prmvals := st.prmvals;
+            (mod,st) := s.setup(st,true);
+            st := mod.body.flat(st);
+            st.prmvals := old_prmvals;
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            var mod : moduledc;
+            var old_prmvals := st.prmvals;
+            (mod,st) := s.setup(st,false);
+            st := mod.body.defd(st);
+            st.prmvals := old_prmvals;
+        }
+    }
+
+    action set_root(st:flatst,s:expr) returns (st:flatst) = {
+	var root : expr;
+	(root,st) := s.flat(st);
+        st.root := root.get_name;
+        st.has_root := true;
+    }
+
+    object objectdc = { ...
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            var old_has_root := st.has_root;
+            var old_root := st.root;
+            st := set_root(st,s.name);
+            var odc : objectdc;
+            odc.name := symbol.make(st.root,s.name.get_ann);
+            odc.ann := s.ann;
+            st.decls := st.decls.append(odc);
+            st := s.body.flat(st);
+            st.has_root := old_has_root;
+            st.root := old_root;
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            st := add_def(s.name,st,false,true);
+            var old_has_root := st.has_root;
+            var old_root := st.root;
+            st := set_root(st,s.name);
+            st := s.body.defd(st);
+            st.has_root := old_has_root;
+            st.root := old_root;
+        }
+    }
+
+    action auto_instance_defd(s:instancedc,st:flatst) returns (st:flatst) = {
+        st.defining := true;
+        var id := s.objname.get_name.flat(false,st);
+        st.defining := false;
+	var pmap : symeval;
+	var key : ident;
+	(key,pmap) := make_auto_key(id,false);
+	var prms : vector[expr];
+	{
+	    var idx := s.prms.begin;
+	    while idx < s.prms.end {
+		prms := prms.append(pmap.get(s.prms.value(idx).get_name,s.prms.value(idx)));
+		idx := idx.next;
+	    }
+	};
+	var body : instantiatedc;
+	body.ann := s.ann;
+	body.name := s.modname;
+	body.prms := prms;
+	st.autodefs := st.autodefs.set(key,body);
+    }
+
+    object instancedc = { ...
+        action desugar(s:this) returns (res:decl) = {
+            var body := instantiatedc.make(s.modname,s.prms,s.ann);
+            res := objectdc.make(s.objname,body,s.ann);
+        }
+        
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+	    if ~s.is_auto {
+		var ds := desugar(s);  # workaround
+		st := ds.flat(st);
+	    }
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+	    if s.is_auto {
+		st := auto_instance_defd(s,st);
+	    } else {
+		var ds := desugar(s);  # workaround
+		st := ds.defd(st);
+	    }
+        }
+    }
+
+    object groupdc = { ...
+	action flat(s:this,st:flatst) returns (st:flatst) = {
+            var idx := s.decls.begin;
+            while idx < s.decls.end {
+                st := s.decls.value(idx).flat(st);
+                idx := idx.next;
+            };
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            var idx := s.decls.begin;
+            while idx < s.decls.end {
+                st := s.decls.value(idx).defd(st);
+                idx := idx.next;
+            };
+        }
+    }
+
+    object prog = { ...
+        
+
+        action flat(p:prog) returns (p:prog) = {
+            var st:flatst;
+
+            # A pass to record all the defined identifiers, We need to
+            # know which identifiers are defined to determine the
+            # scope of an object reference and to disambiguate
+            # hierarchical names from "dot" operators.
+            
+            var idx := p.decls.begin;
+            while idx < p.decls.end {
+                st := p.decls.value(idx).defd(st);
+                idx := idx.next;
+            };
+
+            # A pass to flatten. This pass expands module
+            # instantiations and expands hieracharical names of object
+            # members, so that all declarations are in global scope.
+            # Object declarations remain, but their bodies are empty.
+
+            idx := p.decls.begin;
+            while idx < p.decls.end {
+                st := p.decls.value(idx).flat(st);
+                idx := idx.next;
+            };
+            p.decls := st.decls;
+        }
+    }
+}
