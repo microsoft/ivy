@@ -197,26 +197,27 @@ after tls_client_initial_request(src:ip.endpoint,dst:ip.endpoint,nonce:cid) {
     var ikm := cid_to_bytes(nonce,8);
     var salt : stream_data := stream_data.empty;
 
-    salt := salt.append(0xef);
-    salt := salt.append(0x4f);
-    salt := salt.append(0xb0);
-    salt := salt.append(0xab);
+    salt := salt.append(0xc3);
+    salt := salt.append(0xee);
+    salt := salt.append(0xf7);
+    salt := salt.append(0x12);
+    salt := salt.append(0xc7);
+    salt := salt.append(0x2e);
+    salt := salt.append(0xbb);
+    salt := salt.append(0x5a);
+    salt := salt.append(0x11);
+    salt := salt.append(0xa7);
+    salt := salt.append(0xd2);
+    salt := salt.append(0x43);
+    salt := salt.append(0x2b);
     salt := salt.append(0xb4);
-    salt := salt.append(0x74);
-    salt := salt.append(0x70);
-    salt := salt.append(0xc4);
-    salt := salt.append(0x1b);
-    salt := salt.append(0xef);
-    salt := salt.append(0xcf);
-    salt := salt.append(0x80);
-    salt := salt.append(0x31);
-    salt := salt.append(0x33);
-    salt := salt.append(0x4f);
-    salt := salt.append(0xae);
-    salt := salt.append(0x48);
-    salt := salt.append(0x5e);
-    salt := salt.append(0x09);
-    salt := salt.append(0xa0);
+    salt := salt.append(0x63);
+    salt := salt.append(0x65);
+    salt := salt.append(0xbe);
+    salt := salt.append(0xf9);
+    salt := salt.append(0xf5);
+    salt := salt.append(0x02);
+
     call tls_api.upper.set_initial_keys(0,salt,ikm);
 }
 
@@ -241,7 +242,11 @@ action packet_scid(h:prot.header_info) returns (scid:cid) = {
     if h.hdr_long {
         scid := h.scid;
     } else {
-        scid := connected_to(h.dcid);
+        if used_cid(h.dcid) {
+            scid := connected_to(h.dcid);
+        } else {
+            scid := 0;
+        }
     }
 }
 

@@ -1,12 +1,9 @@
 import codecs
 import os
-
-from setuptools import setup, find_packages
 import platform
 
-so_ext = "so"
-if platform.system() == 'Darwin':
-    so_ext = "dylib"
+from setuptools import setup, find_packages
+
 
 # Get the long description from the README file
 here = os.path.abspath(os.path.dirname(__file__))
@@ -18,7 +15,7 @@ except:
   long_description = None
 
 setup(name='ms_ivy',
-      version='0.3',
+      version='1.7.0',
       description='IVy verification tool',
       long_description=long_description,
       url='https://github.com/microsoft/ivy',
@@ -26,7 +23,11 @@ setup(name='ms_ivy',
       author_email='nomail@example.com',
       license='MIT',
       packages=find_packages(),
-      package_data={'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.{}','lib/*.a','z3/*.{}'.format(so_ext,so_ext)]},
+      package_data=({'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.dll','lib/*.lib','z3/*.dll']}
+                    if platform.system() == 'Windows' else
+                    {'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.dylib','lib/*.a','z3/*.dylib']}
+                    if platform.system() == 'Darwin' else
+                    {'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.so','lib/*.a','z3/*.so','ivy2/s3/ivyc_s3']}),
       install_requires=[
           'ply',
           'tarjan'

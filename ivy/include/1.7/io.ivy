@@ -85,3 +85,59 @@ module path_name(name) = {
         path1 := path1.extend(path2);
     }
 }
+
+# The `stdio` module provides input/output on the standard
+# streams, that is, standard input, standard output and standard
+# error. It takes a parameter `str`, which is a type with string
+# traits.
+
+module io_stdio(str,domain,range) = {
+
+        # The `write` action writes a string to standard output.
+
+        action write(s:str) = {
+	<<<
+	for (unsigned i = 0; i < s.size(); i++) {
+	    std::cout.put(s[i]);
+        }
+	>>>
+	}
+
+        # The `write` action writes a string to standard output followed
+	# by newline.
+
+        action writeln(s:str) = {
+	<<<
+	for (unsigned i = 0; i < s.size(); i++) {
+	    std::cout.put(s[i]);
+        }
+	std::cout.put(10);
+	>>>
+        }
+
+	# The `read` action from standard input untio EOF.
+
+        action read returns (s:str) = {
+	<<<
+	int c = std::cin.get();
+        while (c >= 0) {
+            s.push_back(c);
+	    c = std::cin.get();
+        }
+	>>>
+        }
+
+	# The `readln` action reads a line from standard input, returning
+	# the line without any terminating newline character.
+
+        action readln returns (s:str) = {
+	<<<
+	int c = std::cin.get();
+        while (c >= 0 && c != 10) {
+            s.push_back(c);
+	    c = std::cin.get();
+        }
+	>>>
+    }
+}
+

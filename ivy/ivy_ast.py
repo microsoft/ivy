@@ -25,6 +25,10 @@ class AST(object):
 class NoneAST(AST):
     pass
 
+def copy_attrs(ast1,ast2):
+    if hasattr(ast1,'lineno'):
+        ast2.lineno = ast1.lineno
+    
 class Symbol(AST):
     def __init__(self,rep,sort):
         assert isinstance(rep,str)
@@ -575,6 +579,13 @@ class LabeledFormula(AST):
         res.explicit = self.explicit
         return res
 
+    def clone_with_fresh_id(self,args):
+        global lf_counter
+        res = AST.clone(self,args)
+        res.temporal = self.temporal
+        res.explicit = self.explicit
+        return res
+
 class LabeledDecl(Decl):
     def defines(self):
         if iu.get_numeric_version() <= [1,6]:
@@ -722,6 +733,19 @@ class PropertyTactic(AST):
                 + 'property ' + str(p)
                 + ('' if isinstance(n,NoneAST) else ('named ' + str(n)))
                 + ('' if isinstance(pr,NoneAST) else ('proof ' + str(pr))))
+class TacticTactic(AST):
+    @property
+    def tactic_name(self):
+        return self.args[0].rep
+    @property
+    def tactic_decls(self):
+        return self.args[1].args
+    def __str__(self):
+        res = 'tactic ' + str(self.args[0]) + str(self.args[1])
+
+class TacticWith(AST):
+    def __str__(self):
+        res = (' with ' + ' '.join(str(x) for x in self.args[1].args)) if self.args[1].args > 0 else ''
 
 class ComposeTactics(AST):
     def __str__(self):
@@ -1093,8 +1117,13 @@ class AttributeDecl(Decl):
 class TypeDef(Definition):
     def __init__(self,name,sort):
         self.args = [name,sort]
+        self.finite = False
+    def clone(self,args):
+        res = Definition.clone(self,args)
+        res.finite = self.finite
+        return res
     def __repr__(self):
-        return str(self.args[0]) + ' = ' + repr(self.args[1])
+        return ('finite ' if self.finite else '') + str(self.args[0]) + ' = ' + repr(self.args[1])
     def defines(self):
         syms =  [self.args[0].rep] + self.args[1].defines()
         return [(sym,lineno(self)) for sym in syms]
@@ -1144,6 +1173,8 @@ class ActionDef(Definition):
             res.formal_params = [rewrite_param(p,rewrite) for p in self.formal_params]
         if hasattr(self,'formal_returns'):
             res.formal_returns = [rewrite_param(p,rewrite) for p in self.formal_returns]
+        if hasattr(self,'labels'):
+            res.labels = labels
         return res
     def formals(self):
         return ([s.drop_prefix('fml:') for s in self.formal_params],
@@ -1446,6 +1477,30 @@ def substitute_constants_ast(ast,subs):
         if isinstance(ast,str):
             return ast
         new_args = [substitute_constants_ast(x,subs) for x in ast.args]
+        res = ast.clone(new_args)
+        copy_attributes_ast(ast,res)
+        return res
+
+def substitute_constants_ast2(ast,subs):
+    """
+    Substitute terms for variables in an ast. Here, subs is
+    a dict from string names of variables to terms.
+    """
+    if (isinstance(ast, Atom) or isinstance(ast,App)) and not ast.args:
+        if ast.rep in subs:
+            return subs[ast.rep]
+        names = split_name(ast.rep)
+        if names[0] in subs:
+            thing = type(ast)(compose_names(*names[1:]),ast.args)
+            thing.lineno = ast.lineno
+            res = MethodCall(subs[names[0]],thing)
+            res.lineno = ast.lineno
+            return res
+        return ast
+    else:
+        if isinstance(ast,str):
+            return ast
+        new_args = [substitute_constants_ast2(x,subs) for x in ast.args]
         res = ast.clone(new_args)
         copy_attributes_ast(ast,res)
         return res

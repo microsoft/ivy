@@ -28,39 +28,13 @@ from collections import defaultdict
 #
 ################################################################################
 
-class Trace(art.AnalysisGraph):
-    def __init__(self,clauses,model,vocab,top_level=True):
+class TraceBase(art.AnalysisGraph):
+    def __init__(self):
         art.AnalysisGraph.__init__(self)
-        self.clauses = clauses
-        self.model = model
-        self.vocab = vocab
-        mod_clauses = islv.clauses_model_to_clauses(clauses,model=model,numerals=True)
-        self.eqs = defaultdict(list)
-        for fmla in mod_clauses.fmlas:
-            if lg.is_eq(fmla):
-                lhs,rhs = fmla.args
-                if lg.is_app(lhs):
-                    self.eqs[lhs.rep].append(fmla)
-            elif isinstance(fmla,lg.Not):
-                app = fmla.args[0]
-                if lg.is_app(app):
-                    self.eqs[app.rep].append(lg.Equals(app,lg.Or()))
-            else:
-                if lg.is_app(fmla):
-                    self.eqs[fmla.rep].append(lg.Equals(fmla,lg.And()))
         self.last_action = None
         self.sub = None
         self.returned = None
-        self.top_level = top_level
 
-    def eval(self,cond):
-        truth = self.model.eval_to_constant(cond)
-        if lg.is_false(truth):
-            return False
-        elif lg.is_true(truth):
-            return True
-        assert False,truth
-        
     def is_skolem(self,sym):
         res = itr.is_skolem(sym) and not (sym.name.startswith('__') and sym.name[2:3].isupper())
         # if not res and self.top_level:
@@ -68,27 +42,13 @@ class Trace(art.AnalysisGraph):
         #     res = name.startswith('loc:') or name.startswith('fml:')
         return res
 
-    def new_state(self,env):
-        sym_pairs = []
-        for sym in self.vocab:
-            if sym not in env and not itr.is_new(sym) and not self.is_skolem(sym):
-                sym_pairs.append((sym,sym))
-        for sym,renamed_sym in env.iteritems():
-            if not itr.is_new(sym) and not self.is_skolem(sym):
-                sym_pairs.append((sym,renamed_sym))
-        self.new_state_pairs(sym_pairs,env)
 
-    def new_state_pairs(self,sym_pairs,env):
-        eqns = []
-        for sym,renamed_sym in sym_pairs:
-            rmap = {renamed_sym:sym}
-            # TODO: what if the renamed symbol is not in the model?
-            for fmla in self.eqs[renamed_sym]:
-                rfmla = lut.rename_ast(fmla,rmap)
-                eqns.append(rfmla)
+    def add_state(self,eqns):
         clauses = lut.Clauses(eqns)
         state = self.domain.new_state(clauses)
-        state.universe = self.model.universes(numerals=True)
+        univs = self.get_universes()
+        if univs is not None:
+            state.universe = univs
         if self.last_action is not None:
             expr = itp.action_app(self.last_action,self.states[-1])
             if self.returned is not None:
@@ -98,6 +58,43 @@ class Trace(art.AnalysisGraph):
             self.add(state,expr)
         else:
             self.add(state)
+
+
+    def label_from_action(self,action):
+        if hasattr(action,'label'):
+            return action.label + '\n'
+        lineno = str(action.lineno) if hasattr(action,'lineno') else ''
+        return lineno + iu.pretty(str(action),max_lines=4)
+
+    def to_lines(self,lines,hash,indent):
+        for state in self.states:
+            if hasattr(state,'expr') and state.expr is not None:
+                expr = state.expr
+                newlines = [indent * '    ' + x + '\n' for x in self.label_from_action(expr.rep).split('\n')]
+                lines.extend(newlines)
+                if hasattr(expr,'subgraph'):
+                    lines.append(indent * '    ' + '{\n')
+                    expr.subgraph.to_lines(lines,hash,indent+1)
+                    lines.append(indent * '    ' + '}\n')
+                lines.append('\n')
+            foo = False
+            for c in state.clauses.fmlas:
+                s1,s2 = map(str,c.args)
+                if not(s1 in hash and hash[s1] == s2):
+                    hash[s1] = s2
+                    if not foo:
+                        lines.append(indent * '    ' + '[\n')
+                        foo = True
+                    lines.append((indent+1) * '    ' + str(c) + '\n')
+            if foo:
+                lines.append(indent * '    ' + ']\n')
+        
+    def __str__(self):
+        lines = []
+        hash = dict()
+        self.to_lines(lines,hash,0)
+        return ''.join(lines)
+
                 
 
     def handle(self,action,env):
@@ -105,7 +102,7 @@ class Trace(art.AnalysisGraph):
         if self.sub is not None:
             self.sub.handle(action,env)
         elif isinstance(self.last_action,(act.CallAction,act.EnvAction)) and self.returned is None:
-            self.sub = Trace(self.clauses,self.model,self.vocab,False)
+            self.sub = self.clone()
             self.sub.handle(action,env)
         else:
             self.new_state(env)
@@ -123,11 +120,74 @@ class Trace(art.AnalysisGraph):
     def fail(self):
         self.last_action = itp.fail_action(self.last_action)
     def end(self):
-        sym_pairs = []
         if self.sub is not None: # return from any unfinished calls, due to assertion failure
             self.sub.end()
             self.returned = self.sub
             self.sub = None
+        self.final_state()
+
+class Trace(TraceBase):
+    def __init__(self,clauses,model,vocab,top_level=True):
+        TraceBase.__init__(self)
+        self.clauses = clauses
+        self.model = model
+        self.vocab = vocab
+        self.top_level = top_level
+        if clauses is not None:
+            mod_clauses = islv.clauses_model_to_clauses(clauses,model=model,numerals=True)
+            self.eqs = defaultdict(list)
+            for fmla in mod_clauses.fmlas:
+                if lg.is_eq(fmla):
+                    lhs,rhs = fmla.args
+                    if lg.is_app(lhs):
+                        self.eqs[lhs.rep].append(fmla)
+                elif isinstance(fmla,lg.Not):
+                    app = fmla.args[0]
+                    if lg.is_app(app):
+                        self.eqs[app.rep].append(lg.Equals(app,lg.Or()))
+                else:
+                    if lg.is_app(fmla):
+                        self.eqs[fmla.rep].append(lg.Equals(fmla,lg.And()))
+
+    def clone(self):
+        return Trace(self.clauses,self.model,self.vocab,False)
+
+    def get_universes(self):
+        return self.model.universes(numerals=True)
+        
+    def eval(self,cond):
+        truth = self.model.eval_to_constant(cond)
+        if lg.is_false(truth):
+            return False
+        elif lg.is_true(truth):
+            return True
+        assert False,truth
+        
+    def get_sym_eqs(self,sym):
+        return self.eqs[sym]
+
+    def new_state(self,env):
+        sym_pairs = []
+        for sym in self.vocab:
+            if sym not in env and not itr.is_new(sym) and not self.is_skolem(sym):
+                sym_pairs.append((sym,sym))
+        for sym,renamed_sym in env.iteritems():
+            if not itr.is_new(sym) and not self.is_skolem(sym):
+                sym_pairs.append((sym,renamed_sym))
+        self.new_state_pairs(sym_pairs,env)
+
+    def new_state_pairs(self,sym_pairs,env):
+        eqns = []
+        for sym,renamed_sym in sym_pairs:
+            rmap = {renamed_sym:sym}
+            # TODO: what if the renamed symbol is not in the model?
+            for fmla in self.get_sym_eqs(renamed_sym):
+                rfmla = lut.rename_ast(fmla,rmap)
+                eqns.append(rfmla)
+        self.add_state(eqns)
+                        
+    def final_state(self):
+        sym_pairs = []
         for sym in self.vocab:
             if not itr.is_new(sym) and not self.is_skolem(sym):
                 sym_pairs.append((sym,sym))
@@ -140,7 +200,7 @@ def make_check_art(act_name=None,precond=[]):
     ag = art.AnalysisGraph()
     
     pre = itp.State()
-    pre.clauses = lut.and_clauses(*precond)
+    pre.clauses = lut.and_clauses(*precond) if precond else lut.true_clauses()
     pre.clauses.annot = act.EmptyAnnotation()
     
     with itp.EvalContext(check=False): # don't check safety

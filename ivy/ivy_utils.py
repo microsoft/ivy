@@ -669,7 +669,9 @@ def get_default_ui_module():
 #        return sys.modules[__name__]
     else:
         defui = 'ivy_ui_' + defui
-    return __import__('ivy.'+defui).__dict__[defui]
+    prefix = ''.join(x + '.' for x in __name__.split('.')[:-1])
+    module = __import__(prefix+defui)
+    return module.__dict__[defui] if prefix else module
     
 def get_default_ui_class():
     mod = get_default_ui_module()
@@ -696,3 +698,11 @@ def dbg(*exprs):
         del frame
 
 
+def parse_int_subscripts(name):
+    things = name.split('[')
+    thy = things[0]
+    things = things[1:]
+    if not all(t.endswith(']') for t in things):
+        raise iu.IvyError(None,'bad subscript syntax: {}'.format(name))
+    prms = [int(t[:-1]) for t in things]
+    return thy,prms

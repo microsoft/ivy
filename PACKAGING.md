@@ -23,7 +23,7 @@ Ivy is packaged as a python "wheel".
 4. Upload a wheel like this:
 
         $ pip install twine
-        $ twin upload dist/*
+        $ twine upload dist/*
         
 ## Debian/Ubuntu
 

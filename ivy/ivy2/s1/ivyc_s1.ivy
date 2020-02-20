@@ -1,0 +1,32 @@
+#lang ivy1.7
+
+include reader
+include pass_flat
+include pass_typeinfer
+include ivy_to_cpp
+
+object ivy = { ...
+    action show_expr(e:expr) = {
+	call stdio.writeln(e.enc)
+    }
+
+    action testelide(inp:str) returns (res:str) = {
+        var e := expr.dec(inp);
+        var ty : expr;
+        var m : symeval;
+        m := m.set(strident.make("foo"),expr.dec("t"));
+        var st : elidest;
+        (e,st) := e.type_elide_int(false,m,st);
+        res := expr.enc(e);
+    }
+
+
+}
+
+parameter input_file_name : str
+
+after init {
+    var tmp := ivy.testelide("x");
+    call ivy.prog.file_to_cpp(input_file_name);
+}
+

@@ -30,7 +30,7 @@ also work on other Debian-based distributions.
 
 ### Prerequisites
 
-    $ sudo apt-get install python python-pip g++ cmake python-ply python-pygraphviz git python-tk tix pkg-config
+    $ sudo apt-get install python python-pip g++ cmake python-ply python-pygraphviz git python-tk tix pkg-config libssl-dev
 
 ### Install IVy
 
@@ -62,6 +62,10 @@ future.
 See the [python documentation](https://docs.python.org/2/install/) for
 general instructions on installing python packages.
 
+Optionally, build the experimental Ivy v2.0 compiler:
+
+    $ python build_v2_compiler.py
+
 ### Run
 
 Run Ivy on an example, like this:
@@ -84,39 +88,35 @@ somewhere in your emacs load path and add the following code to your
     (add-to-list 'auto-mode-alist '("\\.ivy\\'" . ivy-mode))
     (autoload 'ivy-mode  "ivy-mode.el" "Major mode for editing Ivy code" t nil)
 
-<a name="windowsnotes"></a> Windows installation from source
-============================================================
+<a name="windowsdeps"></a> Windows prerequisites
+=================================================
 
-Installing on from source on Windows can be a bit challenging, but here are a few
-suggestions that may get you through it.
+### Security exceptions
 
-### Installing Python and Python packages
+If you want to compile programs or testers in Ivy, you may need to
+install a security exception to prevent the antivirus software from
+scanning your programs each time they are run (which makes startup of
+programs very slow). This is a generic problem with compiling binary
+code on Windows. If you are using Windows 10 and your antivirus is
+Windows defender, exceptions are found under Start > Settings > Update
+& Security > Windows Security > Virus & Threat Protection > Virus &
+Threat Protection Settings > Manage Settings. Add an exception for the
+directory in which you plan to do development. This should cover all
+subdirecties as well. If you just want to do verification without
+compiling, this step is not necessary.
 
-Install Python 2.7.11 in the normal way. Before installing packages, you may also
-need to install the [Visual C++ compiler for Python](http://aka.ms/vcpython27).
+### Visual studio
 
-### Installing Z3
+Install Visual Studio 2019. You may be able to get away with other
+versions of the Visual Studio compiler tools, but only Visual Studio
+2019 is documented here.  Some free tools that might be helpful are
+available [here](https://visualstudio.microsoft.com/downloads/).
 
-Install Z3 using the instructions [here](https://github.com/Z3Prover/z3/wiki/Using-Z3Py-on-Windows).
-We will assume that you havce installed Z3 in `c:\z3`. If not, modify the instructions below accordingly.
-Make sure to follow the instructions on setting the environmenet variables `PATH` and `PYTHONPATH`.
-In addition, set environment variable `Z3DIR` to `c:\z3`.
+### Python and Python packages
 
-If things are installed correctly, the following should produce no errors:
-
-    > python
-    >>> import z3
-
-### Installing Graphviz
-
-You only need graphviz to use the Ivy GUI. For normal verification and
-testing tasks, you don't need this.  Get `graphviz-2.38` from
-[graphviz.org](http://graphviz.org). This site is often down, so you
-may have to be patient. Versions downloaded from alternative sites may
-be broken.  Install into some directory without spaces in the name,
-for example `c:/Graphviz`.
-
-### Using scripts
+Install Python 2.7.11 in the normal way. Make sure to install 64-bit
+Python. Install Python in `c:/Python27` and put `c:/Python27` in your
+PATH.
 
 The `pip` package installation utility is found in `c:/Python27/Scripts`. You should put
 this directory in your `PATH`, since the IVY command line scripts will also be installed there
@@ -125,13 +125,59 @@ by default. Try installing the `tarjan` and `ply` packages like this:
     > pip install tarjan
     > pip install ply
 
+### Graphviz
+
+You only need graphviz to use the Ivy GUI. For command line verification and
+testing tasks, you don't need this.  Get `graphviz-2.38` from
+[graphviz.org](http://graphviz.org). Install into some directory
+without spaces in the name, for example `c:/Graphviz2.38`. Make sure that
+`c:/Graphviz2.38/bin` is in your `PATH`.
+
+### OPENSSL
+
+OpenSSL binaries for Windows can be found
+[here](https://slproweb.com/products/Win32OpenSSL.html).  You need the
+full 64-bit version. Be sure to install in the default directory
+`c:\OpenSSL-Win64`. These OpenSSL binaries are missing a file
+`include/ms/applink.c`. Do this:
+
+    > mkdir c:\OpenSSL-Win64\include\ms
+    > copy c:\OpenSSL-Win64\include\openssl\applink.c c:\OpenSSL-Win64\include\ms
+
+You also need to copy the libcrypto DLL into someplace the system will
+find it:
+
+    > copy c:\OpenSSL-Win64\libcrypto-1_1-x64.dll c:\Windows\SysWOW64\
+
+### Windows SDK
+
+Install Windows SDK version 10.0.14393.0 from
+[here](https://developer.microsoft.com/en-us/windows/downloads/sdk-archive). You
+have to get exactly this version, even if you have a newer
+version. The windows build tool is very fussy about this. Note, this
+version number may change. You'll get an error mesage when compiling
+if it does. Install the version that it asks for.
+
+<a name="windowsnotes"></a> Windows installation from source
+============================================================
+
 ### Installing Ivy
 
-Now you can now try to install Ivy, like this:
+First, install the [Windows prerequisites](#windowsdeps).
+
+### Install git
+
+Install git from [here](https://gitforwindows.org). If you install it
+in `c:/Git`, then put `c:\Git\cmd` in your `PATH`.
+
+### Install Ivy
 
     > cd c:\
     > git clone https://github.com/Microsoft/ivy.git
     > cd ivy
+    > git submodule init
+    > git submodule update
+    > python build_submodules
     > python setup.py develop
 
 Using the `develop` command instead of `install` is helpful, since you
@@ -143,14 +189,8 @@ or pull a new version.  If you have put `c:/Python27/Scripts` in your
 
 Or, if you only want to use Ivy on the command line, test it like this:
 
-    > ivy_check trace=true doc/examples/client_server_example_new.ivy
+    > ivy_check trace=true doc/examples/client_server_example.ivy
     
-Ivy should print out a counterexample trace.
-
-To be able to compile Ivy programs or Ivy testers, you also need to
-have some verison of Visual Studio installed. At a minimum you need the
-command line build tools for C++ installed. You can get them free of charge
-[here](https://visualstudio.microsoft.com/downloads/). 
 
 <a name="macnotes"></a> Installation from source on MacOS High Sierra and Mojave
 ================================================================================
@@ -161,7 +201,7 @@ These instructions have been tested for macOS 10.12 Sierra up to macOS
 1. Install Xcode from App Store
 2. Install Xcode command line tools
 
-        xcode-select --install
+        $ xcode-select --install
 
 3. Install Xserver
 
@@ -222,18 +262,19 @@ These instructions have been tested for macOS 10.12 Sierra up to macOS
         $ ivy_check diagnose=true client_server_example.ivy
 
 
-<a name="release"></a> Binary releases
+<a name="binary"></a> Binary releases
 --------------------
 
 Ivy is released as a Python package in the PyPI repository.
 
 ### <a name="linuxbinary"> Install binary release on Linux
 
-    $ sudo apt-get install python python-pip g++ python-ply python-pygraphviz python-tk tix
+    $ sudo apt-get install python python-pip g++ python-ply python-pygraphviz python-tk tix libssl-dev
     $ sudo pip install ms-ivy
 
-Note, if you omit `sudo` in the second command, Ivy will be installed into `~\.local\bin`.
-In this case, you should put this directory in your `PATH`. 
+Note, if you omit `sudo` in the second command, Ivy will be installed
+into `~\.local\bin`, which is probably not what you want, so be
+careful.
 
 This does not install the documentation and example files. You can get
 these from github like this (see the directory `ivy\doc`):
@@ -244,7 +285,15 @@ these from github like this (see the directory `ivy\doc`):
 
 ### <a name="windowsbinary"> Install binary release on Windows
 
-Windows binary distributions are not yet available.
+First, install the [Windows prerequisites](#windowsdeps).
+
+Then install the Ivy binaries:
+
+    > pip install ms-ivy
+
+This does not install the documentation and example files. You can get
+these from the source repository. See [Windows installation from
+source](#windowsnotes).
 
 ### <a name="macbinary"> Install binary release on Mac
 

@@ -20,11 +20,666 @@ import itertools
 import ivy_cpp
 import ivy_cpp_types
 import ivy_fragment as ifc
+import sys
+import os
 
 
 from collections import defaultdict
 from operator import mul
 import re
+
+hash_h = """
+/*++
+  Copyright (c) Microsoft Corporation
+
+  This hash template is borrowed from Microsoft Z3
+  (https://github.com/Z3Prover/z3).
+
+  Simple implementation of bucket-list hash tables conforming roughly
+  to SGI hash_map and hash_set interfaces, though not all members are
+  implemented.
+
+  These hash tables have the property that insert preserves iterators
+  and references to elements.
+
+  This package lives in namespace hash_space. Specializations of
+  class "hash" should be made in this namespace.
+
+  --*/
+
+#pragma once
+
+#ifndef HASH_H
+#define HASH_H
+
+#ifdef _WINDOWS
+#pragma warning(disable:4267)
+#endif
+
+#include <string>
+#include <vector>
+#include <iterator>
+#include <fstream>
+
+namespace hash_space {
+
+    unsigned string_hash(const char * str, unsigned length, unsigned init_value);
+
+    template <typename T> class hash {
+    public:
+        size_t operator()(const T &s) const {
+            return s.__hash();
+        }
+    };
+
+    template <>
+        class hash<int> {
+    public:
+        size_t operator()(const int &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<long long> {
+    public:
+        size_t operator()(const long long &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<unsigned> {
+    public:
+        size_t operator()(const unsigned &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<unsigned long long> {
+    public:
+        size_t operator()(const unsigned long long &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<bool> {
+    public:
+        size_t operator()(const bool &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<std::string> {
+    public:
+        size_t operator()(const std::string &s) const {
+            return string_hash(s.c_str(), (unsigned)s.size(), 0);
+        }
+    };
+
+    template <>
+        class hash<std::pair<int,int> > {
+    public:
+        size_t operator()(const std::pair<int,int> &p) const {
+            return p.first + p.second;
+        }
+    };
+
+    template <typename T>
+        class hash<std::vector<T> > {
+    public:
+        size_t operator()(const std::vector<T> &p) const {
+            hash<T> h;
+            size_t res = 0;
+            for (unsigned i = 0; i < p.size(); i++)
+                res += h(p[i]);
+            return res;
+        }
+    };
+
+    template <class T>
+        class hash<std::pair<T *, T *> > {
+    public:
+        size_t operator()(const std::pair<T *,T *> &p) const {
+            return (size_t)p.first + (size_t)p.second;
+        }
+    };
+
+    template <class T>
+        class hash<T *> {
+    public:
+        size_t operator()(T * const &p) const {
+            return (size_t)p;
+        }
+    };
+
+    enum { num_primes = 29 };
+
+    static const unsigned long primes[num_primes] =
+        {
+            7ul,
+            53ul,
+            97ul,
+            193ul,
+            389ul,
+            769ul,
+            1543ul,
+            3079ul,
+            6151ul,
+            12289ul,
+            24593ul,
+            49157ul,
+            98317ul,
+            196613ul,
+            393241ul,
+            786433ul,
+            1572869ul,
+            3145739ul,
+            6291469ul,
+            12582917ul,
+            25165843ul,
+            50331653ul,
+            100663319ul,
+            201326611ul,
+            402653189ul,
+            805306457ul,
+            1610612741ul,
+            3221225473ul,
+            4294967291ul
+        };
+
+    inline unsigned long next_prime(unsigned long n) {
+        const unsigned long* to = primes + (int)num_primes;
+        for(const unsigned long* p = primes; p < to; p++)
+            if(*p >= n) return *p;
+        return primes[num_primes-1];
+    }
+
+    template<class Value, class Key, class HashFun, class GetKey, class KeyEqFun>
+        class hashtable
+    {
+    public:
+
+        typedef Value &reference;
+        typedef const Value &const_reference;
+    
+        struct Entry
+        {
+            Entry* next;
+            Value val;
+      
+        Entry(const Value &_val) : val(_val) {next = 0;}
+        };
+    
+
+        struct iterator
+        {      
+            Entry* ent;
+            hashtable* tab;
+
+            typedef std::forward_iterator_tag iterator_category;
+            typedef Value value_type;
+            typedef std::ptrdiff_t difference_type;
+            typedef size_t size_type;
+            typedef Value& reference;
+            typedef Value* pointer;
+
+        iterator(Entry* _ent, hashtable* _tab) : ent(_ent), tab(_tab) { }
+
+            iterator() { }
+
+            Value &operator*() const { return ent->val; }
+
+            Value *operator->() const { return &(operator*()); }
+
+            iterator &operator++() {
+                Entry *old = ent;
+                ent = ent->next;
+                if (!ent) {
+                    size_t bucket = tab->get_bucket(old->val);
+                    while (!ent && ++bucket < tab->buckets.size())
+                        ent = tab->buckets[bucket];
+                }
+                return *this;
+            }
+
+            iterator operator++(int) {
+                iterator tmp = *this;
+                operator++();
+                return tmp;
+            }
+
+
+            bool operator==(const iterator& it) const { 
+                return ent == it.ent;
+            }
+
+            bool operator!=(const iterator& it) const {
+                return ent != it.ent;
+            }
+        };
+
+        struct const_iterator
+        {      
+            const Entry* ent;
+            const hashtable* tab;
+
+            typedef std::forward_iterator_tag iterator_category;
+            typedef Value value_type;
+            typedef std::ptrdiff_t difference_type;
+            typedef size_t size_type;
+            typedef const Value& reference;
+            typedef const Value* pointer;
+
+        const_iterator(const Entry* _ent, const hashtable* _tab) : ent(_ent), tab(_tab) { }
+
+            const_iterator() { }
+
+            const Value &operator*() const { return ent->val; }
+
+            const Value *operator->() const { return &(operator*()); }
+
+            const_iterator &operator++() {
+                const Entry *old = ent;
+                ent = ent->next;
+                if (!ent) {
+                    size_t bucket = tab->get_bucket(old->val);
+                    while (!ent && ++bucket < tab->buckets.size())
+                        ent = tab->buckets[bucket];
+                }
+                return *this;
+            }
+
+            const_iterator operator++(int) {
+                const_iterator tmp = *this;
+                operator++();
+                return tmp;
+            }
+
+
+            bool operator==(const const_iterator& it) const { 
+                return ent == it.ent;
+            }
+
+            bool operator!=(const const_iterator& it) const {
+                return ent != it.ent;
+            }
+        };
+
+    private:
+
+        typedef std::vector<Entry*> Table;
+
+        Table buckets;
+        size_t entries;
+        HashFun hash_fun ;
+        GetKey get_key;
+        KeyEqFun key_eq_fun;
+    
+    public:
+
+    hashtable(size_t init_size) : buckets(init_size,(Entry *)0) {
+            entries = 0;
+        }
+    
+        hashtable(const hashtable& other) {
+            dup(other);
+        }
+
+        hashtable& operator= (const hashtable& other) {
+            if (&other != this)
+                dup(other);
+            return *this;
+        }
+
+        ~hashtable() {
+            clear();
+        }
+
+        size_t size() const { 
+            return entries;
+        }
+
+        bool empty() const { 
+            return size() == 0;
+        }
+
+        void swap(hashtable& other) {
+            buckets.swap(other.buckets);
+            std::swap(entries, other.entries);
+        }
+    
+        iterator begin() {
+            for (size_t i = 0; i < buckets.size(); ++i)
+                if (buckets[i])
+                    return iterator(buckets[i], this);
+            return end();
+        }
+    
+        iterator end() { 
+            return iterator(0, this);
+        }
+
+        const_iterator begin() const {
+            for (size_t i = 0; i < buckets.size(); ++i)
+                if (buckets[i])
+                    return const_iterator(buckets[i], this);
+            return end();
+        }
+    
+        const_iterator end() const { 
+            return const_iterator(0, this);
+        }
+    
+        size_t get_bucket(const Value& val, size_t n) const {
+            return hash_fun(get_key(val)) % n;
+        }
+    
+        size_t get_key_bucket(const Key& key) const {
+            return hash_fun(key) % buckets.size();
+        }
+
+        size_t get_bucket(const Value& val) const {
+            return get_bucket(val,buckets.size());
+        }
+
+        Entry *lookup(const Value& val, bool ins = false)
+        {
+            resize(entries + 1);
+
+            size_t n = get_bucket(val);
+            Entry* from = buckets[n];
+      
+            for (Entry* ent = from; ent; ent = ent->next)
+                if (key_eq_fun(get_key(ent->val), get_key(val)))
+                    return ent;
+      
+            if(!ins) return 0;
+
+            Entry* tmp = new Entry(val);
+            tmp->next = from;
+            buckets[n] = tmp;
+            ++entries;
+            return tmp;
+        }
+
+        Entry *lookup_key(const Key& key) const
+        {
+            size_t n = get_key_bucket(key);
+            Entry* from = buckets[n];
+      
+            for (Entry* ent = from; ent; ent = ent->next)
+                if (key_eq_fun(get_key(ent->val), key))
+                    return ent;
+      
+            return 0;
+        }
+
+        const_iterator find(const Key& key) const {
+            return const_iterator(lookup_key(key),this);
+        }
+
+        iterator find(const Key& key) {
+            return iterator(lookup_key(key),this);
+        }
+
+        std::pair<iterator,bool> insert(const Value& val){
+            size_t old_entries = entries;
+            Entry *ent = lookup(val,true);
+            return std::pair<iterator,bool>(iterator(ent,this),entries > old_entries);
+        }
+    
+        iterator insert(const iterator &it, const Value& val){
+            Entry *ent = lookup(val,true);
+            return iterator(ent,this);
+        }
+
+        size_t erase(const Key& key)
+        {
+            Entry** p = &(buckets[get_key_bucket(key)]);
+            size_t count = 0;
+            while(*p){
+                Entry *q = *p;
+                if (key_eq_fun(get_key(q->val), key)) {
+                    ++count;
+                    *p = q->next;
+                    delete q;
+                }
+                else
+                    p = &(q->next);
+            }
+            entries -= count;
+            return count;
+        }
+
+        void resize(size_t new_size) {
+            const size_t old_n = buckets.size();
+            if (new_size <= old_n) return;
+            const size_t n = next_prime(new_size);
+            if (n <= old_n) return;
+            Table tmp(n, (Entry*)(0));
+            for (size_t i = 0; i < old_n; ++i) {
+                Entry* ent = buckets[i];
+                while (ent) {
+                    size_t new_bucket = get_bucket(ent->val, n);
+                    buckets[i] = ent->next;
+                    ent->next = tmp[new_bucket];
+                    tmp[new_bucket] = ent;
+                    ent = buckets[i];
+                }
+            }
+            buckets.swap(tmp);
+        }
+    
+        void clear()
+        {
+            for (size_t i = 0; i < buckets.size(); ++i) {
+                for (Entry* ent = buckets[i]; ent != 0;) {
+                    Entry* next = ent->next;
+                    delete ent;
+                    ent = next;
+                }
+                buckets[i] = 0;
+            }
+            entries = 0;
+        }
+
+        void dup(const hashtable& other)
+        {
+            clear();
+            buckets.resize(other.buckets.size());
+            for (size_t i = 0; i < other.buckets.size(); ++i) {
+                Entry** to = &buckets[i];
+                for (Entry* from = other.buckets[i]; from; from = from->next)
+                    to = &((*to = new Entry(from->val))->next);
+            }
+            entries = other.entries;
+        }
+    };
+
+    template <typename T> 
+        class equal {
+    public:
+        bool operator()(const T& x, const T &y) const {
+            return x == y;
+        }
+    };
+
+    template <typename T>
+        class identity {
+    public:
+        const T &operator()(const T &x) const {
+            return x;
+        }
+    };
+
+    template <typename T, typename U>
+        class proj1 {
+    public:
+        const T &operator()(const std::pair<T,U> &x) const {
+            return x.first;
+        }
+    };
+
+    template <typename Element, class HashFun = hash<Element>, 
+        class EqFun = equal<Element> >
+        class hash_set
+        : public hashtable<Element,Element,HashFun,identity<Element>,EqFun> {
+
+    public:
+
+    typedef Element value_type;
+
+    hash_set()
+    : hashtable<Element,Element,HashFun,identity<Element>,EqFun>(7) {}
+    };
+
+    template <typename Key, typename Value, class HashFun = hash<Key>, 
+        class EqFun = equal<Key> >
+        class hash_map
+        : public hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun> {
+
+    public:
+
+    hash_map()
+    : hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun>(7) {}
+
+    Value &operator[](const Key& key) {
+	std::pair<Key,Value> kvp(key,Value());
+	return 
+	hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun>::
+        lookup(kvp,true)->val.second;
+    }
+    };
+
+    template <typename D,typename R>
+        class hash<hash_map<D,R> > {
+    public:
+        size_t operator()(const hash_map<D,R> &p) const {
+            hash<D > h1;
+            hash<R > h2;
+            size_t res = 0;
+            
+            for (typename hash_map<D,R>::const_iterator it=p.begin(), en=p.end(); it!=en; ++it)
+                res += (h1(it->first)+h2(it->second));
+            return res;
+        }
+    };
+
+    template <typename D,typename R>
+    inline bool operator ==(const hash_map<D,R> &s, const hash_map<D,R> &t){
+        for (typename hash_map<D,R>::const_iterator it=s.begin(), en=s.end(); it!=en; ++it) {
+            typename hash_map<D,R>::const_iterator it2 = t.find(it->first);
+            if (it2 == t.end() || !(it->second == it2->second)) return false;
+        }
+        for (typename hash_map<D,R>::const_iterator it=t.begin(), en=t.end(); it!=en; ++it) {
+            typename hash_map<D,R>::const_iterator it2 = s.find(it->first);
+            if (it2 == t.end() || !(it->second == it2->second)) return false;
+        }
+        return true;
+    }
+}
+#endif
+"""
+
+hash_cpp = """
+/*++
+Copyright (c) Microsoft Corporation
+
+This string hash function is borrowed from Microsoft Z3
+(https://github.com/Z3Prover/z3). 
+
+--*/
+
+
+#define mix(a,b,c)              \\
+{                               \\
+  a -= b; a -= c; a ^= (c>>13); \\
+  b -= c; b -= a; b ^= (a<<8);  \\
+  c -= a; c -= b; c ^= (b>>13); \\
+  a -= b; a -= c; a ^= (c>>12); \\
+  b -= c; b -= a; b ^= (a<<16); \\
+  c -= a; c -= b; c ^= (b>>5);  \\
+  a -= b; a -= c; a ^= (c>>3);  \\
+  b -= c; b -= a; b ^= (a<<10); \\
+  c -= a; c -= b; c ^= (b>>15); \\
+}
+
+#ifndef __fallthrough
+#define __fallthrough
+#endif
+
+namespace hash_space {
+
+// I'm using Bob Jenkin's hash function.
+// http://burtleburtle.net/bob/hash/doobs.html
+unsigned string_hash(const char * str, unsigned length, unsigned init_value) {
+    register unsigned a, b, c, len;
+
+    /* Set up the internal state */
+    len = length;
+    a = b = 0x9e3779b9;  /* the golden ratio; an arbitrary value */
+    c = init_value;      /* the previous hash value */
+
+    /*---------------------------------------- handle most of the key */
+    while (len >= 12) {
+        a += reinterpret_cast<const unsigned *>(str)[0];
+        b += reinterpret_cast<const unsigned *>(str)[1];
+        c += reinterpret_cast<const unsigned *>(str)[2];
+        mix(a,b,c);
+        str += 12; len -= 12;
+    }
+
+    /*------------------------------------- handle the last 11 bytes */
+    c += length;
+    switch(len) {        /* all the case statements fall through */
+    case 11: 
+        c+=((unsigned)str[10]<<24);
+        __fallthrough;
+    case 10: 
+        c+=((unsigned)str[9]<<16);
+        __fallthrough;
+    case 9 : 
+        c+=((unsigned)str[8]<<8);
+        __fallthrough;
+        /* the first byte of c is reserved for the length */
+    case 8 : 
+        b+=((unsigned)str[7]<<24);
+        __fallthrough;
+    case 7 : 
+        b+=((unsigned)str[6]<<16);
+        __fallthrough;
+    case 6 : 
+        b+=((unsigned)str[5]<<8);
+        __fallthrough;
+    case 5 : 
+        b+=str[4];
+        __fallthrough;
+    case 4 : 
+        a+=((unsigned)str[3]<<24);
+        __fallthrough;
+    case 3 : 
+        a+=((unsigned)str[2]<<16);
+        __fallthrough;
+    case 2 : 
+        a+=((unsigned)str[1]<<8);
+        __fallthrough;
+    case 1 : 
+        a+=str[0];
+        __fallthrough;
+        /* case 0: nothing left to add */
+    }
+    mix(a,b,c);
+    /*-------------------------------------------- report the result */
+    return c;
+}
+
+}
+
+"""
 
 def all_state_symbols():
     syms = il.all_symbols()
@@ -301,8 +956,15 @@ def hashtype(sort,classname=None):
 def has_string_interp(sort):
     return il.sort_interp(sort) == 'strlit'    
 
+def is_numeric_range(sort):
+    s = sort.extension[0]
+    return s[0].isdigit() or (s[0] == '-' and len(s) > 1 and s[1].isdigit)
+
+
 def ctype_remaining_cases(sort,classname):
     if isinstance(sort,il.EnumeratedSort):
+        if is_numeric_range(sort):
+            return 'int'
         return ((classname+'::') if classname != None else '') + varname(sort.name)
     if sort.is_relational():
         return 'bool'
@@ -512,10 +1174,11 @@ def emit_cpp_sorts(header):
             header.append("    };\n");
         elif isinstance(il.sig.sorts[name],il.EnumeratedSort):
             sort = il.sig.sorts[name]
-            header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
-        elif name in il.sig.interp and isinstance(il.sig.interp[name],il.EnumeratedSort):
-            sort = il.sig.interp[name]
-            header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
+            if not is_numeric_range(sort):
+                header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
+            elif name in il.sig.interp and isinstance(il.sig.interp[name],il.EnumeratedSort):
+                sort = il.sig.interp[name]
+                header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
         elif name in im.module.variants:
             sort = il.sig.sorts[name]
             cpptype = ivy_cpp_types.VariantType(varname(name),sort,[(s,ctypefull(s,classname=the_classname)) for s in im.module.variants[name]])
@@ -1328,6 +1991,9 @@ def may_alias(x,y):
 
 def emit_param_decls(header,name,params,extra=[],classname=None,ptypes=None):
     header.append(funname(name) + '(')
+    for p in params:
+        if il.is_function_sort(p.sort):
+            raise(iu.IvyError(None,'Cannot compile parameter {} with function sort'.format(p)))
     header.append(', '.join(extra + [ctype(p.sort,classname=classname,ptype = ptypes[idx] if ptypes else None) + ' ' + varname(p.name) for idx,p in enumerate(params)]))
     header.append(')')
 
@@ -1402,7 +2068,7 @@ def emit_some_action(header,impl,name,action,classname,inline=False):
         indent(code)
         p = action.formal_returns[0]
         if p not in action.formal_params:
-            code.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
+            code.append(ctypefull(p.sort,classname=classname) + ' ' + varname(p.name) + ';\n')
             mk_nondet_sym(code,p,p.name,0)
     with ivy_ast.ASTContext(action):
         action.emit(code)
@@ -1655,6 +2321,7 @@ def find_import_callers():
         name = imp.imported()
         if not imp.scope() and name in im.module.actions:
             import_callers.add('ext:' + name[5:])
+            import_callers.add(name[5:])
             
 def module_to_cpp_class(classname,basename):
     global the_classname
@@ -1749,6 +2416,7 @@ def module_to_cpp_class(classname,basename):
     header.append('class ' + classname + ' {\n  public:\n')
     header.append("    typedef {} ivy_class;\n".format(classname))
     header.append("""
+    std::vector<std::string> __argv;
 #ifdef _WIN32
     void *mutex;  // forward reference to HANDLE
 #else
@@ -2969,6 +3637,7 @@ class z3_thunk : public thunk<D,R> {
     int seed = 1;
     int sleep_ms = 10;
     int final_ms = 0; 
+    
     std::vector<char *> pargs; // positional args
     pargs.push_back(argv[0]);
     for (int i = 1; i < argc; i++) {
@@ -3067,6 +3736,7 @@ class z3_thunk : public thunk<D,R> {
                     impl.append('    initializing = true;\n')
                 impl.append('    {}_repl ivy{};\n'
                             .format(classname,cp))
+                impl.append('    for(unsigned i = 0; i < argc; i++) {ivy.__argv.push_back(argv[i]);}\n')
                 if target.get() == "test":
                     impl.append('    ivy._generating = false;\n')
                     emit_repl_boilerplate3test(header,impl,classname)
@@ -3215,8 +3885,8 @@ def emit_one_initial_state(header):
                 assign_symbol_from_model(header,sym,m)
             else:
                 mk_nondet_sym(header,sym,'init',0)
-    action = ia.Sequence(*[a for n,a in im.module.initializers])
-    action.emit(header)
+#    action = ia.Sequence(*[a for n,a in im.module.initializers])
+#    action.emit(header)
 
 def emit_parameter_assignments(impl):
     for sym in im.module.params:
@@ -4794,9 +5464,9 @@ public:
         if (range.is_bool())
             return ctx.bool_val((bool)value);
         if (range.is_bv())
-            return ctx.bv_val(value,range.bv_size());
+            return ctx.bv_val((int)value,range.bv_size());
         if (range.is_int())
-            return ctx.int_val(value);
+            return ctx.int_val((int)value);
         return enum_values.find(range)->second[(int)value]();
     }
 
@@ -5069,6 +5739,17 @@ def main_int(is_ivyc):
         global emit_main
         emit_main = False
         
+    with iu.ErrorPrinter():
+        if len(sys.argv) == 2 and ic.get_file_version(sys.argv[1]) >= [2]:
+            if not target.get() == 'repl' and emit_main:
+                raise iu.IvyError(None,'Version 2 compiler supports only target=repl')
+            cdir = os.path.join(os.path.dirname(__file__), 'ivy2/s3')
+            cmd = 'IVY_INCLUDE_PATH={} {} {}'.format(os.path.join(cdir,'include'),os.path.join(cdir,'ivyc_s3'),sys.argv[1])
+            print cmd
+            sys.stdout.flush()
+            status = os.system(cmd)
+            exit(status)
+
 
     with im.Module():
         if target.get() == 'test':
@@ -5112,13 +5793,18 @@ def main_int(is_ivyc):
                 if isolates == [None] and not iu.version_le(iu.get_string_version(),"1.6"):
                     isolates = ['this']
 
-        import sys
         import json
         for isolate in isolates:
             with im.module.copy():
                 with iu.ErrorPrinter():
 
-                    import os
+
+                    def do_cmd(cmd):
+                        print cmd
+                        status = os.system(cmd)
+                        if status:
+                            exit(1)
+    
                     if isolate:
                         if len(isolates) > 1:
                             print "Compiling isolate {}...".format(isolate)
@@ -5183,14 +5869,21 @@ def main_int(is_ivyc):
                             else:
                                 libspec += ''.join(' -l' + ll for ll in y.rep.strip('"').split(',') if not ll.endswith('.lib'))
                     if platform.system() == 'Windows':
-                        if 'Z3DIR' in os.environ:
-                            incspec = '/I %Z3DIR%\\include'
-                            libpspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
-                        else:
-                            import z3
-                            z3path = os.path.dirname(os.path.abspath(z3.__file__))
-                            incspec = '/I {}'.format(z3path)
-                            libpspec = '/LIBPATH:{}'.format(z3path)
+                        # if 'Z3DIR' in os.environ:
+                        #     incspec = '/I %Z3DIR%\\include'
+                        #     libpspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
+                        # else:
+                        #     import z3
+                        #     z3path = os.path.dirname(os.path.abspath(z3.__file__))
+                        #     incspec = '/I {}'.format(z3path)
+                        #     libpspec = '/LIBPATH:{}'.format(z3path)
+                        _dir = os.path.dirname(os.path.abspath(__file__))
+                        incspec = '/I {}'.format(os.path.join(_dir,'include'))
+                        libpspec = '/LIBPATH:{}'.format(os.path.join(_dir,'lib'))
+                        if not os.path.exists('libz3.dll'):
+                            print 'Copying libz3.dll to current directory.'
+                            print 'If the binary {}.exe is moved to another directory, this file must also be moved.'.format(basename)
+                            do_cmd('copy {} libz3.dll'.format(os.path.join(_dir,'lib','libz3.dll')))
                         for lib in libs:
                             _incdir = lib[1] if len(lib) >= 2 else []
                             _libdir = lib[2] if len(lib) >= 3 else []
@@ -5242,7 +5935,6 @@ def outfile(name):
     return (opt_outdir.get() + '/' + name) if opt_outdir.get() else name
         
 def find_vs():
-    import os
     try:
         windir = os.getenv('WINDIR')
         drive = windir[0]
@@ -5256,657 +5948,5 @@ def find_vs():
     raise iu.IvyError(None,'Cannot find a suitable version of Visual Studio (require 10.0-15.0)')
 
 if __name__ == "__main__":
-    main()
+    main_int(True)
         
-hash_h = """
-/*++
-  Copyright (c) Microsoft Corporation
-
-  This hash template is borrowed from Microsoft Z3
-  (https://github.com/Z3Prover/z3).
-
-  Simple implementation of bucket-list hash tables conforming roughly
-  to SGI hash_map and hash_set interfaces, though not all members are
-  implemented.
-
-  These hash tables have the property that insert preserves iterators
-  and references to elements.
-
-  This package lives in namespace hash_space. Specializations of
-  class "hash" should be made in this namespace.
-
-  --*/
-
-#pragma once
-
-#ifndef HASH_H
-#define HASH_H
-
-#ifdef _WINDOWS
-#pragma warning(disable:4267)
-#endif
-
-#include <string>
-#include <vector>
-#include <iterator>
-#include <fstream>
-
-namespace hash_space {
-
-    unsigned string_hash(const char * str, unsigned length, unsigned init_value);
-
-    template <typename T> class hash {
-    public:
-        size_t operator()(const T &s) const {
-            return s.__hash();
-        }
-    };
-
-    template <>
-        class hash<int> {
-    public:
-        size_t operator()(const int &s) const {
-            return s;
-        }
-    };
-
-    template <>
-        class hash<long long> {
-    public:
-        size_t operator()(const long long &s) const {
-            return s;
-        }
-    };
-
-    template <>
-        class hash<unsigned> {
-    public:
-        size_t operator()(const unsigned &s) const {
-            return s;
-        }
-    };
-
-    template <>
-        class hash<unsigned long long> {
-    public:
-        size_t operator()(const unsigned long long &s) const {
-            return s;
-        }
-    };
-
-    template <>
-        class hash<bool> {
-    public:
-        size_t operator()(const bool &s) const {
-            return s;
-        }
-    };
-
-    template <>
-        class hash<std::string> {
-    public:
-        size_t operator()(const std::string &s) const {
-            return string_hash(s.c_str(), (unsigned)s.size(), 0);
-        }
-    };
-
-    template <>
-        class hash<std::pair<int,int> > {
-    public:
-        size_t operator()(const std::pair<int,int> &p) const {
-            return p.first + p.second;
-        }
-    };
-
-    template <typename T>
-        class hash<std::vector<T> > {
-    public:
-        size_t operator()(const std::vector<T> &p) const {
-            hash<T> h;
-            size_t res = 0;
-            for (unsigned i = 0; i < p.size(); i++)
-                res += h(p[i]);
-            return res;
-        }
-    };
-
-    template <class T>
-        class hash<std::pair<T *, T *> > {
-    public:
-        size_t operator()(const std::pair<T *,T *> &p) const {
-            return (size_t)p.first + (size_t)p.second;
-        }
-    };
-
-    template <class T>
-        class hash<T *> {
-    public:
-        size_t operator()(T * const &p) const {
-            return (size_t)p;
-        }
-    };
-
-    enum { num_primes = 29 };
-
-    static const unsigned long primes[num_primes] =
-        {
-            7ul,
-            53ul,
-            97ul,
-            193ul,
-            389ul,
-            769ul,
-            1543ul,
-            3079ul,
-            6151ul,
-            12289ul,
-            24593ul,
-            49157ul,
-            98317ul,
-            196613ul,
-            393241ul,
-            786433ul,
-            1572869ul,
-            3145739ul,
-            6291469ul,
-            12582917ul,
-            25165843ul,
-            50331653ul,
-            100663319ul,
-            201326611ul,
-            402653189ul,
-            805306457ul,
-            1610612741ul,
-            3221225473ul,
-            4294967291ul
-        };
-
-    inline unsigned long next_prime(unsigned long n) {
-        const unsigned long* to = primes + (int)num_primes;
-        for(const unsigned long* p = primes; p < to; p++)
-            if(*p >= n) return *p;
-        return primes[num_primes-1];
-    }
-
-    template<class Value, class Key, class HashFun, class GetKey, class KeyEqFun>
-        class hashtable
-    {
-    public:
-
-        typedef Value &reference;
-        typedef const Value &const_reference;
-    
-        struct Entry
-        {
-            Entry* next;
-            Value val;
-      
-        Entry(const Value &_val) : val(_val) {next = 0;}
-        };
-    
-
-        struct iterator
-        {      
-            Entry* ent;
-            hashtable* tab;
-
-            typedef std::forward_iterator_tag iterator_category;
-            typedef Value value_type;
-            typedef std::ptrdiff_t difference_type;
-            typedef size_t size_type;
-            typedef Value& reference;
-            typedef Value* pointer;
-
-        iterator(Entry* _ent, hashtable* _tab) : ent(_ent), tab(_tab) { }
-
-            iterator() { }
-
-            Value &operator*() const { return ent->val; }
-
-            Value *operator->() const { return &(operator*()); }
-
-            iterator &operator++() {
-                Entry *old = ent;
-                ent = ent->next;
-                if (!ent) {
-                    size_t bucket = tab->get_bucket(old->val);
-                    while (!ent && ++bucket < tab->buckets.size())
-                        ent = tab->buckets[bucket];
-                }
-                return *this;
-            }
-
-            iterator operator++(int) {
-                iterator tmp = *this;
-                operator++();
-                return tmp;
-            }
-
-
-            bool operator==(const iterator& it) const { 
-                return ent == it.ent;
-            }
-
-            bool operator!=(const iterator& it) const {
-                return ent != it.ent;
-            }
-        };
-
-        struct const_iterator
-        {      
-            const Entry* ent;
-            const hashtable* tab;
-
-            typedef std::forward_iterator_tag iterator_category;
-            typedef Value value_type;
-            typedef std::ptrdiff_t difference_type;
-            typedef size_t size_type;
-            typedef const Value& reference;
-            typedef const Value* pointer;
-
-        const_iterator(const Entry* _ent, const hashtable* _tab) : ent(_ent), tab(_tab) { }
-
-            const_iterator() { }
-
-            const Value &operator*() const { return ent->val; }
-
-            const Value *operator->() const { return &(operator*()); }
-
-            const_iterator &operator++() {
-                const Entry *old = ent;
-                ent = ent->next;
-                if (!ent) {
-                    size_t bucket = tab->get_bucket(old->val);
-                    while (!ent && ++bucket < tab->buckets.size())
-                        ent = tab->buckets[bucket];
-                }
-                return *this;
-            }
-
-            const_iterator operator++(int) {
-                const_iterator tmp = *this;
-                operator++();
-                return tmp;
-            }
-
-
-            bool operator==(const const_iterator& it) const { 
-                return ent == it.ent;
-            }
-
-            bool operator!=(const const_iterator& it) const {
-                return ent != it.ent;
-            }
-        };
-
-    private:
-
-        typedef std::vector<Entry*> Table;
-
-        Table buckets;
-        size_t entries;
-        HashFun hash_fun ;
-        GetKey get_key;
-        KeyEqFun key_eq_fun;
-    
-    public:
-
-    hashtable(size_t init_size) : buckets(init_size,(Entry *)0) {
-            entries = 0;
-        }
-    
-        hashtable(const hashtable& other) {
-            dup(other);
-        }
-
-        hashtable& operator= (const hashtable& other) {
-            if (&other != this)
-                dup(other);
-            return *this;
-        }
-
-        ~hashtable() {
-            clear();
-        }
-
-        size_t size() const { 
-            return entries;
-        }
-
-        bool empty() const { 
-            return size() == 0;
-        }
-
-        void swap(hashtable& other) {
-            buckets.swap(other.buckets);
-            std::swap(entries, other.entries);
-        }
-    
-        iterator begin() {
-            for (size_t i = 0; i < buckets.size(); ++i)
-                if (buckets[i])
-                    return iterator(buckets[i], this);
-            return end();
-        }
-    
-        iterator end() { 
-            return iterator(0, this);
-        }
-
-        const_iterator begin() const {
-            for (size_t i = 0; i < buckets.size(); ++i)
-                if (buckets[i])
-                    return const_iterator(buckets[i], this);
-            return end();
-        }
-    
-        const_iterator end() const { 
-            return const_iterator(0, this);
-        }
-    
-        size_t get_bucket(const Value& val, size_t n) const {
-            return hash_fun(get_key(val)) % n;
-        }
-    
-        size_t get_key_bucket(const Key& key) const {
-            return hash_fun(key) % buckets.size();
-        }
-
-        size_t get_bucket(const Value& val) const {
-            return get_bucket(val,buckets.size());
-        }
-
-        Entry *lookup(const Value& val, bool ins = false)
-        {
-            resize(entries + 1);
-
-            size_t n = get_bucket(val);
-            Entry* from = buckets[n];
-      
-            for (Entry* ent = from; ent; ent = ent->next)
-                if (key_eq_fun(get_key(ent->val), get_key(val)))
-                    return ent;
-      
-            if(!ins) return 0;
-
-            Entry* tmp = new Entry(val);
-            tmp->next = from;
-            buckets[n] = tmp;
-            ++entries;
-            return tmp;
-        }
-
-        Entry *lookup_key(const Key& key) const
-        {
-            size_t n = get_key_bucket(key);
-            Entry* from = buckets[n];
-      
-            for (Entry* ent = from; ent; ent = ent->next)
-                if (key_eq_fun(get_key(ent->val), key))
-                    return ent;
-      
-            return 0;
-        }
-
-        const_iterator find(const Key& key) const {
-            return const_iterator(lookup_key(key),this);
-        }
-
-        iterator find(const Key& key) {
-            return iterator(lookup_key(key),this);
-        }
-
-        std::pair<iterator,bool> insert(const Value& val){
-            size_t old_entries = entries;
-            Entry *ent = lookup(val,true);
-            return std::pair<iterator,bool>(iterator(ent,this),entries > old_entries);
-        }
-    
-        iterator insert(const iterator &it, const Value& val){
-            Entry *ent = lookup(val,true);
-            return iterator(ent,this);
-        }
-
-        size_t erase(const Key& key)
-        {
-            Entry** p = &(buckets[get_key_bucket(key)]);
-            size_t count = 0;
-            while(*p){
-                Entry *q = *p;
-                if (key_eq_fun(get_key(q->val), key)) {
-                    ++count;
-                    *p = q->next;
-                    delete q;
-                }
-                else
-                    p = &(q->next);
-            }
-            entries -= count;
-            return count;
-        }
-
-        void resize(size_t new_size) {
-            const size_t old_n = buckets.size();
-            if (new_size <= old_n) return;
-            const size_t n = next_prime(new_size);
-            if (n <= old_n) return;
-            Table tmp(n, (Entry*)(0));
-            for (size_t i = 0; i < old_n; ++i) {
-                Entry* ent = buckets[i];
-                while (ent) {
-                    size_t new_bucket = get_bucket(ent->val, n);
-                    buckets[i] = ent->next;
-                    ent->next = tmp[new_bucket];
-                    tmp[new_bucket] = ent;
-                    ent = buckets[i];
-                }
-            }
-            buckets.swap(tmp);
-        }
-    
-        void clear()
-        {
-            for (size_t i = 0; i < buckets.size(); ++i) {
-                for (Entry* ent = buckets[i]; ent != 0;) {
-                    Entry* next = ent->next;
-                    delete ent;
-                    ent = next;
-                }
-                buckets[i] = 0;
-            }
-            entries = 0;
-        }
-
-        void dup(const hashtable& other)
-        {
-            clear();
-            buckets.resize(other.buckets.size());
-            for (size_t i = 0; i < other.buckets.size(); ++i) {
-                Entry** to = &buckets[i];
-                for (Entry* from = other.buckets[i]; from; from = from->next)
-                    to = &((*to = new Entry(from->val))->next);
-            }
-            entries = other.entries;
-        }
-    };
-
-    template <typename T> 
-        class equal {
-    public:
-        bool operator()(const T& x, const T &y) const {
-            return x == y;
-        }
-    };
-
-    template <typename T>
-        class identity {
-    public:
-        const T &operator()(const T &x) const {
-            return x;
-        }
-    };
-
-    template <typename T, typename U>
-        class proj1 {
-    public:
-        const T &operator()(const std::pair<T,U> &x) const {
-            return x.first;
-        }
-    };
-
-    template <typename Element, class HashFun = hash<Element>, 
-        class EqFun = equal<Element> >
-        class hash_set
-        : public hashtable<Element,Element,HashFun,identity<Element>,EqFun> {
-
-    public:
-
-    typedef Element value_type;
-
-    hash_set()
-    : hashtable<Element,Element,HashFun,identity<Element>,EqFun>(7) {}
-    };
-
-    template <typename Key, typename Value, class HashFun = hash<Key>, 
-        class EqFun = equal<Key> >
-        class hash_map
-        : public hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun> {
-
-    public:
-
-    hash_map()
-    : hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun>(7) {}
-
-    Value &operator[](const Key& key) {
-	std::pair<Key,Value> kvp(key,Value());
-	return 
-	hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun>::
-        lookup(kvp,true)->val.second;
-    }
-    };
-
-    template <typename D,typename R>
-        class hash<hash_map<D,R> > {
-    public:
-        size_t operator()(const hash_map<D,R> &p) const {
-            hash<D > h1;
-            hash<R > h2;
-            size_t res = 0;
-            
-            for (typename hash_map<D,R>::const_iterator it=p.begin(), en=p.end(); it!=en; ++it)
-                res += (h1(it->first)+h2(it->second));
-            return res;
-        }
-    };
-
-    template <typename D,typename R>
-    inline bool operator ==(const hash_map<D,R> &s, const hash_map<D,R> &t){
-        for (typename hash_map<D,R>::const_iterator it=s.begin(), en=s.end(); it!=en; ++it) {
-            typename hash_map<D,R>::const_iterator it2 = t.find(it->first);
-            if (it2 == t.end() || !(it->second == it2->second)) return false;
-        }
-        for (typename hash_map<D,R>::const_iterator it=t.begin(), en=t.end(); it!=en; ++it) {
-            typename hash_map<D,R>::const_iterator it2 = s.find(it->first);
-            if (it2 == t.end() || !(it->second == it2->second)) return false;
-        }
-        return true;
-    }
-}
-#endif
-"""
-
-hash_cpp = """
-/*++
-Copyright (c) Microsoft Corporation
-
-This string hash function is borrowed from Microsoft Z3
-(https://github.com/Z3Prover/z3). 
-
---*/
-
-
-#define mix(a,b,c)              \\
-{                               \\
-  a -= b; a -= c; a ^= (c>>13); \\
-  b -= c; b -= a; b ^= (a<<8);  \\
-  c -= a; c -= b; c ^= (b>>13); \\
-  a -= b; a -= c; a ^= (c>>12); \\
-  b -= c; b -= a; b ^= (a<<16); \\
-  c -= a; c -= b; c ^= (b>>5);  \\
-  a -= b; a -= c; a ^= (c>>3);  \\
-  b -= c; b -= a; b ^= (a<<10); \\
-  c -= a; c -= b; c ^= (b>>15); \\
-}
-
-#ifndef __fallthrough
-#define __fallthrough
-#endif
-
-namespace hash_space {
-
-// I'm using Bob Jenkin's hash function.
-// http://burtleburtle.net/bob/hash/doobs.html
-unsigned string_hash(const char * str, unsigned length, unsigned init_value) {
-    register unsigned a, b, c, len;
-
-    /* Set up the internal state */
-    len = length;
-    a = b = 0x9e3779b9;  /* the golden ratio; an arbitrary value */
-    c = init_value;      /* the previous hash value */
-
-    /*---------------------------------------- handle most of the key */
-    while (len >= 12) {
-        a += reinterpret_cast<const unsigned *>(str)[0];
-        b += reinterpret_cast<const unsigned *>(str)[1];
-        c += reinterpret_cast<const unsigned *>(str)[2];
-        mix(a,b,c);
-        str += 12; len -= 12;
-    }
-
-    /*------------------------------------- handle the last 11 bytes */
-    c += length;
-    switch(len) {        /* all the case statements fall through */
-    case 11: 
-        c+=((unsigned)str[10]<<24);
-        __fallthrough;
-    case 10: 
-        c+=((unsigned)str[9]<<16);
-        __fallthrough;
-    case 9 : 
-        c+=((unsigned)str[8]<<8);
-        __fallthrough;
-        /* the first byte of c is reserved for the length */
-    case 8 : 
-        b+=((unsigned)str[7]<<24);
-        __fallthrough;
-    case 7 : 
-        b+=((unsigned)str[6]<<16);
-        __fallthrough;
-    case 6 : 
-        b+=((unsigned)str[5]<<8);
-        __fallthrough;
-    case 5 : 
-        b+=str[4];
-        __fallthrough;
-    case 4 : 
-        a+=((unsigned)str[3]<<24);
-        __fallthrough;
-    case 3 : 
-        a+=((unsigned)str[2]<<16);
-        __fallthrough;
-    case 2 : 
-        a+=((unsigned)str[1]<<8);
-        __fallthrough;
-    case 1 : 
-        a+=str[0];
-        __fallthrough;
-        /* case 0: nothing left to add */
-    }
-    mix(a,b,c);
-    /*-------------------------------------------- report the result */
-    return c;
-}
-
-}
-
-"""

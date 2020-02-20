@@ -246,7 +246,7 @@ object toma = {
 
         if(~eu(issue_eu).valid){
             eu(issue_eu).valid := exe_valid;
-            eu(issue_eu).res := f(exe_opra)(exe_oprb);
+            eu(issue_eu).res := f(exe_opra,exe_oprb);
             eu(issue_eu).tag := exe_tag;
         };
         

@@ -1,0 +1,112 @@
+#lang ivy1.7
+
+include ivy_to_cpp
+
+export ivy.expr.enc
+export ivy.expr.dec
+export ivy.expr.encdec
+export ivy.stmt.enc
+export ivy.stmt.dec
+export ivy.stmt.encdec
+export ivy.decl.enc
+export ivy.decl.dec
+export ivy.decl.encdec
+export ivy.prog.enc
+export ivy.prog.dec
+export ivy.prog.encdec
+
+export cpp.expr.enc
+export cpp.expr.dec
+export cpp.expr.encdec
+export cpp.stmt.enc
+export cpp.stmt.dec
+export cpp.stmt.encdec
+export cpp.decl.enc
+export cpp.decl.dec
+export cpp.decl.encdec
+export cpp.prog.enc
+export cpp.prog.dec
+export cpp.prog.encdec
+
+import parse_error
+
+module test_to_cpp(ivyclass,cppclass) = {
+    export action test(s:str) returns(res:str) = {
+        var ivyexpr := ivyclass.dec(s);
+        var fst : flatst;
+        (ivyexpr,fst) := ivyexpr.flat(fst);
+        var cppexpr : cppclass;
+        var st : tocppst;
+        (cppexpr,st) := ivyexpr.to_cpp(st);
+        res := cppexpr.enc
+    }
+    export action test1(s:str) returns(res:cppclass) = {
+        var ivyexpr := ivyclass.dec(s);
+        var fst : flatst;
+        (ivyexpr,fst) := ivyexpr.flat(fst);
+        var st : tocppst; 
+        (res,st) := ivyexpr.to_cpp(st);
+    }
+    export action test2(s:str) returns(res:ivyclass) = {
+        var ivyexpr := ivyclass.dec(s);
+        var fst : flatst;
+        (ivyexpr,fst) := ivyexpr.flat(fst);
+        res := ivyexpr;
+    }
+}
+
+object ivy = { ...
+    export action test_read(name:str) returns (res:str) = {
+        var p := read_file(name);
+        res := prog.enc(p);
+    }
+    type thing = struct {
+        out:str,
+        st:decost
+    }
+    
+    export action testdeco(inp:str) returns (res:thing) = {
+        var e := expr.dec(inp);
+        var ty : expr;
+        var m : symeval;
+        m := m.set(strident.make("foo"),expr.dec("t"));
+        res.st := decost.make;
+        (e,ty,res.st) := e.type_decorate(res.st,m);
+        (e,res.st) := e.type_fill_in(res.st);
+        res.out := expr.enc(e);
+    }
+
+    export action testelide(inp:str) returns (res:str) = {
+        var e := expr.dec(inp);
+        var ty : expr;
+        var m : symeval;
+        m := m.set(strident.make("foo"),expr.dec("t"));
+        var st : elidest;
+        (e,st) := e.type_elide_int(false,m,st);
+        res := expr.enc(e);
+    }
+
+    object expr = { ...
+        instantiate test_to_cpp(ivy.expr,cpp.expr)
+    }
+    
+    object stmt = { ...
+        instantiate test_to_cpp(ivy.stmt,cpp.stmt)
+    }
+
+    export action test_lvalue_path(s:str) returns(path:access_path) = {
+        var ok : bool;
+        (path,ok) :=lvalue_path(expr.dec(s),path)
+    }
+
+
+
+
+}
+
+export ivy.prog.file_to_cpp
+
+        
+
+
+import action show_pretty(p:pretty)

@@ -1,3 +1,7 @@
+#
+# Copyright (c) Microsoft Corporation. All Rights Reserved.
+#
+
 import ivy_module as im
 import ivy_actions as ia
 import ivy_logic as il
@@ -9,6 +13,7 @@ import ivy_interp as itp
 import ivy_theory as thy
 import ivy_ast
 import ivy_proof
+import ivy_trace
 
 import tempfile
 import subprocess
@@ -1070,7 +1075,7 @@ def to_aiger(mod,ext_act):
 
     # we use a special state variable __init to indicate the initial state
 
-    ext_acts = [mod.actions[x] for x in sorted(mod.public_actions)]
+    ext_acts = [mod.actions[x].add_label(x) for x in sorted(mod.public_actions)]
     ext_act = ia.EnvAction(*ext_acts)
 
     init_var = il.Symbol('__init',il.find_sort('bool')) 
@@ -1080,7 +1085,7 @@ def to_aiger(mod,ext_act):
     # get the invariant to be proved, replacing free variables with
     # skolems. First, we apply any proof tactics.
 
-    pc = ivy_proof.ProofChecker(mod.axioms,mod.definitions,mod.schemata)
+    pc = ivy_proof.ProofChecker(mod.labeled_axioms,mod.definitions,mod.schemata)
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     conjs = []
     for lf in mod.labeled_conjs:
@@ -1383,6 +1388,8 @@ class AigerMatchHandler(object):
             return tr.is_skolem(x) and x not in self.cnsts
 
         def show_sym(v,decd,val):
+            iu.dbg('decd')
+            iu.dbg('val')
             if all(x in inv_env or not my_is_skolem(x) and
                    not tr.is_new(x) and x not in env for x in ilu.used_symbols_ast(decd)):
                 expr = ilu.rename_ast(decd,inv_env)
@@ -1397,6 +1404,7 @@ class AigerMatchHandler(object):
 #            print '        env: {}'.format('{'+','.join('{}:{}'.format(x,y) for x,y in env.iteritems())+'}')
             inv_env = dict((y,x) for x,y in env.iteritems() if not my_is_skolem(x))
             for v in self.aiger.inputs:
+                iu.dbg('v')
                 if v in self.decoder:
                     show_sym(v,self.decoder[v],self.aiger.get_sym(v))
             rn = dict((x,tr.new(x)) for x in self.stvarset)
@@ -1407,6 +1415,70 @@ class AigerMatchHandler(object):
 
             print '    {}{}'.format(action.lineno,action)
         
+class AigerMatchHandler2(ivy_trace.TraceBase):
+    def __init__(self,aiger,decoder,cnsts,stvarset,current):
+        ivy_trace.TraceBase.__init__(self)
+        self.aiger,self.decoder,self.cnsts,self.stvarset = aiger,decoder,cnsts,stvarset
+        self.current = current
+    def eval(self,cond):
+        if il.is_false(cond):
+            res = False
+        elif il.is_true(cond):
+            res =  True
+        else:
+            res = il.is_true(self.aiger.get_sym(cond))
+#        print 'eval: {} = {}'.format(cond,res)
+        return res
+
+    def clone(self):
+        return AigerMatchHandler2(self.aiger,self.decoder,self.cnsts,self.stvarset,self.current)
+
+    def get_universes(self):
+        return None
+        
+    def do_return(self,action,env):
+        pass
+
+    def new_state(self,env):
+
+        def my_is_skolem(x):
+            return tr.is_skolem(x) and x not in self.cnsts
+
+        def show_sym(v,decd,val,eqns):
+            if all(x in inv_env or not my_is_skolem(x) and
+                   not tr.is_new(x) and x not in env for x in ilu.used_symbols_ast(decd)):
+                expr = ilu.rename_ast(decd,inv_env)
+                if not tr.is_new(expr.rep):
+                    if il.is_constant(expr) and expr in il.sig.constructors:
+                        return
+                    eqns.append(il.Equals(expr,val))
+
+        inv_env = dict((y,x) for x,y in env.iteritems() if not my_is_skolem(x))
+        eqns = []
+        for v in self.aiger.inputs:
+            if v in self.decoder:
+                show_sym(v,self.decoder[v],self.aiger.get_sym(v),eqns)
+        rn = dict((x,tr.new(x)) for x in self.stvarset)
+        for v in self.aiger.latches:
+            if v in self.decoder:
+                decd = self.decoder[v]
+                show_sym(v,ilu.rename_ast(decd,rn),self.aiger.get_next_sym(v),eqns)
+
+        self.add_state(eqns)
+        
+    def final_state(self):
+        self.aiger.sub.next()
+
+        post = self.aiger.sub.latch_vals()  # use this, since file can be wrong!
+        stvals = []
+        stmap = self.aiger.get_state(post)                     
+#            iu.dbg('stmap')
+        for v in self.aiger.latches: # last two are used for encoding
+            if v in self.decoder and v.name != '__init':
+                val = stmap[v]
+                if val is not None:
+                    stvals.append(il.Equals(self.decoder[v],val))
+        self.add_state(stvals)
 
 
 def aiger_witness_to_ivy_trace(aiger,witnessfilename,action,stvarset,ext_act,annot,consts,decoder):
@@ -1464,6 +1536,46 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,action,stvarset,ext_act,ann
                 tr = IvyMCTrace(stvals) # first transition is initialization
             else:
                 tr.add_state(stvals,ext_act) # remainder are exported actions
+        print 80*'-'
+        if tr is None:
+            badwit()
+        return tr
+
+def aiger_witness_to_ivy_trace2(aiger,witnessfilename,action,stvarset,ext_act,annot,consts,decoder):
+    with open(witnessfilename,'r') as f:
+        res = f.readline().strip()
+        if res != '1':
+            badwit()
+        aiger.sub.reset()
+        lines = []
+        for line in f:
+            if line.endswith('\n'):
+                line = line[:-1]
+            lines.append(line)
+        print '\nCounterexample follows:'
+        print 80*'-'
+        current = dict()
+        count = 0
+        handler = AigerMatchHandler2(aiger,decoder,consts,stvarset,current)
+        for line in lines:
+            cols = line.split(' ')
+#            iu.dbg('cols')
+            if len(cols) != 4:
+                badwit()
+            pre,inp,out,post = cols
+            aiger.sub.step(inp)
+            count += 1
+            if count == len(lines):
+                invar_fail = il.Symbol('invar__fail',il.find_sort('bool'))
+                if il.is_true(aiger.get_sym(invar_fail)):
+                    break
+            # print 'inputs:'
+            # for v in aiger.inputs:
+            #     if v in decoder:
+            #         print '    {} = {}'.format(decoder[v],aiger.get_sym(v))
+            ia.match_annotation(action,annot,handler)
+            handler.end()
+        print str(handler)
         print 80*'-'
         if tr is None:
             badwit()
@@ -1559,7 +1671,7 @@ def check_isolate():
         print
         print 'Counterexample trace follows...'
         print 80*'*'
-        tr = aiger_witness_to_ivy_trace(aiger,outfilename,action,stvarset,ext_act,annot,cnsts,decoder)        
+        tr = aiger_witness_to_ivy_trace2(aiger,outfilename,action,stvarset,ext_act,annot,cnsts,decoder)        
         print
         print 80*'*'
         exit(0)

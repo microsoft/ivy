@@ -221,6 +221,7 @@ def infer_sorts(t, env=None):
             lambda: NamedBinder(
                 t.name,
                 [x() for x in vars_t],
+                t.environ,
                 body_t(),
             )
         )
@@ -323,7 +324,7 @@ if __name__ == '__main__':
     # print repr(cf5)
     # print
 
-    f6 = NamedBinder('mybinder', [XT], ps(XT))
+    f6 = NamedBinder('mybinder', [XT], None, ps(XT))
     cf6 = concretize_sorts(f6)
     print repr(f6)
     print f6.sort
@@ -331,7 +332,7 @@ if __name__ == '__main__':
     print cf6.sort
     print
 
-    f7 = NamedBinder('mybinder', [], ps(XT))
+    f7 = NamedBinder('mybinder', [], None, ps(XT))
     cf7 = concretize_sorts(f7)
     print repr(f7)
     print f7.sort

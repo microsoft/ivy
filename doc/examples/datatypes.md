@@ -19,26 +19,25 @@ Abstract datatypes can provide just the properties we need for a given
 application. For example, suppose we need a datatype to represent
 clock values in a protocol. The protocol doesn't care about the
 quantitative values of the clocks. It only needs to be able to compare
-the values. Here is a possible specification of this type in IVy:
+the values. Here is a possible specification of this type in Ivy:
 
     #lang ivy1.7
 
-    object clock = {
-        type t
-        relation (X:t < Y:t)
+    isolate clock = {
+        type this
         
-        object spec = {
-            property [transitivity] X:t < Y & Y < Z -> X < Z
-            property [antisymmetry] ~(X:t < Y & Y < X)
+        specification {
+            property [transitivity] X:this < Y & Y < Z -> X < Z
+            property [antisymmetry] ~(X:this < Y & Y < X)
         }
     }
 
-We begin with the interface. Our datatype `clock` provides a type
-`clock.t` equipped with a binary relation `<`. The we give the
-specification of this interface. The specification is a sub-object
-containing two properties. The spec says that the type `clock.t`
+We begin with the interface. Our isolate `clock` provides a type
+`clock` (referred to as `this` inside the isolate).  Then we give the
+specification. The specification contains two properties. These proeprties say that
+the type `clock`
 respects the axioms of a partial order. We can rely on the declared
-properties of `clock.t` in proving correctness of our protocol.
+properties of `clock` in proving correctness of our protocol.
 
 Of course, our new datatype isn't very useful, since it provides no
 actual operations. Suppose, for example, that our protocol requires an
@@ -46,17 +45,16 @@ operation `incr` that can add some amount to a clock value. We don't
 care how much is added, so long as the clock value increases. Let's
 add this operation to the interface and specify it:
 
-    object clock = {
-        type t
-        relation (X:t < Y:t)
-        action incr(inp:t) returns (out:t)
+    isolate clock = {
+        type this
+        action incr(inp:this) returns (out:this)
 
-        object spec = {
-            property [transitivity] X:t < Y & Y < Z -> X < Z
-            property [antisymmetry] ~(X:t < Y & Y < X)
+        specification {
+            property [transitivity] X:this < Y & Y < Z -> X < Z
+            property [antisymmetry] ~(X:this < Y & Y < X)
 
             after incr {
-                assert inp < out
+                ensure inp < out
             }
         }
     }
@@ -64,7 +62,7 @@ add this operation to the interface and specify it:
 We've added an action `incr` that takes a clock value and returns a
 clock value. In addition, we've added a monitor to object `spec`.  It
 requires that the output value `y` be greater than the input value
-`x`. Notice the new keyword `after`. It specifies that a given action
+`x`. Notice the new keyword `after`. It specifies that the given code
 be inserted *after* the execution of action `incr`. We need an `after`
 specification to make statements about the output values of actions.
 
@@ -72,88 +70,104 @@ specification to make statements about the output values of actions.
 
 As an example of using an abstract datatype, let's make our [ping-pong
 game](/examples/specification.html) a little more interesting by
-attaching a clock value to the ball. Here is the new interface definition:
+attaching a clock value to the ball. Here is the new interface specification:
 
-    object intf = {
-        action ping(x:clock.t)
-        action pong(x:clock.t)
+    isolate intf = {
+
+        action ping(x:clock)
+        action pong(x:clock)
+
+        specification {
+
+            type side_t = {left,right}
+            individual side : side_t
+            individual time : clock
+
+            after init {
+                side := left;
+                time := 0
+            }
+
+            before ping {
+                require side = left & time < x;
+                side := right;
+                time := x
+            }
+
+            before pong {
+                require side = right & time < x;
+                side := left;
+                time := x
+            }
+        }
     }
 
-To the specification, we add the requirement that the ball's clock value
-must always increase:
 
-    type side_t = {left,right}
+We have added a requirement that the ball's clock value must always
+increase.  Now, using our abstract datatype `clock`, we can implement
+the left player like this:
 
-    object spec = {
-        individual side : side_t
-        individual time : clock.t
-        after init {
-            side := left;
-            time = 0
-        }
+    isolate left_player = {
 
-        before intf.ping {
-            assert side = left & time < x;
-            side := right;
-            time := x
-        }
+        implementation {
+            individual ball : bool
+            individual time : clock
+            after init {
+                ball := true;
+                time := 0
+            }
 
-        before intf.pong {
-            assert side = right & time < x;
-            side := left;
-            time := x
-        }
-    }
+            action hit = {
+                if ball {
+                    call intf.ping(clock.incr(time));
+                    ball := false
+                }
+            }
 
-Now, using our abstract datatype `clock`, we can implement the left player like this:
-
-    object left_player = {
-        individual ball : bool
-        individual time : clock.t
-        after init {
-            ball := true;
-            time := 0
-        }
-
-        action hit = {
-            if ball {
-                call intf.ping(clock.incr(time));
-                ball := false
+            implement intf.pong {
+                ball := true;
+                time := x
             }
         }
 
-        implement intf.pong {
-            ball := true;
-            time := x
+        private {
+            invariant ball -> (intf.side = intf.left & intf.time <= time)
         }
-
-        conjecture ball -> (spec.side = left & spec.time <= time)
     }
+    with intf, clock
+
 
 Notice that when we send the ball using `intf.ping`, we increment the
 clock value using our `incr` operation. The right player is similar:
 
-    object right_player = {
-        individual ball : bool
-        individual time : clock.t
-        after init {
-            ball := false
-        }
+    isolate right_player = {
 
-        action hit = {
-            if ball {
-                call intf.pong(clock.incr(time));
+        implementation {
+            individual ball : bool
+            individual time : clock
+            after init {
                 ball := false
+            }
+
+            action hit = {
+                if ball {
+                    call intf.pong(clock.incr(time));
+                    ball := false
+                }
+            }
+
+            implement intf.ping {
+                ball := true;
+                time := x
             }
         }
 
-        implement intf.ping {
-            ball := true;
-            time := x
+        private {
+            invariant ball -> (intf.side = intf.right & intf.time <= time)
         }
-
-        conjecture ball -> (spec.side = right & spec.time <= time)
     }
+    with intf, clock
+
 
 As before, we export some actions to the environment, and set up our
 assume-guarantee proof:
@@ -161,22 +175,20 @@ assume-guarantee proof:
     export left_player.hit
     export right_player.hit
 
-    isolate iso_l = left_player with spec, clock
-    isolate iso_r = right_player with spec, clock
-
 Notice that in our isolates, we use the `clock` datatype. Without the
 specification of `clock`, we couldn't verify the interface
-specifications in `spec`. Now let's try to use IVy to verify this program:
+specifications in `spec`. Now let's try to use Ivy to verify this program:
 
-    $ ivy_check coverage=false pingpongclock.ivy
+    $ ivy_check isolate=left_player pingpongclock.ivy
+    ...
+    OK
+    $ ivy_check isolate=right_player pingpongclock.ivy
     ...
     OK
 
-The command line option `coverage=false` tells IVy that we know some
-assertions are not checked (that is, the ones in `clock`). What we
-have proved is that the protocol only depends on the specifications we
-provided for `clock`: that it is a partial order and that `incr` is
-increasing.
+What we have proved is that the protocol only depends on the
+specifications we provided for `clock`: that it is a partial order and
+that `incr` is increasing.
 
 As an experiment, see what happens when you remove the `transitivity`
 property from `clock` (hint: use the command line option
@@ -187,58 +199,32 @@ remove `antisymmetry`?
 
 To make a program we can actually run, we need to provide an
 implementation of the abstract datatype `clock`. We will do this using
-IVy's built-in type `int` that represents the integers. Here is
+Ivy's built-in theory `int` that represents the integers. Here is
 the implementation:
 
-    object clock = {
+    isolate clock = {
         ...
 
-        object impl = {
-            interpret clock.t -> int
+        implementation {
+            interpret clock -> int
 
             implement incr {
-                out := in + 1
+                out := inp + 1
             }
         }
     }
 
-The `interpret` declaration tells IVy that the type `clock.t` should
+The `interpret` declaration tells Ivy that the type `clock` should
 be interpreted as the integers. This also gives an interpretation to
 certain symbols in the signature of the integer theory, for example
 `+`, `<`, `0` and `1`. With this interpretation, we can write an
 implementation of `clock.incr` that simply adds one to its argument.
 
-Now let's apply assume-guarantee reasoning to our abstract datatype:
+Now let's verify this isolate using Ivy:
 
-    isolate iso_ci = clock
+    $ ivy_check isolate=clock pingpongclock.ivy
 
-First, let's see what we're actually verifying:
-
-    $ ivy_show isolate=iso_ci pingpongclock.ivy
-
-    type clock.t
-    type side_t = {left,right}
-    relation (V0:clock.t < V1:clock.t)
-
-    property [clock.transitivity] (X:clock.t < Y:clock.t & Y:clock.t < Z:clock.t) -> X:clock.t < Z:clock.t
-    property [clock.antisymmetry] ~(X:clock.t < Y:clock.t & Y:clock.t < X:clock.t)
-    interp clock.t -> int
-
-    action ext:clock.incr(inp:clock.t) returns(out:clock.t) = {
-        out := inp + 1;
-        assert inp < out
-    }
-
-Notice that the `after` specification for `clock.incr` has been
-inserted at the *end* of the implemention and is a *guarantee* for
-object `clock`. In general, `after` specifications for actions are
-guarantees for the objects that define them.
-
-Now let's verify this isolate using IVy:
-
-    $ ivy_check isolate=iso_ci pingpongclock.ivy
-
-    Isolate iso_ci:
+    Isolate clock:
 
     The following properties are to be checked:
         pingpongclock.ivy: line 7: clock.transitivity ... PASS
@@ -253,7 +239,7 @@ Now let's verify this isolate using IVy:
     ...
     OK
 
-IVy used the built-in theory of integer arithmetic of the Z3 theorem
+Ivy used the built-in theory of integer arithmetic of the Z3 theorem
 prover to prove the assertion, and also to prove the two properties of
 clocks.  As an experiment, try taking out the `interpret` declaration
 to see what happens.
@@ -270,7 +256,7 @@ the full program:
 Specifying and verifying an abstract datatype might seem to be a lot
 of work just to avoid making unnecesary assumptions about the
 integers. However, it is worth observing the effect of this approach
-on the proof. When verifying the protocol, IVy didn't have to make use
+on the proof. When verifying the protocol, Ivy didn't have to make use
 of the integer theory. It only used the properties that we provided.
 This will be a significant advantage when doing proofs about systems
 of many processes, or other systems that require quantifiers in the

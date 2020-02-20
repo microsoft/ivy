@@ -1,0 +1,67 @@
+#lang ivy1.7
+
+include reader
+include pass_flat
+include pass_typeinfer
+include ivy_to_cpp
+
+instance argv : sys_argv(pos,str)
+instance pid : arith_int
+instance retcode : arith_int
+instance cmd : sys.command(pid,vector[str],retcode)
+
+object ivy { ...
+    action show_expr(e:expr) = {
+	call stdio.writeln(e.enc)
+    }
+    action show_annot(a:annot) = {
+	call stdio.writeln(a.to_str)
+    }
+}
+
+action usage = {
+    stdio.writeln("usage: ivyc <file>.ivy");
+}
+
+init {
+    if argv.end > 1 {
+	var name := argv.value(1);
+	ivy.prog.file_to_cpp(name);
+	if ivy.errors.end = 0 {
+	    var cpp_name := ivy.path.change_extension(name,"cpp");
+	    var com : vector[str];
+	    com := com.append("g++");
+	    com := com.append("-O2");
+	    var idx := ivy.include_path.begin;
+	    while idx < ivy.include_path.end {
+		com := com.append("-I");
+		com := com.append(ivy.include_path.value(idx));
+		idx := idx.next
+	    };
+	    com := com.append("-o");
+	    var bin_name := ivy.path.drop_extension(name);
+	    com := com.append(bin_name);
+	    com := com.append("-std=c++17");
+	    com := com.append(cpp_name);
+	    var full_com := com.value(0);
+	    var jdx := com.begin.next;
+	    while jdx < com.end {
+		full_com := full_com.extend(" ");
+		full_com := full_com.extend(com.value(jdx));
+		jdx := jdx.next
+	    };
+	    stdio.writeln(full_com);
+	    var p := cmd.command(com);
+	    var rc := cmd.wait(p);
+	    if rc = 0 {
+		stdio.writeln("success");
+	    } else {
+		stdio.writeln("error returned");
+	    }
+	}
+    } else {
+	usage
+    }
+}
+
+
