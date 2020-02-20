@@ -30,7 +30,7 @@ also work on other Debian-based distributions.
 
 ### Prerequisites
 
-    $ sudo apt-get install python python-pip g++ cmake python-ply python-pygraphviz git python-tk tix pkg-config
+    $ sudo apt-get install python python-pip g++ cmake python-ply python-pygraphviz git python-tk tix pkg-config libssl-dev
 
 ### Install IVy
 
@@ -62,6 +62,10 @@ future.
 See the [python documentation](https://docs.python.org/2/install/) for
 general instructions on installing python packages.
 
+Optionally, build the experimental Ivy v2.0 compiler:
+
+    $ python build_v2_compiler.py
+
 ### Run
 
 Run Ivy on an example, like this:
@@ -83,9 +87,6 @@ somewhere in your emacs load path and add the following code to your
 
     (add-to-list 'auto-mode-alist '("\\.ivy\\'" . ivy-mode))
     (autoload 'ivy-mode  "ivy-mode.el" "Major mode for editing Ivy code" t nil)
-
-Installing on from source on Windows can be a bit challenging, but here are a few
-suggestions that may get you through it.
 
 <a name="windowsdeps"></a> Windows prerequisites
 =================================================
@@ -268,11 +269,12 @@ Ivy is released as a Python package in the PyPI repository.
 
 ### <a name="linuxbinary"> Install binary release on Linux
 
-    $ sudo apt-get install python python-pip g++ python-ply python-pygraphviz python-tk tix
+    $ sudo apt-get install python python-pip g++ python-ply python-pygraphviz python-tk tix libssl-dev
     $ sudo pip install ms-ivy
 
-Note, if you omit `sudo` in the second command, Ivy will be installed into `~\.local\bin`.
-In this case, you should put this directory in your `PATH`. 
+Note, if you omit `sudo` in the second command, Ivy will be installed
+into `~\.local\bin`, which is probably not what you want, so be
+careful.
 
 This does not install the documentation and example files. You can get
 these from github like this (see the directory `ivy\doc`):
