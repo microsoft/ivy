@@ -1,4 +1,4 @@
-#lang ivy1.6
+#lang ivy1.7
 
 # This is a model of the Chord ring maintenance protocol based on
 # Pamela Zave's version. As in Pamela's paper, it handles on successor
@@ -22,8 +22,8 @@ include collections
 ################################################################################
 
 module ring_topology = {
-    type t
-    relation btw(X:t,Y:t,Z:t)
+    type this
+    relation btw(X:this,Y:this,Z:this)
 
     property btw(W, Y, Z) & btw(W, X, Y) -> btw(X, Y, Z)
     property btw(W, X, Z) & btw(X, Y, Z) -> btw(W, X, Y)
@@ -35,11 +35,13 @@ module ring_topology = {
     property btw(X,Y,Z) |  Y = Z |  btw(X,Z,Y)
     property btw(X,Y,Z) |  Y = X |  btw(Y,X,Z)
     
-    object impl = {
-	interpret t -> bv[16]
-	definition btw(X,Y,Z) = X < Y & Y < Z | Z <= X & X < Y  | Y < Z & Z <= X
+    implementation {
+        type idx_t
+        interpret idx_t -> bv[16]
+        destructor m(X:this) : idx_t
+        function idx_btw(X:idx_t,Y,Z) = X < Y & Y < Z | Z <= X & X < Y  | Y < Z & Z <= X
+        definition btw(X,Y,Z) = idx_btw(m(X),m(Y),m(Z))
     }
-
 }
 
 instance ring : ring_topology
@@ -50,13 +52,13 @@ instance ring : ring_topology
 #
 ################################################################################
 
-relation a(X:ring.t)                           # active set
-instance s1 : partial_function(ring.t,ring.t)  # first successor map
-instance s2 : partial_function(ring.t,ring.t)  # second successor map
-instance p : partial_function(ring.t,ring.t)   # predecessor map
+relation a(X:ring)                           # active set
+instance s1 : partial_function(ring,ring)  # first successor map
+instance s2 : partial_function(ring,ring)  # second successor map
+instance p : partial_function(ring,ring)   # predecessor map
 
 # This is the origin (stable) node
-individual org : ring.t
+individual org : ring
 
 
 ################################################################################
@@ -72,13 +74,13 @@ individual org : ring.t
 
 
 object bs = {
-    relation map(X:ring.t,Y:ring.t)
+    relation map(X:ring,Y:ring)
     
     property s1.map(X,Y) & a(Y) -> map(X,Y)
     property s1.map(X,Y) & ~a(Y) & s2.map(X,Z) & a(Z) -> map(X,Z)
 
-    object impl = {
-	definition map(x:ring.t,y:ring.t) = a(y) & (s1.map(x,y) | s2.map(x,y) & exists Z. (s1.map(x,Z) & ~a(Z)))
+    implementation {
+	definition map(x:ring,y:ring) = a(y) & (s1.map(x,y) | s2.map(x,y) & exists Z. (s1.map(x,Z) & ~a(Z)))
     }
 }
 
@@ -91,7 +93,7 @@ object bs = {
 ################################################################################
 
 object rch = {
-    relation elem(X:ring.t)
+    relation elem(X:ring)
 
     property bs.map(X,org) -> elem(X)
     property elem(Y) & bs.map(X,Y) -> elem(X)
@@ -142,7 +144,7 @@ object prop = {
 
 object pro = {
     after init {
-	local other : ring.t {
+	local other : ring {
 	    assume other ~= org;
 	    a(X) := false;
 	    a(org) := true;
@@ -155,68 +157,68 @@ object pro = {
     }
 
 
-    action join(x:ring.t,y:ring.t) = {
-	assume ~a(x);
-	assume a(y);
-	assume ~ring.btw(x, org, y);
+    action join(x:ring,y:ring) = {
+	require ~a(x);
+	require a(y);
+	require ~ring.btw(x, org, y);
 	a(x) := true;
 	call s1.remap(x,y);
 	call s2.remove(x);
 	call p.remove(x)
     }
 
-    action stabilize(x:ring.t,y:ring.t,z:ring.t) = {
-	assume a(x);
-	assume s1.map(x, y);
-	assume a(y);
-	assume p.map(y, z);
-#	assume a(z);
-	assume ring.btw(x, z, y);
+    action stabilize(x:ring,y:ring,z:ring) = {
+	require a(x);
+	require s1.map(x, y);
+	require a(y);
+	require p.map(y, z);
+#	require a(z);
+	require ring.btw(x, z, y);
 	call s1.remap(x,z);
 	call s2.remap(x,y)
     }
 
-    action inherit(x:ring.t,y:ring.t,z:ring.t) = {
-	assume a(x);
-	assume s1.map(x, y);
-	assume a(y);
-	assume s1.map(y, z);
+    action inherit(x:ring,y:ring,z:ring) = {
+	require a(x);
+	require s1.map(x, y);
+	require a(y);
+	require s1.map(y, z);
 	call s2.remap(x,z)
     }
 
-    action remove(x:ring.t,y:ring.t,z:ring.t) = {
-	assume a(x);
-	assume s1.map(x, y);
-	assume ~a(y);
-	assume s2.map(x, z);
+    action remove(x:ring,y:ring,z:ring) = {
+	require a(x);
+	require s1.map(x, y);
+	require ~a(y);
+	require s2.map(x, z);
 	call s1.remap(x,z);
 	call s2.remove(x)
     }
 
-    action notify(x:ring.t,y:ring.t,z:ring.t)  = {
-	assume a(x);
-	assume s1.map(x, y);
-	assume a(y);
-	assume p.map(y, z) | ~p.map(y, X);
-	assume ring.btw(z, x, y);
+    action notify(x:ring,y:ring,z:ring)  = {
+	require a(x);
+	require s1.map(x, y);
+	require a(y);
+	require p.map(y, z) | ~p.map(y, X);
+	require ring.btw(z, x, y);
 	call p.remap(y,x)
     }
 
-    action fail(x:ring.t) = {
-	assume a(x);
-	assume x ~= org; # assume origin node cannot fail
+    action fail(x:ring) = {
+	require a(x);
+	require x ~= org; # assume origin node cannot fail
 	a(x) := false;
 	call p.remove(x);
 	call s1.remove(x);
 	call s2.remove(x);
 	# assume the last active successor of any does not fail
-	assume (~s1.map(X, Y) | a(Y) | s2.pre(X));
-	assume (~s1.map(X, Y) | a(Y) | ~s2.map(X, Z) | a(Z))
+	require (~s1.map(X, Y) | a(Y) | s2.pre(X));
+	require (~s1.map(X, Y) | a(Y) | ~s2.map(X, Z) | a(Z))
     }
 
     # Check that all nodes are connected to the origin via best successors.
 
-    action test(x:ring.t) = {
+    action test(x:ring) = {
 	call s1.lemma(prop.lerr);
 	call s2.lemma(prop.lerr);
 	assert ~prop.err(X)  
@@ -224,17 +226,18 @@ object pro = {
 
     # Inductive invariant proving that test never fails
 
-    conjecture (a(X) | p.map(Y, X) | ~s1.map(X, Y))
-    conjecture (a(X) | X ~= org)
-    conjecture (a(X) | ~p.map(Y, X) | ~s1.map(X, Y))
-    conjecture (a(X) | ~s2.map(X, Y))
-    conjecture (a(Y) | a(Z) | ~s1.map(X, Y) | ~s2.map(X, Z))
-    conjecture (a(Y) | s2.pre(X) | ~a(X) | ~s1.map(X, Y))
-#    conjecture (a(Y) | ~a(X) | ~p.map(Y, X) | ~s1.map(X, Y))
-    conjecture (s1.pre(X) | ~a(X))
-    conjecture (~ring.btw(X, org, Y) | ~s1.map(X, Y))
-    conjecture ~(s1.map(V0, V1) & V1 ~= org & s2.map(V0, V2) & ring.btw(V0, org, V2))
-
+    private {
+        invariant (a(X) | p.map(Y, X) | ~s1.map(X, Y))
+        invariant (a(X) | X ~= org)
+        invariant (a(X) | ~p.map(Y, X) | ~s1.map(X, Y))
+        invariant (a(X) | ~s2.map(X, Y))
+        invariant (a(Y) | a(Z) | ~s1.map(X, Y) | ~s2.map(X, Z))
+        invariant (a(Y) | s2.pre(X) | ~a(X) | ~s1.map(X, Y))
+    #    invariant (a(Y) | ~a(X) | ~p.map(Y, X) | ~s1.map(X, Y))
+        invariant (s1.pre(X) | ~a(X))
+        invariant (~ring.btw(X, org, Y) | ~s1.map(X, Y))
+        invariant ~(s1.map(V0, V1) & V1 ~= org & s2.map(V0, V2) & ring.btw(V0, org, V2))
+    }
 }
 
 export pro.join
@@ -247,5 +250,5 @@ export pro.test
 
 isolate iso_pro = pro with ring,s1,s2,p,bs,rch,prop
 isolate iso_ring = ring
-isolate iso_bs = bs
+isolate iso_bs = bs with pro,p,s1,s2
 trusted isolate iso_rch = rch # we can't yet prove that horn clauses are consistent!
