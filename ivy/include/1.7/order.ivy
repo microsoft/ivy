@@ -27,35 +27,35 @@ module unbounded_sequence = {
 
     object spec = {
 
-	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
+	      property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
 
-	instantiate totally_ordered_with_zero(t)
+	      instantiate totally_ordered_with_zero(t)
 
-	after next {
-	    assert x < y & (x < Y -> y <= Y);
-	    assert succ(x,y)
-	}
-	before prev {
-	    assert 0 < x
-	}
-	after prev {
-	    assert y < x & (Y < x -> Y <= y);
-	    assert succ(y,x)
-	}
+	      after next {
+	          assert x < y & (x < Y -> y <= Y);
+	          assert succ(x,y)
+	      }
+	      before prev {
+	          assert 0 < x
+	      }
+	      after prev {
+	          assert y < x & (Y < x -> Y <= y);
+	          assert succ(y,x)
+	      }
     }
 
     object impl = {
 
-	interpret t -> nat
+	      interpret t -> nat
 
-	definition succ(X,Y) = (Y = X + 1)
+	      definition succ(X,Y) = (Y = X + 1)
 
-	implement next {
-	    y := x + 1
-	}
-	implement prev {
-	    y := x - 1
-	}
+	      implement next {
+	          y := x + 1
+	      }
+	      implement prev {
+	          y := x - 1
+	      }
     }
 
     isolate iso = impl,spec
@@ -84,27 +84,27 @@ module bounded_sequence_spec = {
     object spec = {
 
         property N:t >= 0
-	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
+	      property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
 
-	instantiate totally_ordered(t)
+	      instantiate totally_ordered(t)
 
-	before next {
-	    assert exists S. S > x;
-	}
-	after next {
-	    assert x < y & (x < Y -> y <= Y);
-	    assert succ(x,y)
-	}
-	before prev {
-	    assert 0 < x
-	}
-	after prev {
-	    assert y < x & (Y < x -> Y <= y);
-	    assert succ(y,x)
-	}
-	after is_max {
-	    assert r <-> ~exists S. S > x
-	}
+	      before next {
+	          assert exists S. S > x;
+	      }
+	      after next {
+	          assert x < y & (x < Y -> y <= Y);
+	          assert succ(x,y)
+	      }
+	      before prev {
+	          assert 0 < x
+	      }
+	      after prev {
+	          assert y < x & (Y < x -> Y <= y);
+	          assert succ(y,x)
+	      }
+	      after is_max {
+	          assert r <-> ~exists S. S > x
+	      }
     }
 }
 
@@ -143,12 +143,12 @@ module bit_vector(length) = {
 
 module order_iterator(range) = {
     type t = struct {
-	is_end : bool,
-	val : range.t
+	      is_end : bool,
+	      val : range.t
     }
 
     definition (X < Y) = ~is_end(X) & is_end(Y) 
-                      | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
+    | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
 
     function done(X,Y) = is_end(Y) | X < val(Y)
     function ahead(X,Y) = ~is_end(Y) & val(Y) < X
@@ -159,27 +159,27 @@ module order_iterator(range) = {
     
     object spec = {
 
-#	instantiate totally_ordered(range.t)
+        #	instantiate totally_ordered(range.t)
 
-	after create {
-	    assert ~is_end(y);
-	    assert val(y) = x
-	}
-	after end {
-	    assert is_end(y);
-	    assert val(y) = 0
-	}
+	      after create {
+	          assert ~is_end(y);
+	          assert val(y) = x
+	      }
+	      after end {
+	          assert is_end(y);
+	          assert val(y) = 0
+	      }
     }
 
     object impl = {
-	implement create {
-	    is_end(y) := false;
-	    val(y) := x
-	}
-	implement end {
-	    is_end(y) := true;
-	    val(y) := 0
-	}
+	      implement create {
+	          is_end(y) := false;
+	          val(y) := x
+	      }
+	      implement end {
+	          is_end(y) := true;
+	          val(y) := 0
+	      }
     }
 
     isolate iso = impl,spec with range
@@ -189,12 +189,12 @@ module order_iterator(range) = {
 
 module order_iterator_impl(range) = {
     type t = struct {
-	is_end : bool,
-	val : range.t
+	      is_end : bool,
+	      val : range.t
     }
 
     definition (X < Y) = ~is_end(X) & is_end(Y) 
-                      | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
+    | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
 
     function done(X,Y) = is_end(Y) | X < val(Y)
     function ahead(X,Y) = ~is_end(Y) & val(Y) < X
@@ -204,12 +204,12 @@ module order_iterator_impl(range) = {
     action end returns (y:t)
     
     implement create {
-	is_end(y) := false;
-	val(y) := x
+	      is_end(y) := false;
+	      val(y) := x
     }
     implement end {
-	is_end(y) := true;
-	val(y) := 0
+	      is_end(y) := true;
+	      val(y) := 0
     }
 
 }
@@ -222,38 +222,38 @@ module sequence_iterator(range) = {
     action prev(x:t) returns (x:t)
     
     object spec = {
-	...
-	before next {
-	    assert ~is_end(x)
-	}
-	after next {
-	    assert X <= val(old x) & is_end(x)
-	           | ~(val(old x) < Y & Y < val(x))
-	             & val(old x) < val(x) & ~is_end(x)
-	}
-	before prev {
-	    assert is_end(x) | exists X. X < val(x)
-	}
-	after prev {
-	    assert ~is_end(x);
-	    assert X <= val(x) & is_end(old x)
-	           | ~(val(x) < Y & Y < val(old x))
-	             & val(x) < val(old x) & ~is_end(old x)
-	}
+	      ...
+	      before next {
+	          assert ~is_end(x)
+	      }
+	      after next {
+	          assert X <= val(old x) & is_end(x)
+	          | ~(val(old x) < Y & Y < val(x))
+	          & val(old x) < val(x) & ~is_end(x)
+	      }
+	      before prev {
+	          assert is_end(x) | exists X. X < val(x)
+	      }
+	      after prev {
+	          assert ~is_end(x);
+	          assert X <= val(x) & is_end(old x)
+	          | ~(val(x) < Y & Y < val(old x))
+	          & val(x) < val(old x) & ~is_end(old x)
+	      }
     }
 
     object impl = {
-	...
-	implement next {
-	    if range.is_max(val(x)) {
-		x := end
-	    } else {
-		x := create(range.next(val(x)))
-	    }
-	}
-	implement prev {
-	    x := create(range.prev(val(x)))
-	}
+	      ...
+	      implement next {
+	          if range.is_max(val(x)) {
+		            x := end
+	          } else {
+		            x := create(range.next(val(x)))
+	          }
+	      }
+	      implement prev {
+	          x := create(range.prev(val(x)))
+	      }
     }
 
 }
@@ -318,22 +318,22 @@ module iterable = {
         property 0 <= X:t & X <= max
     }
 
-    implementation {
+    object impl = {
         parameter size : t
-        interpret t -> <<< int >>>
-        definition (x:t < y:t) = <<< x < y >>>
-        definition (x:t - y:t) = <<< x - y >>>
-        definition 0:t = <<< 0 >>>
-        definition max = <<< `size` - 1 >>>
+        interpret t -> nat
+        # definition (x:t < y:t) = x < y
+        # definition (x:t - y:t) = x - y
+        # definition 0:t = 0
+        definition max = size - 1
         
         implement next(x:t) returns (y:t) {
-            <<< y = x + 1; >>>
+            y := x + 1
         }
         implement prev(x:t) returns (y:t) {
-            <<< y = x - 1; >>>
+            y := x - 1
         }
         implement is_max(x:t) returns (r:bool) {
-            <<< r = (x == `size` - 1); >>>
+            r := (x = (size - 1))
         }
     }
     
