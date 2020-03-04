@@ -4513,10 +4513,9 @@ def emit_repl_boilerplate3test(header,impl,classname):
 #endif
     for(int cycle = 0; cycle < test_iters; cycle++) {
 
-        int choices = num_gens + readers.size() + timers.size();
-        int rnd = choices ? (rand() % choices) : 0;
-        if (rnd < num_gens) {
-            double frnd = totalweight * (((double)rand())/(((double)RAND_MAX)+1.0));
+        double choices = totalweight + readers.size() + timers.size();
+        double frnd = choices * (((double)rand())/(((double)RAND_MAX)+1.0));
+        if (frnd < totalweight) {
             int idx = 0;
             double sum = 0.0;
             while (idx < num_gens-1) {
