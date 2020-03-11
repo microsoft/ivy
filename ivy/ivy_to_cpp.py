@@ -4897,11 +4897,13 @@ public:
     }
 
     void add_alit(const z3::expr &pred){
-        // std::cout << "pred: " << pred << std::endl;
+        if (__ivy_modelfile.is_open()) 
+            __ivy_modelfile << "pred: " << pred << std::endl;
         std::ostringstream ss;
         ss << "alit:" << alits.size();
         z3::expr alit = ctx.bool_const(ss.str().c_str());
-        // std::cout << "alit: " << alit << std::endl;
+        if (__ivy_modelfile.is_open()) 
+            __ivy_modelfile << "alit: " << alit << std::endl;
         alits.push_back(alit);
         slvr.add(!alit || pred);
     }
@@ -5029,7 +5031,15 @@ public:
     bool solve() {
         // std::cout << alits.size();
         static bool show_model = true;
+        if (__ivy_modelfile.is_open()) 
+            __ivy_modelfile << "begin check:\\n" << slvr << "end check:\\n" << std::endl;
         while(true){
+            if (__ivy_modelfile.is_open()) {
+                __ivy_modelfile << "(check-sat"; 
+                for (unsigned i = 0; i < alits.size(); i++)
+                    __ivy_modelfile << " " << alits[i];
+                __ivy_modelfile << ")" << std::endl;
+            }
             z3::check_result res = slvr.check(alits.size(),&alits[0]);
             if (res != z3::unsat)
                 break;
@@ -5039,11 +5049,13 @@ public:
 //                    __ivy_modelfile << "begin unsat:\\n" << slvr << "end unsat:\\n" << std::endl;
                 return false;
             }
-            //for (unsigned i = 0; i < core.size(); i++)
-            //    std::cout << "core: " << core[i] << std::endl;
+            if (__ivy_modelfile.is_open()) 
+                for (unsigned i = 0; i < core.size(); i++)
+                    __ivy_modelfile << "core: " << core[i] << std::endl;
             unsigned idx = rand() % core.size();
             z3::expr to_delete = core[idx];
-            // std::cout << "to delete: " << to_delete << std::endl;
+            if (__ivy_modelfile.is_open()) 
+                __ivy_modelfile << "to delete: " << to_delete << std::endl;
             for (unsigned i = 0; i < alits.size(); i++)
                 if (z3::eq(alits[i],to_delete)) {
                     alits[i] = alits.back();
