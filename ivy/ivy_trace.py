@@ -134,7 +134,8 @@ class Trace(TraceBase):
         self.vocab = vocab
         self.top_level = top_level
         if clauses is not None:
-            mod_clauses = islv.clauses_model_to_clauses(clauses,model=model,numerals=True)
+            ignore = lambda s: islv.solver_name(s) == None
+            mod_clauses = islv.clauses_model_to_clauses(clauses,model=model,numerals=True,ignore=ignore)
             self.eqs = defaultdict(list)
             for fmla in mod_clauses.fmlas:
                 if lg.is_eq(fmla):
