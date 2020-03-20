@@ -1,0 +1,85 @@
+#lang ivy1.7
+
+# This is a shim that implements broadcast over a unicast network.  It
+# just loops over all hosts and sends to each. Other than that, the
+# specification is the same as UDP, that is, it is lossy, reordering
+# and duplicating.
+
+# Note: you can send and receive longer messages using TCP instead.
+# To do this, replace `include udp` with `include tcp` and
+# `udp_simple2` with `simple_tcp`. But beware of a quirk of
+# `tcp_simple`: the first messsage to a given destination is always
+# lost, but it triggers creation of a TCP connection with that
+# destination.
+
+include order
+include udp
+
+module broadcast_shim(node,msg) = {
+
+    action bcast(src:node,m:msg)
+    action unicast(src:node,dst:node,m:msg)
+    action recv(dst:node,m:msg)
+    
+    specification {
+
+        relation sent(M:msg,N:node)
+
+        after init {
+            sent(M,D) := false;
+        }
+
+        before bcast {
+            sent(m,D) := true
+        }
+        
+        before unicast {
+            sent(m,dst) := true;
+        }
+        
+        before recv {
+            assert sent(m,dst)
+        }
+    }
+
+    implementation {
+
+        instance net : udp_simple2(node,msg)
+
+
+        implement net.recv(dst:node,m:msg) {
+            call recv(dst,m);
+        }
+
+        implement bcast { # broadcast sends to all nodes, including the sender.
+            var iter := node.iter.create(0);
+            while ~iter.is_end
+            invariant net.sent(M,D) -> sent(M,D)
+            {
+                call net.send(src,iter.val,m);
+                iter := iter.next;
+            }
+        }
+        implement unicast {
+            call net.send(src,dst,m);
+        }
+
+        private {
+            invariant net.sent(M,D) -> sent(M,D)
+        }
+    }
+
+    isolate iso = this with node
+    
+}
+
+
+# instance node : iterable
+# type msg
+# instance foo : broadcast_shim(node,msg)
+# export foo.bcast
+# export foo.unicast
+# import foo.recv
+# extract code(self:node) = foo(self),node
+
+
