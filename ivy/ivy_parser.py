@@ -242,6 +242,10 @@ class Ivy(object):
         if isinstance(decl,ActionDecl):
             for d in decl.args:
                 self.actions[d.defines()] = d
+        if isinstance(decl,ModuleDecl):
+            for d in decl.args:
+                self.modules[d.defines()] = d
+                
 
     def define(self,df,allow_redef=False):
         if len(df) == 3:
@@ -459,7 +463,6 @@ def p_top_module_atom_eq_lcb_top_rcb(p):
     p[0] = p[1]
     d = Definition(app_to_atom(p[4]),p[7])
     p[0].declare(ModuleDecl(d))
-    p[0].modules[d.defines()] = d
     stack.pop()
     stack[-1].is_module=False
 
@@ -707,14 +710,13 @@ def p_pnames_pnames_pname(p):
     p[0].append(p[3])
 
 def p_modinst_symbol(p):
-    'modinst : SYMBOL'
-    p[0] = Atom(p[1],[])
-    p[0].lineno = get_lineno(p,1)
+    'modinst : dotsym'
+    p[0] = p[1]
 
 def p_modinst_symbol_lp_pnames_rp(p):
-    'modinst : SYMBOL LPAREN pnames RPAREN'
-    p[0] = Atom(p[1],p[3])
-    p[0].lineno = get_lineno(p,1)
+    'modinst : dotsym LPAREN pnames RPAREN'
+    p[0] = p[1]
+    p[0].args = p[3]
 
 def p_inst_modinst(p):
    'inst : modinst'
