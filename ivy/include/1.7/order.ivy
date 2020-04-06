@@ -139,6 +139,18 @@ module bounded_sequence(interp) = {
 
 module bit_vector(length) = {
     instantiate bounded_sequence(bv[length])
+    action random returns (res:this)
+    implementation {
+        implement random {
+            <<<
+            res = 0;
+            for (int b = `length`; b > 0; b -= 15) {
+                int q = ( b < 15 ) ? b : 15;
+                res = (res << q) | (::random() & ~(-1 << q));
+            }
+            >>>
+        }
+    }
 }
 
 module order_iterator(range) = {
