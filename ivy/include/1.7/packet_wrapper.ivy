@@ -1,0 +1,115 @@
+#lang ivy
+
+# This module wraps Linux packet sockets
+#
+# - pkt : packet type ("array of integer" traits)
+# - ifnum : interface number type ("integer" traits)
+# - macaddr : mac address type ("integer" traits)
+#
+# These sockets can send and receive arbitrary IP datagrams on a specified interface,
+# bypassing the kernel networking stack and talking directly to the device drivers.
+
+module packet_wrapper(pkt,ifnum,macaddr) = {
+
+    object rdr = {}
+
+    <<< header
+	class packet_reader;
+    >>>
+
+    <<< impl
+        #include <linux/if_packet.h>
+        #include <net/ethernet.h>
+
+        class packet_reader : public reader {
+	    int sock;
+	    %`handle_recv` rcb;
+	    ivy_class *ivy;
+	    bool bound;
+	  public:
+	    packet_reader(%`handle_recv` rcb, ivy_class *ivy)
+	        : rcb(rcb), ivy(ivy), bound(false) {
+		sock = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_IP));
+		if (sock < 0)
+		    { perror("cannot create socket"); exit(1); }
+            }
+	    virtual ~packet_reader() {
+#ifdef _WIN32
+                closesocket(sock);
+#else
+	        close(sock);
+#endif
+	    }
+	    virtual int fdes() {
+		return sock;
+	    }
+	    virtual void read() {
+		//std::cout << "RECEIVING\n";
+	        int len=0;
+                socklen_t lenlen=4;
+#ifdef _WIN32
+	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&len,&lenlen))
+#else
+	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,&len,&lenlen))
+#endif
+	            { perror("getsockopt failed"); exit(1); }
+	        std::vector<unsigned char> buf(len);
+                struct sockaddr_ll src_addr;
+                socklen_t src_addr_len = sizeof(src_addr);
+                int bytes;
+		if ((bytes = recvfrom(sock,&buf[0],len,0,(struct sockaddr*)&src_addr, &src_addr_len)) < 0)
+		    { std::cerr << "recv failed\n"; exit(1); }
+	        buf.resize(bytes);
+	        `pkt` pkt;
+                pkt.resize(bytes);
+                std::copy(buf.begin(),buf.end(),pkt.begin());
+		ivy->__lock();
+		rcb(pkt,src_addr.sll_ifindex);
+		ivy->__unlock();
+	    }
+	    virtual void write(`pkt` pkt, `ifnum` idx, `macaddr` mac) {
+//	        std::cout << "mac: " << std::hex << mac << std::endl;
+	        std::vector<char> buf;
+                buf.resize(pkt.size());
+                std::copy(pkt.begin(),pkt.end(),buf.begin());
+//                std::cout << "sending to: " << (int)buf[16] << "." << (int)buf[17] << "." << (int)buf[18] << "." << (int)buf[19] << std::endl;
+		//std::cout << "SENDING\n";
+		struct sockaddr_ll dstaddr;
+		memset((char *)&dstaddr, 0, sizeof(dstaddr));
+		dstaddr.sll_family = AF_PACKET;
+	        dstaddr.sll_protocol = htons(ETH_P_IP);
+		dstaddr.sll_ifindex = idx;
+		dstaddr.sll_halen = 6; // ethernet address only!
+	        for (int i = 0; i < 6; i++)
+		    dstaddr.sll_addr[i] = (mac >> (8*(5-i))) & 0xff;
+//	        std::cout << "index: " << dstaddr.sll_ifindex << std::endl;
+//	        std::cout << "addr: ";
+//	    for (int i = 0; i < 6; i++) std::cout << std::hex <<  (((int)dstaddr.sll_addr[i]) & 0xff) << "::" ;
+//	    std::cout << std::endl;
+	        if (sendto(sock,&buf[0],buf.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_ll)) < 0)
+	        // if (send(sock,&buf[0],buf.size(),0) < 0) 
+#ifdef _WIN32
+		     { std::cerr << "send failed " << WSAGetLastError() << "\n"; exit(1); }
+#else
+		     { perror("send failed"); exit(1); }
+#endif
+	    }
+	};
+    >>>
+    <<< member
+	packet_reader *`rdr`;
+    >>>
+    <<< init
+	install_reader(`rdr` = new packet_reader(`handle_recv`, this));
+    >>>
+
+    action handle_recv(x:pkt,idx:ifnum) = {
+	call recv(x,idx)
+    }
+
+    implement send(x:pkt,idx:ifnum,addr:macaddr) {
+	<<<
+	    `rdr`->write(`x`,`idx`,`addr`);
+	>>>
+    }
+}
