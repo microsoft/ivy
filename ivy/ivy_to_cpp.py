@@ -5154,16 +5154,18 @@ def main_int(is_ivyc):
             if isolate != None:
                 isolates = [isolate]
             else:
-                extracts = list((x,y) for x,y in im.module.isolates.iteritems()
-                                if isinstance(y,ivy_ast.ExtractDef))
-                if len(extracts) == 0:
-                    isol = ivy_ast.ExtractDef(ivy_ast.Atom('extract'),ivy_ast.Atom('this'))
-                    isol.with_args = 1
-                    im.module.isolates['extract'] = isol
-                    isolates = ['extract']
-                elif len(extracts) == 1:
-                    isolates = [extracts[0][0]]
-
+                if target.get() == 'test':
+                    isolates = ['this']
+                else:
+                    extracts = list((x,y) for x,y in im.module.isolates.iteritems()
+                                    if isinstance(y,ivy_ast.ExtractDef))
+                    if len(extracts) == 0:
+                        isol = ivy_ast.ExtractDef(ivy_ast.Atom('extract'),ivy_ast.Atom('this'))
+                        isol.with_args = 1
+                        im.module.isolates['extract'] = isol
+                        isolates = ['extract']
+                    elif len(extracts) == 1:
+                        isolates = [extracts[0][0]]
         else:
             if isolate != None:
                 isolates = [isolate]
