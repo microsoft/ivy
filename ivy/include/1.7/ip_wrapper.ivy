@@ -1,0 +1,105 @@
+#lang ivy
+
+# This module wraps raw IP sockets
+#
+# - pkt : packet type (array of integer traits)
+# - protocol : IP protocol number
+#
+# Because of limitations on Unix raw sockets, this module can only
+# send and receive with a single IP protocol number
+#
+
+module ip_wrapper(pkt,protocol) = {
+
+    object rdr = {}
+
+    <<< header
+	class ip_reader;
+    >>>
+
+    <<< impl
+	class ip_reader : public reader {
+	    int sock;
+	    %`handle_recv` rcb;
+	    ivy_class *ivy;
+	    bool bound;
+	  public:
+	    ip_reader(%`handle_recv` rcb, ivy_class *ivy)
+	        : rcb(rcb), ivy(ivy), bound(false) {
+		sock = socket(PF_INET, SOCK_RAW, `protocol`);
+		if (sock < 0)
+		    { perror("cannot create socket"); exit(1); }
+                int one = 1;
+                if (setsockopt (sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof (one)) < 0)
+		    { perror("cannot set socket option"); exit(1); }
+            }
+	    virtual ~ip_reader() {
+#ifdef _WIN32
+                closesocket(sock);
+#else
+	        close(sock);
+#endif
+	    }
+	    virtual int fdes() {
+		return sock;
+	    }
+	    virtual void read() {
+		//std::cout << "RECEIVING\n";
+	        int len=0;
+                socklen_t lenlen=4;
+#ifdef _WIN32
+	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&len,&lenlen))
+#else
+	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,&len,&lenlen))
+#endif
+	            { perror("getsockopt failed"); exit(1); }
+	        std::vector<unsigned char> buf(len);
+	        int bytes;
+		if ((bytes = recv(sock,&buf[0],len,0)) < 0)
+		    { std::cerr << "recv failed\n"; exit(1); }
+	        buf.resize(bytes);
+	        `pkt` pkt;
+                pkt.resize(bytes);
+                std::copy(buf.begin(),buf.end(),pkt.begin());
+		ivy->__lock();
+		rcb(pkt);
+		ivy->__unlock();
+	    }
+	    virtual void write(`pkt` pkt) {
+	        std::vector<char> buf;
+                buf.resize(pkt.size());
+                std::copy(pkt.begin(),pkt.end(),buf.begin());
+//                std::cout << "sending to: " << (int)buf[16] << "." << (int)buf[17] << "." << (int)buf[18] << "." << (int)buf[19] << std::endl;
+		//std::cout << "SENDING\n";
+		struct sockaddr_in dstaddr;
+		memset((char *)&dstaddr, 0, sizeof(dstaddr));
+		dstaddr.sin_family = AF_INET;
+		dstaddr.sin_addr.s_addr = *(in_addr_t *)&buf[16];
+		dstaddr.sin_port = htons(0);
+	        if (sendto(sock,&buf[0],buf.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0)
+	        // if (send(sock,&buf[0],buf.size(),0) < 0) 
+#ifdef _WIN32
+		     { std::cerr << "send failed " << WSAGetLastError() << "\n"; exit(1); }
+#else
+		     { perror("send failed"); exit(1); }
+#endif
+	    }
+	};
+    >>>
+    <<< member
+	ip_reader *`rdr`;
+    >>>
+    <<< init
+	install_reader(`rdr` = new ip_reader(`handle_recv`, this));
+    >>>
+
+    action handle_recv(x:pkt) = {
+	call recv(x)
+    }
+
+    implement send(x:pkt) {
+	<<<
+	    `rdr`->write(`x`);
+	>>>
+    }
+}

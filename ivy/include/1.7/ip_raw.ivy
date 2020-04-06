@@ -1,0 +1,28 @@
+#lang ivy
+
+include ip_wrapper
+
+# Raw IP sockets
+#
+# - pkt : packet type (with integer array traits)
+# - protocol : IP protocol number
+#
+# Because of limitations on Unix raw sockets, this module can only
+# send and receive with a single IP protocol number.
+#
+
+module ip_raw_socket(pkt,protocol) = {
+
+    action recv(v:pkt)
+    action send(v:pkt)
+
+    specification {
+        before send {
+            require true;
+        }
+    }
+
+    instance impl : ip_wrapper(pkt,protocol)
+    trusted isolate iso = this
+    attribute test = impl
+}
