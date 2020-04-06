@@ -150,14 +150,18 @@ def bfe_to_z3(sym):
         lo,hi = things
         insort = sym.sort.dom[0].to_z3()
         outsort = sym.sort.rng.to_z3()
-#        assert (z3.is_bv_sort(insort) and z3.is_bv_sort(outsort))
-        if not z3.is_bv_sort(insort):
+        #        assert (z3.is_bv_sort(insort) and z3.is_bv_sort(outsort))
+        if insort == z3.IntSort():
+            pass
+        elif not z3.is_bv_sort(insort):
             return None
-        if insort.size() <= hi:
+        elif insort.size() <= hi:
             hi = insort.size() - 1
         if outsort == z3.IntSort():
             if hi < lo:
                 return lambda x: z3.IntVal(0)
+            if insort == z3.IntSort():
+                return lambda x: z3.BV2Int(z3.Extract(hi,lo,z3.Int2BV(x,hi+1)))
             return lambda x: z3.BV2Int(z3.Extract(hi,lo,x))
         if not z3.is_bv_sort(outsort):
             return None
@@ -166,8 +170,12 @@ def bfe_to_z3(sym):
         if hi < lo:
             return lambda x: z3.BitVecVal(0,outsort.size())
         elif hi - lo + 1 < outsort.size():
+            if insort == z3.IntSort():
+                return lambda x: z3.Concat(z3.BitVecVal(0,outsort.size() - (hi - lo + 1)),z3.Extract(hi,lo,z3.Int2BV(x,hi+1)))
             return lambda x: z3.Concat(z3.BitVecVal(0,outsort.size() - (hi - lo + 1)),z3.Extract(hi,lo,x))
         else:
+            if insort == z3.IntSort():
+                return lambda x: z3.Extract(hi,lo,z3.Int2BV(x,hi+1))
             return lambda x: z3.Extract(hi,lo,x)
 
 
