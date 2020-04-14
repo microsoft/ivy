@@ -756,10 +756,24 @@ def p_param_tterm(p):
     p[0] = ParameterDecl(p[1])
     p[0].lineno = p[1].lineno
 
-def p_param_tterm_eq_symbol(p):
-    'parameter : tterm EQ SYMBOL'
-    dflt = App(p[3])
-    dflt.lineno = get_lineno(p,3)
+def p_paramval_true(p):
+    'paramval : TRUE'
+    p[0] = Atom('true')
+    p[0].lineno = get_lineno(p,1)
+
+def p_paramval_false(p):
+    'paramval : FALSE'
+    p[0] = Atom('false')
+    p[0].lineno = get_lineno(p,1)
+
+def p_paramval_symbol(p):
+    'paramval : SYMBOL'
+    p[0] = App(p[1])
+    p[0].lineno = get_lineno(p,1)
+
+def p_param_tterm_eq_paramval(p):
+    'parameter : tterm EQ paramval'
+    dflt = p[3]
     df = Definition(p[1],dflt)
     df.lineno = get_lineno(p,2)
     p[0] = ParameterDecl(df)
