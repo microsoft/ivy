@@ -205,7 +205,7 @@ def declare_ctuple(header,dom):
     header.append(t+'('+','.join('const '+ctypefull(d)+' &arg'+str(idx) for idx,d in enumerate(dom))
                   + ') : '+','.join('arg'+str(idx)+'(arg'+str(idx)+')' for idx,d in enumerate(dom))
                   + '{}\n')
-    header.append("        size_t __hash() const { return "+struct_hash_fun(['arg{}'.format(n) for n in range(len(dom))],dom) + ";}\n")
+    header.append("        size_t __hash() const { "+struct_hash_fun(['arg{}'.format(n) for n in range(len(dom))],dom) + "}\n")
     header.append('};\n')
 
 def ctuple_hash(dom):
@@ -384,6 +384,12 @@ def native_type_full(self):
 
 large_thresh = 1024
 
+def is_large_destr(sort):
+    if hasattr(sort,'dom') and any(not is_any_integer_type(s) for s in sort.dom[1:]):
+        return True
+    cards = map(sort_card,sort.dom[1:] if hasattr(sort,'dom') else [])
+    return not(all(cards) and reduce(mul,cards,1) <= large_thresh)
+
 def is_large_type(sort):
     if hasattr(sort,'dom') and any(not is_any_integer_type(s) for s in sort.dom):
         return True
@@ -488,17 +494,31 @@ def make_thunk(impl,vs,expr):
     close_scope(impl,semi=True)
     return 'hash_thunk<{},{}>(new {}({}))'.format(D,R,name,','.join(envnames))
 
+# def struct_hash_fun(field_names,field_sorts):
+#     if len(field_names) == 0:
+#         return '0'
+#     return '+'.join('hash_space::hash<{}>()({})'.format(hashtype(s),varname(f)) for s,f in zip(field_sorts,field_names))
+
 def struct_hash_fun(field_names,field_sorts):
-    if len(field_names) == 0:
-        return '0'
-    return '+'.join('hash_space::hash<{}>()({})'.format(hashtype(s),varname(f)) for s,f in zip(field_sorts,field_names))
+    code = []
+    code_line(code,'size_t hv = 0')
+    for sort,f in zip(field_sorts,field_names):
+        domain = sort_domain(sort)[1:]
+        if not is_large_destr(sort):
+            vs = variables(domain)
+            open_loop(code,vs)
+            code_line(code,'hv += ' + 'hash_space::hash<{}>()({})'.format(hashtype(sort.rng),varname(f) + ''.join('['+varname(a)+']' for a in vs)))
+            close_loop(code,vs)
+    code_line(code,'return hv')
+    return ''.join(code)
+    
 
 def emit_struct_hash(header,the_type,field_names,field_sorts):
     header.append("""
     template<> class hash<the_type> {
         public:
             size_t operator()(const the_type &__s) const {
-                return the_val;
+                the_val
              }
     };
 """.replace('the_type',the_type).replace('the_val',struct_hash_fun(['__s.'+n for n in field_names],field_sorts)))
@@ -518,7 +538,7 @@ def emit_cpp_sorts(header):
             destrs = im.module.sort_destructors[name]
             for destr in destrs:
                 declare_symbol(header,destr,skip_params=1)
-            header.append("        size_t __hash() const { return "+struct_hash_fun(map(memname,destrs),[d.sort.rng for d in destrs]) + ";}\n")
+            header.append("        size_t __hash() const { "+struct_hash_fun(map(memname,destrs),[d.sort for d in destrs]) + "}\n")
             header.append("    };\n");
         elif isinstance(il.sig.sorts[name],il.EnumeratedSort):
             sort = il.sig.sorts[name]
@@ -2555,6 +2575,7 @@ class z3_thunk : public thunk<D,R> {
         cpptype.emit_templates()
 
     global native_classname
+    global global_classname
     once_memo = set()
     for native in im.module.natives:
         tag = native_type(native)
@@ -2725,6 +2746,7 @@ class z3_thunk : public thunk<D,R> {
         variant_of = set((x.name,y) for y,l in im.module.variants.iteritems() for x in l)
         arcs = [a for a in arcs if a in variant_of]
         inline_sort_order = iu.topological_sort(im.module.sort_order,arcs)
+        global_classname = classname
         for sort_name in inline_sort_order:
             if sort_name in im.module.variants:
                 sort = im.module.sig.sorts[sort_name] 
@@ -2781,6 +2803,7 @@ class z3_thunk : public thunk<D,R> {
                         close_loop(impl,[v])
                 code_line(impl,"res.close_struct()")
                 close_scope(impl)
+        global_classname = None
 
 
         for sort_name in enum_sort_names:
@@ -2805,6 +2828,7 @@ class z3_thunk : public thunk<D,R> {
                 emit_repl_imports(header,impl,classname)
                 emit_repl_boilerplate1(header,impl,classname)
 
+            global_classname = classname
             for sort_name in sorted(im.module.sort_destructors):
                 destrs = im.module.sort_destructors[sort_name]
                 sort = im.module.sig.sorts[sort_name]
@@ -2856,7 +2880,7 @@ class z3_thunk : public thunk<D,R> {
                         code_line(impl,'inp.open_field("'+fname+'")')
                         for v in vs:
                             card = sort_card(v.sort)
-                            code_line(impl,'inp.open_list('+str(card)+')')
+                            code_line(impl,'inp.open_list()')
                             open_loop(impl,[v])
                         code_line(impl,'__deser(inp,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
                         for v in vs:
@@ -2911,6 +2935,7 @@ class z3_thunk : public thunk<D,R> {
                         for v in vs:
                             close_loop(impl,[v])
                     close_scope(impl)
+            global_classname = None
 
 
             for sort_name in enum_sort_names:
