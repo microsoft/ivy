@@ -157,9 +157,8 @@ module tls_intf(cid,index,bytes,lower,extens,exten_ser,seq_num) = {
 	invariant established(C) -> open(C)
     }
     
-    implementation {
-        instance impl : tls_gnutls(cid,index,bytes,extens,exten_ser,lower,this)
-    }
+    instance foo : tls_gnutls(cid,index,bytes,extens,exten_ser,lower,this)
+
 
 }
 
