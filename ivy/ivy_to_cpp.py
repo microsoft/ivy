@@ -122,7 +122,11 @@ def varname(name):
     return name.replace(':','__COLON__')
 #    return name.split(':')[-1]
 
-other_varname = varname
+def other_varname(name):
+    if global_classname is not None:
+        return global_classname + '::' + varname(name)
+    return varname(name)
+    
 
 def funname(name):
     if not isinstance(name,str):
