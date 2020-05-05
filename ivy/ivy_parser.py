@@ -643,6 +643,13 @@ def p_top_theorem_label_rhs(p):
     if p[5] is not None:
         p[0].declare(ProofDecl(p[5]))
 
+def p_top_proof_label_label_proofstep(p):
+    'top : top PROOF LABEL proofstep'
+    p[0] = p[1]
+    label = Atom(p[3][1:-1],[])
+    label.lineno = get_lineno(p,3)
+    p[0].declare(ProofDecl(LabeledFormula(label,p[4])))
+
 def p_top_instantiate_insts(p):
     'top : top INSTANTIATE insts'
     p[0] = p[1]
@@ -1082,6 +1089,13 @@ def p_optproof(p):
 def p_optproof_symbol(p):
     'optproof : PROOF proofstep'
     p[0] = p[2]
+    
+def p_optproof_label_proofstep(p):
+    'optproof : PROOF LABEL proofstep'
+    label = Atom(p[2][1:-1],[])
+    label.lineno = get_lineno(p,2)
+    p[0] = LabeledFormula(label,p[3])
+    p[0].lineno = get_lineno(p,1)
     
 def p_optproofgroup(p):
     'optproofgroup :'

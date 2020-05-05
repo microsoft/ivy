@@ -403,6 +403,8 @@ ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,
                                                        if isinstance(self.formula,ivy_ast.SchemaBody)
                                                        else sortify_with_inference(self.formula)])
 
+ivy_ast.ProofDecl.cmpl = lambda self: self.clone([sortify_with_inference(self.args[0])]+self.args[1:]) 
+
 # compiling update patterns is complicated because they declare constants internally
 def UpdatePattern_cmpl(self):
     with ivy_logic.sig.copy():
@@ -1080,6 +1082,9 @@ class IvyDomainSetup(IvyDeclInterp):
             add_symbol(df.args[0].rep.name,df.args[0].rep.sort)
             
     def proof(self,pf):
+        if isinstance(pf,ivy_ast.LabeledFormula):   # proof has a label
+            self.domain.proofs.append((ivy_ast.LabeledFormula(pf.label,None),pf.formula.compile()))
+            return
         if self.last_fact is None:
             return # this is a conjecture
         global last_fmla
@@ -1266,8 +1271,8 @@ class IvyConjectureSetup(IvyDeclInterp):
     def theorem(self,sch):
         self.last_fact = None
     def proof(self,pf):
-        if self.last_fact is None:
-            return # this is a not a conjecture
+        if self.last_fact is None or len(pf.args) >= 2:
+            return # this is a not a conjecture, or proof is labeled
         global last_fmla
         last_fmla = self.last_fact.formula
         self.domain.proofs.append((self.last_fact,pf.compile()))
@@ -1540,6 +1545,33 @@ def get_symbol_dependencies(mp,res,t):
             if s in mp:
                 get_symbol_dependencies(mp,res,mp[s])
 
+
+# Attach the labeled proofs to their properties. A proof can also attach to an isolate.
+
+def attach_proofs(mod):
+    m = dict((lf.label.rep,lf) for lf in mod.labeled_props)
+    m.update((lf.label.rep,lf) for lf in mod.labeled_conjs)
+    used = set()
+    pfs = mod.proofs
+    mod.proofs = []
+    for pf in pfs:
+        if pf[0].formula is not None:
+            mod.proofs.append(pf)
+            used.add(pf[0].label.rep)
+    for pf in pfs:
+        if pf[0].formula is None:
+            lab = pf[0].label.rep
+            if lab in used:
+                raise(IvyError(pf[1],'redundant proof for {}'.format(lab)))
+            used.add(lab)
+            if lab in m:
+                mod.proofs.append((m[lab],pf[1]))
+            elif lab in mod.isolates:
+                mod.isolate_proofs[lab] = pf[1]
+            else:
+                raise(IvyError(pf[1],'proof label {} is not a property or isolate'.format(lab)))
+        
+                
 def check_definitions(mod):
 
     # get the definitions that have no dependence on proofs
@@ -1989,6 +2021,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
 
         create_sort_order(mod)
         create_constructor_schemata(mod)
+        attach_proofs(mod)
         check_definitions(mod)
         check_properties(mod)
         create_conj_actions(mod)

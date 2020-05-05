@@ -84,6 +84,8 @@ class Module(object):
         self.conj_subgoals = None # None or labeled formula list
         self.assumed_invariants = [] # labeled_formula_list
         self.finite_sorts = set() # set of sort names
+        self.isolate_proofs = {}
+        self.isolate_proof = None
         
         self.sig = il.sig.copy() # capture the current signature
 

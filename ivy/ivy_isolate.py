@@ -1659,6 +1659,8 @@ def create_isolate(iso,mod = None,**kwargs):
             for actname,before,after in brackets:
                 bracket_action(mod,actname,before,after)
 
+        mod.isolate_proof = mod.isolate_proofs[iso] if iso in mod.isolate_proofs else None
+
         # show the compiled code if requested
 
         if show_compiled.get():

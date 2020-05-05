@@ -389,6 +389,17 @@ def apply_conj_proofs(mod):
 
 def summarize_isolate(mod):
 
+    if mod.isolate_proof is not None:
+        pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
+        model = itmp.normal_program_from_module(im.module)
+        prop = ivy_ast.LabeledFormula(ivy_ast.Atom('safety'),lg.And())
+        subgoal = ivy_ast.LabeledFormula(ivy_ast.Atom('safety'),itmp.TemporalModels(model,lg.And()))
+        print 'subgoal = {}'.format(subgoal)
+        subgoals = [subgoal]
+        subgoals = pc.admit_proposition(prop,mod.isolate_proof,subgoals)
+        check_subgoals(subgoals)
+        return
+
     global check_lineno
     check_lineno = act.checked_assert.get()
     if check_lineno == "":
@@ -633,6 +644,7 @@ def check_subgoals(goals):
                   """The temporal subgoal {} has not been reduced to an invariance property. 
                      Try using a tactic such as l2s.""")
             mod = im.module.copy()
+            mod.isolate_proof = None
             # mod.labeled_axioms.extend(proved)
             mod.labeled_props = []
             mod.concept_spaces = []
