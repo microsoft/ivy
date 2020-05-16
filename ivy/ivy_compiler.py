@@ -1783,6 +1783,8 @@ def check_properties(mod):
                         mod.definitions.append(prop)
                     else: 
                         mod.labeled_axioms.append(prop)
+                else:
+                    mod.schemata[prop.label.relname] = prop
             else:
                 subgoals = map(theorem_to_property,subgoals)
                 lb = ivy_ast.Labeler()
@@ -1796,6 +1798,8 @@ def check_properties(mod):
                         mod.definitions.append(prop)
                     else:
                         mod.labeled_props.append(prop)
+                else:
+                    mod.schemata[prop.label.relname] = prop
             mod.subgoals.append((prop,subgoals))
         #     from ivy_l2s import l2s
         #     print "=================" + "\n" * 10
