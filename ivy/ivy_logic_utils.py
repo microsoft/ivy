@@ -204,7 +204,7 @@ def normalize_free_variables(ast):
     vs = []
     nvs = []
     for v in variables_ast(ast):
-        if v not in subs:
+        if v.name not in subs:
             nv = lg.Var('V{}'.format(len(subs)), v.sort)
             subs[v.name] = nv
             vs.append(v)
