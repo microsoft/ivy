@@ -662,6 +662,10 @@ class Renaming(AST):
     def __str__(self):
         return '<' + ','.join('{}/{}'.format(x.rhs(),x.lhs()) for x in self.args) + '>'
 
+class Tactic(AST):
+    def vocab(self,names):
+        pass
+    
 class TacticWithMatch(AST):
     """ First arg is a schema name, second is a renaming, rest are matches """
     def __init__(self,*args):
@@ -679,6 +683,9 @@ class TacticWithMatch(AST):
         if len(self.args) > 2:
             res += ' with ' + ','.join(str(x) for x in self.args[2:])
         return res
+    def vocab(self,names):
+        for m in self.match():
+            names.update(symbols_ast(m.args[1]))
 
 class SchemaInstantiation(TacticWithMatch):
     def tactic_name(self):
@@ -688,41 +695,48 @@ class AssumeTactic(TacticWithMatch):
     def tactic_name(self):
         return 'assume'
 
-class ShowGoalsTactic(AST):
+class ShowGoalsTactic(Tactic):
     def tactic_name(self):
         return 'showgoals'
     def __str__(self):
         return 'showgoals'
 
-class DeferGoalTactic(AST):
+class DeferGoalTactic(Tactic):
     def tactic_name(self):
         return 'defergoal'
 
-class NullTactic(AST):
+class NullTactic(Tactic):
     def __init__(self,*args):
         self.args = []
     def __str__(self):
         return '{}'
     
-class LetTactic(AST):
+class LetTactic(Tactic):
     def __init__(self,*args):
         self.args = args
     def __str__(self):
         return 'let ' + ','.join(str(x) for x in self.args)
-    
-class SpoilTactic(AST):
+    def vocab(self,names):
+        for m in self.args:
+            names.update(symbols_ast(m.args[1]))
+        
+class SpoilTactic(Tactic):
     def __init__(self,*args):
         self.args = args
     def __str__(self):
         return 'spoil ' + str(self.args[0])
 
-class IfTactic(AST):
+class IfTactic(Tactic):
     def __init__(self,*args):
         self.args = args
     def __str__(self):
         return 'if ' + str(self.args[0]) + ' { ' + str(self.args[1]) + ' } else { ' + str(self.args[2]) + ' }'
+    def vocab(self,names):
+        names.update(symbols_ast(self.args[0]))
+        for arg in self.args[1:]:
+            arg.vocab(names)
 
-class PropertyTactic(AST):
+class PropertyTactic(Tactic):
     def __init__(self,*args):
         self.args = args
     def __str__(self):
@@ -733,7 +747,10 @@ class PropertyTactic(AST):
                 + 'property ' + str(p)
                 + ('' if isinstance(n,NoneAST) else ('named ' + str(n)))
                 + ('' if isinstance(pr,NoneAST) else ('proof ' + str(pr))))
-class TacticTactic(AST):
+    def vocab(self,names):
+        self.args[2].vocab(names)
+
+class TacticTactic(Tactic):
     @property
     def tactic_name(self):
         return self.args[0].rep
@@ -743,13 +760,16 @@ class TacticTactic(AST):
     def __str__(self):
         res = 'tactic ' + str(self.args[0]) + str(self.args[1])
 
-class TacticWith(AST):
+class TacticWith(Tactic):
     def __str__(self):
         res = (' with ' + ' '.join(str(x) for x in self.args[1].args)) if self.args[1].args > 0 else ''
 
-class ComposeTactics(AST):
+class ComposeTactics(Tactic):
     def __str__(self):
         return '; '.join(map(str,self.args))
+    def vocab(self,names):
+        for arg in self.args:
+            arg.vocab(names)
 
 
 class Instantiation(AST):
@@ -1533,6 +1553,21 @@ def variables_ast(ast):
                 yield x
 
 used_variables_ast = gen_to_set(variables_ast)
+
+def symbols_ast(ast):
+    if isinstance(ast,(App,Atom)):
+        yield ast.rep
+    elif ast != None and not isinstance(ast,str):
+#        if not hasattr(ast,'args'):
+#            print ast
+#            print type(ast)
+#        if any(isinstance(c,list) for c in ast.args):
+#            print "foo: " + repr(ast)
+        for arg in ast.args:
+            for x in symbols_ast(arg):
+                yield x
+
+used_variables_ast = gen_to_set(symbols_ast)
 
 def compose_atoms(pr,atom):
     if atom == None:
