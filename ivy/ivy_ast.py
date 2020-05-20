@@ -1567,7 +1567,6 @@ def symbols_ast(ast):
             for x in symbols_ast(arg):
                 yield x
 
-used_variables_ast = gen_to_set(symbols_ast)
 
 def compose_atoms(pr,atom):
     if atom == None:
