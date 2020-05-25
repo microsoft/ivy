@@ -677,6 +677,8 @@ def compile_one_match(lhs,rhs,freesyms,constants):
     lhs = apply_match_alt(vmatch,lhs)
     newfreesyms = apply_match_freesyms(vmatch,freesyms)
     somatch = match(lhs,rhs,newfreesyms,constants)
+    if somatch is None:
+        return None
     somatch = compose_matches(freesyms,vmatch,somatch,vmatch)
     fmatch = merge_matches(vmatch,somatch)
     return fmatch
