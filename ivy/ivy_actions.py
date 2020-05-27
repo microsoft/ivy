@@ -1129,7 +1129,8 @@ class CallAction(Action):
 #        print "after hide: {}".format(res)
         return res
     def prefix_calls(self,pref):
-        res = CallAction(*([self.args[0].prefix(pref)] + self.args[1:]))
+        res = CallAction(*([self.args[0].prefix(pref) if isinstance(pref,str)
+                            else self.args[0].rename(pref(self.args[0].rep))] + self.args[1:]))
         if hasattr(self,'lineno'):
             res.lineno = self.lineno
         else: 

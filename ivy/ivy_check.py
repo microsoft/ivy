@@ -387,8 +387,10 @@ def apply_conj_proofs(mod):
     mod.conj_subgoals = conjs
 
 
-def summarize_isolate(mod):
 
+
+def check_isolate():
+    mod = im.module
     if mod.isolate_proof is not None:
         pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
         model = itmp.normal_program_from_module(im.module)
@@ -400,232 +402,183 @@ def summarize_isolate(mod):
         check_subgoals(subgoals)
         return
 
-    global check_lineno
-    check_lineno = act.checked_assert.get()
-    if check_lineno == "":
-        check_lineno = None
-#    print 'check_lineno: {}'.format(check_lineno)
-    check = not opt_summary.get()
-    subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
-    axioms = [m for m in mod.labeled_axioms if m.id not in subgoalmap] 
-    schema_instances = [m for m in mod.labeled_axioms if m.id in subgoalmap]
-    if axioms:
-        print "\n    The following properties are assumed as axioms:"
-        for lf in axioms:
-            print pretty_lf(lf)
-
-    if mod.definitions:
-        print "\n    The following definitions are used:"
-        for lf in mod.definitions:
-            print pretty_lf(lf)
-
-    if (mod.labeled_props or schema_instances) and not checked_action.get():
-        print "\n    The following properties are to be checked:"
-        if check:
-            for lf in schema_instances:
-                print pretty_lf(lf) + " [proved by axiom schema]"
-            ag = ivy_art.AnalysisGraph()
-            clauses1 = lut.true_clauses(annot=act.EmptyAnnotation())
-            pre = itp.State(value = clauses1)
-            props = [x for x in im.module.labeled_props if not x.temporal]
-            fcs = ([(ConjAssumer if prop.id in subgoalmap else ConjChecker)(prop) for prop in props])
-            check_fcs_in_state(mod,ag,pre,fcs)
-        else:
-            for lf in schema_instances + mod.labeled_props:
-                print pretty_lf(lf)
-
-    # after checking properties, make them axioms, except temporals
-    im.module.labeled_axioms.extend(p for p in im.module.labeled_props if not p.temporal)
-    im.module.update_theory()
-
-
-    if mod.labeled_inits:
-        print "\n    The following properties are assumed initially:"
-        for lf in mod.labeled_inits:
-            print pretty_lf(lf)
-    if mod.labeled_conjs:
-        print "\n    The inductive invariant consists of the following conjectures:"
-        for lf in mod.labeled_conjs:
-            print pretty_lf(lf)
-
-    apply_conj_proofs(mod)
-    
-    if mod.isolate_info.implementations:
-        print "\n    The following action implementations are present:"
-        for mixer,mixee,action in sorted(mod.isolate_info.implementations,key=lambda x: x[0]):
-            print "        {}implementation of {}".format(pretty_lineno(action),mixee)
-
-    if mod.isolate_info.monitors:
-        print "\n    The following action monitors are present:"
-        for mixer,mixee,action in sorted(mod.isolate_info.monitors,key=lambda x: x[0]):
-            print "        {}monitor of {}".format(pretty_lineno(action),mixee)
-
-    # if mod.actions:
-    #     print "\n    The following actions are present:"
-    #     for actname,action in sorted(mod.actions.iteritems()):
-    #         print "        {}{}".format(pretty_lineno(action),actname)
-
-    if mod.initializers:
-        print "\n    The following initializers are present:"
-        for actname,action in sorted(mod.initializers, key=lambda x: x[0]):
-            print "        {}{}".format(pretty_lineno(action),actname)
-
-    if mod.labeled_conjs and not checked_action.get():
-        print "\n    Initialization must establish the invariant"
-        if check:
-            with itp.EvalContext(check=False):
-                ag = ivy_art.AnalysisGraph(initializer=lambda x:None)
-                check_conjs_in_state(mod,ag,ag.states[0])
-        else:
-            print ''
-
-    if mod.initializers:
-        print "\n    Any assertions in initializers must be checked",
-        if check:
-            ag = ivy_art.AnalysisGraph(initializer=lambda x:None)
-            fail = itp.State(expr = itp.fail_expr(ag.states[0].expr))
-            check_safety_in_state(mod,ag,fail)
-
-
-    checked_actions = get_checked_actions()
-
-    if checked_actions and mod.labeled_conjs:
-        print "\n    The following set of external actions must preserve the invariant:"
-        for actname in sorted(checked_actions):
-            action = act.env_action(actname)
-            print "        {}{}".format(pretty_lineno(action),actname)
-            if check:
-                ag = ivy_art.AnalysisGraph()
-                pre = itp.State()
-                pre.clauses = get_conjs(mod)
-                with itp.EvalContext(check=False): # don't check safety
-#                    post = ag.execute(action, pre, None, actname)
-                    post = ag.execute(action, pre)
-                check_conjs_in_state(mod,ag,post,indent=12)
-            else:
-                print ''
-            
-
-
-    callgraph = defaultdict(list)
-    for actname,action in mod.actions.iteritems():
-        for called_name in action.iter_calls():
-            callgraph[called_name].append(actname)
-
-    some_assumps = False
-    for actname,action in mod.actions.iteritems():
-        assumptions = [sub for sub in action.iter_subactions()
-                           if isinstance(sub,act.AssumeAction)]
-        if assumptions:
-            if not some_assumps:
-                print "\n    The following program assertions are treated as assumptions:"
-                some_assumps = True
-            callers = callgraph[actname]
-            if actname in mod.public_actions:
-                callers.append("the environment")
-            prettyname = actname[4:] if actname.startswith('ext:') else actname
-            prettycallers = [c[4:] if c.startswith('ext:') else c for c in callers]
-            print "        in action {} when called from {}:".format(prettyname,','.join(prettycallers))
-            for sub in assumptions:
-                print "            {}assumption".format(pretty_lineno(sub))
-
-    tried = set()
-    some_guarants = False
-    for actname,action in mod.actions.iteritems():
-        guarantees = [sub for sub in action.iter_subactions()
-                          if isinstance(sub,(act.AssertAction,act.Ranking))]
-        if check_lineno is not None:
-            guarantees = [sub for sub in guarantees if sub.lineno == check_lineno]
-        if guarantees:
-            if not some_guarants:
-                print "\n    The following program assertions are treated as guarantees:"
-                some_guarants = True
-            callers = callgraph[actname]
-            if actname in mod.public_actions:
-                callers.append("the environment")
-            prettyname = actname[4:] if actname.startswith('ext:') else actname
-            prettycallers = [c[4:] if c.startswith('ext:') else c for c in callers]
-            print "        in action {} when called from {}:".format(prettyname,','.join(prettycallers))
-            roots = set(iu.reachable([actname],lambda x: callgraph[x]))
-            for sub in guarantees:
-                print "            {}guarantee".format(pretty_lineno(sub)),
-                if check and any(r in roots and (r,sub.lineno) not in tried for r in checked_actions):
-                    print_dots()
-                    old_checked_assert = act.checked_assert.get()
-                    act.checked_assert.value = sub.lineno
-                    some_failed = False
-                    for root in checked_actions:
-                        if root in roots:
-                           tried.add((root,sub.lineno))
-                           action = act.env_action(root)
-                           ag = ivy_art.AnalysisGraph()
-                           pre = itp.State()
-                           pre.clauses = get_conjs(mod)
-                           with itp.EvalContext(check=False):
-                               post = ag.execute(action,prestate=pre)
-                           fail = itp.State(expr = itp.fail_expr(post.expr))
-                           if not check_safety_in_state(mod,ag,fail,report_pass=False):
-                               some_failed = True
-                               break
-                    if not some_failed:
-                        print 'PASS'
-                    act.checked_assert.value = old_checked_assert
-                else:
-                    print ""
-
-
-def check_isolate():
-    temporals = [p for p in im.module.labeled_props if p.temporal]
-    mod = im.module
-    # if temporals:
-    #     if len(temporals) > 1:
-    #         raise IvyError(None,'multiple temporal properties in an isolate not supported yet')
-    #     from ivy_l2s import l2s
-    #     l2s(mod, temporals[0])
-    #     mod.concept_spaces = []
-    #     mod.update_conjs()
     ifc.check_fragment()
     with im.module.theory_context():
-        summarize_isolate(mod)
+        global check_lineno
+        check_lineno = act.checked_assert.get()
+        if check_lineno == "":
+            check_lineno = None
+    #    print 'check_lineno: {}'.format(check_lineno)
+        check = not opt_summary.get()
+        subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
+        axioms = [m for m in mod.labeled_axioms if m.id not in subgoalmap] 
+        schema_instances = [m for m in mod.labeled_axioms if m.id in subgoalmap]
+        if axioms:
+            print "\n    The following properties are assumed as axioms:"
+            for lf in axioms:
+                print pretty_lf(lf)
+
+        if mod.definitions:
+            print "\n    The following definitions are used:"
+            for lf in mod.definitions:
+                print pretty_lf(lf)
+
+        if (mod.labeled_props or schema_instances) and not checked_action.get():
+            print "\n    The following properties are to be checked:"
+            if check:
+                for lf in schema_instances:
+                    print pretty_lf(lf) + " [proved by axiom schema]"
+                ag = ivy_art.AnalysisGraph()
+                clauses1 = lut.true_clauses(annot=act.EmptyAnnotation())
+                pre = itp.State(value = clauses1)
+                props = [x for x in im.module.labeled_props if not x.temporal]
+                fcs = ([(ConjAssumer if prop.id in subgoalmap else ConjChecker)(prop) for prop in props])
+                check_fcs_in_state(mod,ag,pre,fcs)
+            else:
+                for lf in schema_instances + mod.labeled_props:
+                    print pretty_lf(lf)
+
+        # after checking properties, make them axioms, except temporals
+        im.module.labeled_axioms.extend(p for p in im.module.labeled_props if not p.temporal)
+        im.module.update_theory()
+
+
+        if mod.labeled_inits:
+            print "\n    The following properties are assumed initially:"
+            for lf in mod.labeled_inits:
+                print pretty_lf(lf)
+        if mod.labeled_conjs:
+            print "\n    The inductive invariant consists of the following conjectures:"
+            for lf in mod.labeled_conjs:
+                print pretty_lf(lf)
+
+        apply_conj_proofs(mod)
+
+        if mod.isolate_info.implementations:
+            print "\n    The following action implementations are present:"
+            for mixer,mixee,action in sorted(mod.isolate_info.implementations,key=lambda x: x[0]):
+                print "        {}implementation of {}".format(pretty_lineno(action),mixee)
+
+        if mod.isolate_info.monitors:
+            print "\n    The following action monitors are present:"
+            for mixer,mixee,action in sorted(mod.isolate_info.monitors,key=lambda x: x[0]):
+                print "        {}monitor of {}".format(pretty_lineno(action),mixee)
+
+        # if mod.actions:
+        #     print "\n    The following actions are present:"
+        #     for actname,action in sorted(mod.actions.iteritems()):
+        #         print "        {}{}".format(pretty_lineno(action),actname)
+
+        if mod.initializers:
+            print "\n    The following initializers are present:"
+            for actname,action in sorted(mod.initializers, key=lambda x: x[0]):
+                print "        {}{}".format(pretty_lineno(action),actname)
+
+        if mod.labeled_conjs and not checked_action.get():
+            print "\n    Initialization must establish the invariant"
+            if check:
+                with itp.EvalContext(check=False):
+                    ag = ivy_art.AnalysisGraph(initializer=lambda x:None)
+                    check_conjs_in_state(mod,ag,ag.states[0])
+            else:
+                print ''
+
+        if mod.initializers:
+            print "\n    Any assertions in initializers must be checked",
+            if check:
+                ag = ivy_art.AnalysisGraph(initializer=lambda x:None)
+                fail = itp.State(expr = itp.fail_expr(ag.states[0].expr))
+                check_safety_in_state(mod,ag,fail)
+
+
+        checked_actions = get_checked_actions()
+
+        if checked_actions and mod.labeled_conjs:
+            print "\n    The following set of external actions must preserve the invariant:"
+            for actname in sorted(checked_actions):
+                action = act.env_action(actname)
+                print "        {}{}".format(pretty_lineno(action),actname)
+                if check:
+                    ag = ivy_art.AnalysisGraph()
+                    pre = itp.State()
+                    pre.clauses = get_conjs(mod)
+                    with itp.EvalContext(check=False): # don't check safety
+    #                    post = ag.execute(action, pre, None, actname)
+                        post = ag.execute(action, pre)
+                    check_conjs_in_state(mod,ag,post,indent=12)
+                else:
+                    print ''
+
+
+
+        callgraph = defaultdict(list)
+        for actname,action in mod.actions.iteritems():
+            for called_name in action.iter_calls():
+                callgraph[called_name].append(actname)
+
+        some_assumps = False
+        for actname,action in mod.actions.iteritems():
+            assumptions = [sub for sub in action.iter_subactions()
+                               if isinstance(sub,act.AssumeAction)]
+            if assumptions:
+                if not some_assumps:
+                    print "\n    The following program assertions are treated as assumptions:"
+                    some_assumps = True
+                callers = callgraph[actname]
+                if actname in mod.public_actions:
+                    callers.append("the environment")
+                prettyname = actname[4:] if actname.startswith('ext:') else actname
+                prettycallers = [c[4:] if c.startswith('ext:') else c for c in callers]
+                print "        in action {} when called from {}:".format(prettyname,','.join(prettycallers))
+                for sub in assumptions:
+                    print "            {}assumption".format(pretty_lineno(sub))
+
+        tried = set()
+        some_guarants = False
+        for actname,action in mod.actions.iteritems():
+            guarantees = [sub for sub in action.iter_subactions()
+                              if isinstance(sub,(act.AssertAction,act.Ranking))]
+            if check_lineno is not None:
+                guarantees = [sub for sub in guarantees if sub.lineno == check_lineno]
+            if guarantees:
+                if not some_guarants:
+                    print "\n    The following program assertions are treated as guarantees:"
+                    some_guarants = True
+                callers = callgraph[actname]
+                if actname in mod.public_actions:
+                    callers.append("the environment")
+                prettyname = actname[4:] if actname.startswith('ext:') else actname
+                prettycallers = [c[4:] if c.startswith('ext:') else c for c in callers]
+                print "        in action {} when called from {}:".format(prettyname,','.join(prettycallers))
+                roots = set(iu.reachable([actname],lambda x: callgraph[x]))
+                for sub in guarantees:
+                    print "            {}guarantee".format(pretty_lineno(sub)),
+                    if check and any(r in roots and (r,sub.lineno) not in tried for r in checked_actions):
+                        print_dots()
+                        old_checked_assert = act.checked_assert.get()
+                        act.checked_assert.value = sub.lineno
+                        some_failed = False
+                        for root in checked_actions:
+                            if root in roots:
+                               tried.add((root,sub.lineno))
+                               action = act.env_action(root)
+                               ag = ivy_art.AnalysisGraph()
+                               pre = itp.State()
+                               pre.clauses = get_conjs(mod)
+                               with itp.EvalContext(check=False):
+                                   post = ag.execute(action,prestate=pre)
+                               fail = itp.State(expr = itp.fail_expr(post.expr))
+                               if not check_safety_in_state(mod,ag,fail,report_pass=False):
+                                   some_failed = True
+                                   break
+                        if not some_failed:
+                            print 'PASS'
+                        act.checked_assert.value = old_checked_assert
+                    else:
+                        print ""
+
         check_temporals()
-        return
-        check_properties()
-        some_temporals = any(p.temporal for p in im.module.labeled_props)
-        check_temporals()
-        ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
-        if im.module.initializers:
-            cex = ag.check_bounded_safety(ag.states[0])
-            if cex is not None:
-                display_cex("safety failed in initializer",cex)
-        with ivy_interp.EvalContext(check=False):
-            initiation_checked = False
-            if not some_temporals:
-                check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
-                initiation_checked = True
-            for actname in get_checked_actions():
-                old_checked_assert = act.checked_assert.get()
-                assertions = find_assertions(actname)
-                if assertions and not initiation_checked:
-                    check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
-                    initiation_checked = True
-                print "trying {}...".format(actname)
-                if act.checked_assert.get():
-                    assertions = [a for a in assertions if a.lineno == act.checked_assert.get()]
-                tried = set()
-                for asn in assertions:
-                    if asn.lineno not in tried:
-                        tried.add(asn.lineno)
-                        act.checked_assert.value = asn.lineno
-                        print '{}: {}'.format(asn.lineno,asn)
-                        ag.execute_action(actname,prestate=ag.states[0])
-                        cex = ag.check_bounded_safety(ag.states[-1],bound=1)
-                        if cex is not None:
-                            display_cex("safety failed",cex)
-                if initiation_checked:
-                    print "checking consecution..."
-                    ag.execute_action(actname,prestate=ag.states[0],abstractor=ivy_alpha.alpha)
-                    check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
-                act.checked_assert.value = old_checked_assert
+
 
 
 # This is a little bit backward. When faced with a subgoal from the prover,
