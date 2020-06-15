@@ -57,6 +57,8 @@ def summarize_action(action):
     res.lineno = action.lineno
     res.formal_params = action.formal_params
     res.formal_returns = action.formal_returns
+    if hasattr(action,'labels'):
+        res.labels = action.labels
     # have to havoc the in/out parameters, other outs are non-deterministic anyway
     if isolate_mode.get() != 'test':
         for x in res.formal_returns:
