@@ -1,0 +1,60 @@
+#lang ivy1.7
+
+# Generate random IP traffic from the IP spec
+
+include ip_spec
+
+# To make a specification, the final thing we need to do is tell Ivy what that actual
+# program inputs are. We do this by declaring the `transmit` action as an *export*. This
+# means that someone outside of our program will be calling `transmit`:
+
+export ip.transmit
+
+# Notice that since we our now outside the scope `ip`, we need to
+# refer to `transmit` using its full name, which includes the object
+# `ip`.
+#
+# That's it! We now have a very simple network layer wire
+# specification for our simplified version of IP.
+#
+# Now let's use it to generate some traffic we can look at. Remember we said that
+# the Ivy compiler can generate random inputs for our program. To do this, however,
+# we need to fill in some missing information. First, we need some actual definitions
+# for the uninterpreted types `network` and `host`:
+
+interpret ip.host -> {host1,router,host2}
+interpret ip.network -> {net1,net2}
+
+# The above to statements tell Ivy to interpret the `host` type as an enumerated type
+# with three elements, and the `network` type as an enumerated type with two elements.
+# In effect, we have defined a very small internet.
+#
+# In addition, we need to initialize the relation `intf` that defines
+# the network topology. Here is an example:
+
+after init {
+    ip.intf(H,N,A) := false;
+    ip.intf(host1,net1,0x0A000001) := true;
+    ip.intf(router,net1,0x0A000002) := true;
+    ip.intf(router,net2,0x0A000102) := true;
+    ip.intf(host2,net2,0x0A000101) := true;
+}
+
+# That is, when we start up, we first clear out the relation `intf` and then we add some
+# entries that corresspond to a small internetwork which we have two networks, `net1` and
+# `net2`, each with one host and a router between them. Notice we gave the IP addresses of
+# the interfaces as 32-bit hex numbers (using the same syntax as in C). That's because Ivy
+# doesn't know about the dot notation for IP addresses. In effect, we have defined two class C
+# networks with prefixes 10.0.0 and 10.0.1.
+
+# This little trick causes the tester to print numbers in hex, which is helpful:
+
+attribute radix=16
+
+# Now let's compile this program and run it. Here is the command line to compile:
+#
+#     $ ivyc target=test ip_spec.ivy
+#
+# The option `target=test` tells the compiler to produce a randomized contract-based tester
+# for our program.
+

@@ -1,0 +1,90 @@
+#lang ivy1.7
+
+# Codec for UDP packets.
+
+include udp_spec
+include ip_codec
+
+# Here, we extend the udp object with some additional traits to encode
+# and decode datagrams. Notice the `...` at the beginning of the
+# declarations, which tells us we are extending the object.
+
+# The UDP header layour is:
+#
+# bytes    field
+# 0-1      src port
+# 2-3      dst port
+# 4-5      datagram length, including UDP header and payload
+# 6-7      IP-style checksum
+#
+# Note, the checksum includes some information from the IP header
+#
+# Notice here that the header contains some fields that are not
+# present in the high-level datagram, but can be computed from it.
+# In general, we leave out redundant information from high-level
+# formats, and compute the information during encoding.
+#
+# TODO: compute and check the checksum
+#
+
+object udp = { ...
+
+    # instantiate codecs for various types occuring in header
+
+    instance port_codec : bv_codec(port,2)
+    
+    # Decode a raw UDP packet, returning a `datagram` structure
+
+    action decode(raw:stream) returns (dgram:datagram) = {
+        require raw.end >= 8;
+        dgram.src_port_field := port_codec.decode(raw,0);
+        dgram.dst_port_field := port_codec.decode(raw,2);
+        dgram.payload := raw.segment(8,raw.end);
+    }
+
+    # Encode a UDP datagram into a raw byte stream
+    #
+    # Note: we need the `src` and `dst` IP addresses even though these
+    # don't appear in the UDP datagram, because they are used to
+    # compute the checksum.
+
+    action encode(dgram:datagram, src:ip.addr, dst:ip.addr) returns (raw:stream) = {
+        raw := raw.resize(8,0);
+        raw := port_codec.encode(raw,0,dgram.src_port_field);
+        raw := port_codec.encode(raw,2,dgram.dst_port_field);
+        raw := ip.pos_codec.encode(raw,4,8+dgram.payload.end);
+        raw := raw.extend(dgram.payload);
+        raw := add_checksum(raw,src,dst);
+    }
+
+    # Add the UDP checksum.
+
+    action add_checksum(raw:stream, src:ip.addr, dst:ip.addr) returns (raw:stream) = {
+        var bytes := stream.create(12,0);
+
+        # Pseudo header
+        
+        bytes := ip.addr_codec.encode(bytes,0,src);
+        bytes := ip.addr_codec.encode(bytes,4,dst);
+        bytes := bytes.set(9,17); # protocol 17 is UDP
+        bytes := ip.pos_codec.encode(bytes,10,raw.end);
+
+        # Add the UDP datagram, with data
+
+        bytes := bytes.extend(raw);
+
+        # Pad with a zero byte if length is odd
+
+        if bytes.end / 2 * 2 ~= bytes.end {
+            bytes := bytes.append(0);
+        };
+
+        # Compute the checksum of the bytes using the IP checksum
+        # algorithm and insert it in the UDP datagram in position 6.
+        
+        raw := ip.checksum_codec.encode(raw,6,ip.get_checksum(bytes));
+
+    }
+    
+}
+

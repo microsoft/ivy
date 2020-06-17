@@ -1,0 +1,21 @@
+#lang ivy1.7
+
+include udp_codec
+
+# Test that decoding is the inverse of encoding
+
+export action test(dgram:udp.datagram) = {
+    var raw := udp.encode(dgram);
+    call show_encoded(raw);
+    var redec := udp.decode(raw);
+    call show_decoded(redec);
+    assert redec = dgram;
+}
+
+before test {
+}
+
+import action show_encoded(raw:stream)
+import action show_decoded(dgram:udp.datagram)
+
+attribute radix = 16

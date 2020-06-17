@@ -1,0 +1,8 @@
+> ip.transmit(0,0xa010102,0xa010101,0,{version_field:0x4,ident_field:0x1,false_flag:0,may_fragment_flag:0,more_flag:0,offset_field:0,ttl_field:0x58,protocol_field:0x11,source_addr_field:0xa010102,destination_addr_field:0xa010202,payload:[0x7c,0xc2,0,0]})
+> ip.transmit(0,0xa010102,0xa010101,0,{version_field:0x4,ident_field:0,false_flag:0,may_fragment_flag:0,more_flag:0,offset_field:0,ttl_field:0xf,protocol_field:0x11,source_addr_field:0xa010102,destination_addr_field:0xa010102,payload:[0x1a,0xfe,0,0]})
+> ip.transmit(0,0xa010202,0xa010201,0x1,{version_field:0x4,ident_field:0,false_flag:0,may_fragment_flag:0,more_flag:0,offset_field:0x1,ttl_field:0xa4,protocol_field:0x11,source_addr_field:0xa010202,destination_addr_field:0xa010202,payload:[0x3b,0x33,0xcd,0]})
+> ip.transmit(0,0xa010202,0xa010201,0x1,{version_field:0x4,ident_field:0x1,false_flag:0,may_fragment_flag:0,more_flag:0,offset_field:0,ttl_field:0x6,protocol_field:0x11,source_addr_field:0xa010202,destination_addr_field:0xa010102,payload:[0,0,0,0]})
+< ip_sock_received_pkt({version_field:0x4,ident_field:0,false_flag:0,may_fragment_flag:0,more_flag:0,offset_field:0,ttl_field:0xa3,protocol_field:0x11,source_addr_field:0xa010202,destination_addr_field:0xa010202,payload:[0x3b,0x33,0xcd,0]},0x7e,0x1)
+< infer_ip_transmit(0x1,0xa010201,0xa010202,0x1,{version_field:0x4,ident_field:0,false_flag:0,may_fragment_flag:0,more_flag:0,offset_field:0,ttl_field:0xa3,protocol_field:0x11,source_addr_field:0xa010202,destination_addr_field:0xa010202,payload:[0x3b,0x33,0xcd,0]})
+assertion_failed("ip_spec.ivy: line 200")
+ip_spec.ivy: line 200: error: assertion failed

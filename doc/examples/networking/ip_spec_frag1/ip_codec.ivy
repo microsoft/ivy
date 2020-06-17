@@ -1,0 +1,101 @@
+#lang ivy1.7
+
+# Codec for IP packets.
+
+include ip_spec
+
+# Here, we extend the ip object with some additional traits to encode
+# and decode datagrams. Notice the `...` at the beginning of the
+# declarations, which tells us we are extending the object.
+
+# Notice here that the header contains some fields that are not
+# present in the high-level datagram, but can be computed from it.
+# In general, we leave out redundant information from high-level
+# formats, and compute the information during encoding.
+#
+# TODO: compute and check the checksum
+#
+
+object ip = { ...
+
+    # IP header checksums are 16-bit numbers
+
+    instance checksum : bit_vector(16)
+
+    # instantiate codecs for various types occuring in header
+
+    instance pos_codec : bv_codec(pos,2)
+    instance ident_codec : bv_codec(ident,2)
+    instance checksum_codec : bv_codec(checksum,2)
+    instance addr_codec : bv_codec(addr,4)
+    
+    action get_checksum(bytes:stream) returns (c : checksum) = {
+        var sum : pos := 0;
+        var p := bytes.begin;
+        while p < bytes.end {
+            sum := sum + bfe[0][7](bytes.value(p)) * 256;
+            p := p.next;
+            sum := sum + bfe[0][7](bytes.value(p));
+            p := p.next;
+            if sum > 0xffff {
+                sum := sum - 0xffff;
+            }
+        };
+        c := bvnot(bfe[0][15](sum));
+    }
+
+    # Decode a raw IP packet, returning a `datagram` structure
+
+    action decode(raw:stream) returns (dgram:datagram) = {
+        require raw.end >= 20;
+        var first_byte := raw.value(0);
+        dgram.version_field := bfe[4][7](first_byte);
+        var hlen : pos := bfe[0][3](first_byte) * 4;
+        var tos := raw.value(1);
+        var len := pos_codec.decode(raw,2);
+        dgram.ident_field := ident_codec.decode(raw,4);
+        var off := checksum_codec.decode(raw,6);
+        dgram.may_fragment_flag := bvand(off,0x4000) = 0;
+        dgram.more_flag := bvand(off,0x2000) ~= 0;
+        dgram.offset_field := bfe[0][12](off) * 8;
+        dgram.ttl_field := bfe[0][7](raw.value(8));
+        dgram.protocol_field := bfe[0][7](raw.value(9));
+        var checksum := checksum_codec.decode(raw,10);
+        dgram.source_addr_field := addr_codec.decode(raw,12);
+        dgram.destination_addr_field := addr_codec.decode(raw,16);
+        dgram.payload := raw.segment(hlen,len);
+    }
+
+    # Encode a UDP datagram into a raw byte stream
+
+    action encode(dgram:datagram) returns (raw:stream) = {
+        raw := raw.resize(20,0);
+        raw := raw.set(0,bfe[0][7](dgram.version_field) * 16 + 5);
+        raw := pos_codec.encode(raw,2,20+dgram.payload.end);
+        raw := ident_codec.encode(raw,4,dgram.ident_field);
+        var off : checksum := 0x4000 if ~dgram.may_fragment_flag else 0;
+        off := off + (0x2000 if dgram.more_flag else 0);
+        off := off + bfe[0][12](dgram.offset_field/8);
+        raw := checksum_codec.encode(raw,6,off);
+        raw := raw.set(8,bfe[0][7](dgram.ttl_field));
+        raw := raw.set(9,bfe[0][7](dgram.protocol_field));
+        raw := addr_codec.encode(raw,12,dgram.source_addr_field);
+        raw := addr_codec.encode(raw,16,dgram.destination_addr_field);
+        raw := checksum_codec.encode(raw,10,get_checksum(raw));
+        raw := raw.extend(dgram.payload);
+    }
+
+    # Make a raw IP packet
+
+    action make_datagram(src:addr,dst:addr,vers:version,prot:protocol,payload:stream)
+    returns (dgram:datagram) =
+    {
+        dgram.version_field := vers;
+        dgram.ttl_field := 64;
+        dgram.protocol_field := prot;
+        dgram.source_addr_field := src;
+        dgram.destination_addr_field := dst;
+        dgram.payload := payload;
+    }
+}
+

@@ -1,0 +1,11 @@
+> tcp.protocol.transmit(0x7f000001,0x7f000001,{src_port_field:0x4d3,dst_port_field:0x4d2,seq_num_field:0x3d1b58ba,ack_num_field:0x3f2dba31,urg:0,ack:0,psh:0,rst:0,syn:0x1,fin:0,window_field:0x519b500d,urgent_pointer:0x25e45d32,payload:[]})
+> tcp.protocol.transmit(0x7f000001,0x7f000001,{src_port_field:0x4d3,dst_port_field:0x4d2,seq_num_field:0x189a769b,ack_num_field:0x51ead36b,urg:0,ack:0,psh:0,rst:0,syn:0x1,fin:0,window_field:0x2463b9ea,urgent_pointer:0x5c482a97,payload:[]})
+> tcp.protocol.transmit(0x7f000001,0x7f000001,{src_port_field:0x4d3,dst_port_field:0x4d2,seq_num_field:0x32fff902,ack_num_field:0x10233c99,urg:0,ack:0,psh:0,rst:0,syn:0x1,fin:0,window_field:0x741226bb,urgent_pointer:0x15b5af5c,payload:[]})
+< inferred_protocol_transmit(0x7f000001,0x7f000001,{src_port_field:0x4d2,dst_port_field:0x4d3,seq_num_field:0x9e367d50,ack_num_field:0x3d1b58bb,urg:0,ack:0x1,psh:0,rst:0,syn:0x1,fin:0,window_field:0xffd7,urgent_pointer:0,payload:[]})
+< inferred_protocol_transmit(0x7f000001,0x7f000001,{src_port_field:0x4d2,dst_port_field:0x4d3,seq_num_field:0x9e37dbde,ack_num_field:0x189a769c,urg:0,ack:0x1,psh:0,rst:0,syn:0x1,fin:0,window_field:0xffd7,urgent_pointer:0,payload:[]})
+> tcp.protocol.transmit(0x7f000001,0x7f000001,{src_port_field:0x4d3,dst_port_field:0x4d2,seq_num_field:0x168e121f,ack_num_field:0x885e1b,urg:0,ack:0,psh:0,rst:0,syn:0x1,fin:0,window_field:0x6f6dd9ac,urgent_pointer:0x6eb5bd4,payload:[]})
+> tcp.protocol.transmit(0x7f000001,0x7f000001,{src_port_field:0x4d3,dst_port_field:0x4d2,seq_num_field:0x7f01579b,ack_num_field:0x9e37dbdf,urg:0,ack:0x1,psh:0x1,rst:0,syn:0x1,fin:0,window_field:0x288f1a34,urgent_pointer:0x59adea3d,payload:[]})
+> tcp.protocol.transmit(0x7f000001,0x7f000001,{src_port_field:0x4d3,dst_port_field:0x4d2,seq_num_field:0x69e373,ack_num_field:0x20ee1348,urg:0,ack:0,psh:0,rst:0,syn:0x1,fin:0,window_field:0x57a61a29,urgent_pointer:0x75e0858a,payload:[]})
+< inferred_protocol_transmit(0x7f000001,0x7f000001,{src_port_field:0x4d2,dst_port_field:0x4d3,seq_num_field:0x9e3989f1,ack_num_field:0x32fff903,urg:0,ack:0x1,psh:0,rst:0,syn:0x1,fin:0,window_field:0xffd7,urgent_pointer:0,payload:[]})
+assertion_failed("tcp_spec.ivy: line 161")
+tcp_spec.ivy: line 161: error: assertion failed

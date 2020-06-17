@@ -1,0 +1,126 @@
+#lang ivy1.7
+
+# This file contains a simple specificaiton of UDP, the user datagram
+# protocol. UDP provides a simple mechanism for multiplexing IP by
+# adding a port number to the IP address. This allows user processes
+# to send datagrams to each other, identifying each other with port
+# numbers. UDP is layered on IP.
+#
+# UDP has interfaces at two levels: the app level and the protocol
+# level. Events at the app level correspond to user applications
+# sending and receiving datagrams. Events at the protocol level
+# correspond to UDP sending and receiving IP datagrams.
+#
+# At the app level, the UDP specification says only that UDP
+# does not invent packets. That is, if endpoint A receives datagram
+# from endpoint B, then A in fact sent the datagram to B.
+#
+# At the protocol level, the specification says only that an IP
+# datagram sent by the UDP layer must correspond in its source and
+# destination endpoints and its payload to some UDP datagram that was
+# sent.
+#
+
+include ip_spec
+
+# This module defines an endpoint consisting of an address and a port
+# number. The address and port types are parameters. The endpoint
+# comes with a constructor called `make`.
+
+module generic_endpoint(addr_type,port_type) = {
+    type this = struct {
+        port : port_type,
+        addr : addr_type
+    }
+    action make(addr : addr_type, port : port_type) returns (res:this) = {
+        res.addr := addr;
+        res.port := port;
+    }
+}
+
+# This object specifies the UDP protocol.
+
+object udp = {
+
+    # UDP port numbers are 16-bit binary numbers.
+
+    instance port : bit_vector(16)
+
+    # A datagram has source and destination port fields, and a payload
+    # which is a stream of bytes. Note the the byte-level encoding of
+    # the datagram has additional redundant fields that are derived
+    # from these.
+
+    type datagram = struct {
+        src_port_field : port,
+        dst_port_field : port,
+        payload : stream
+    }
+
+    # We define an endpoint type for UDP as an instance of the generic
+    # endpoint module, where the address field is an IP address and the
+    # port field is a UDP port.
+
+    instance endpoint : generic_endpoint(ip.addr,port)
+
+    # This object specifies the app level interface. It has two
+    # actions, representing transmission and receipt of user
+    # datagrams, both indicating source and destination endpoints.
+    # The specification says that all received datagrams must have
+    # been previously sent. This allows the possibility of reordering,
+    # duplication and loss.
+    
+    object app = {
+
+        action transmit(src:endpoint,dst:endpoint,pyld:stream)
+        action receive(src:endpoint,dst:endpoint,pyld:stream)
+
+
+        specification {
+            relation sent(S:endpoint,D:endpoint,P:stream)
+
+            after init {
+                sent(S,D,P) := false;
+            }
+            before transmit {
+                require src.addr ~= 0 & dst.addr ~=0 & src.addr ~= 0xFFFFFFFF & dst.addr ~= 0xFFFFFFFF;
+            }
+            after transmit {
+                sent(src,dst,pyld) := true
+            }
+
+            before receive {
+                require sent(src,dst,pyld);
+            }
+        }
+    }
+
+    # This object specifies the protocol level interface. It has one
+    # action, representing transmission of an IP datagram UDP.  The
+    # specification says that all transmitted IP datagrams must have
+    # correspond to previously sent UDP datagrams. To specify this, we
+    # reconstruct the origin UDP endpoints by inspecting the UDP
+    # datagram. Notice here that in the protcol level event, the UDP
+    # datagram is represented at the high level as a struct, and not
+    # at the low level as a stream of bytes. This allows Ivy to generate
+    # events without using the encoding function. 
+
+    # Question: how do we know that this simple property of the wire
+    # protocol is enough to guarantee correctness at the application
+    # level?
+
+    object protocol = {
+
+        action transmit(src:ip.addr,dst:ip.addr,d:datagram)
+
+        specification {
+
+            before transmit {
+                var app_src := endpoint.make(src,d.src_port_field);
+                var app_dst := endpoint.make(dst,d.dst_port_field);
+                require app.sent(app_src,app_dst,d.payload);
+            }
+
+        }            
+    }
+}

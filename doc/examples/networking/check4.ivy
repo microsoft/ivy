@@ -1,0 +1,68 @@
+#lang ivy1.7
+
+include collections
+include order
+
+
+instance pos: unbounded_sequence
+
+isolate bitstring4 =
+{
+    type this
+    interpret this -> bv[4]
+}
+
+isolate bitstring5 =
+{
+    type this
+    interpret this -> bv[5]
+}
+instance header: array(pos,bitstring4)
+
+action check(buf: header) returns (sum: bitstring4)
+before check
+{
+    require true
+}
+after check
+{
+    var temp: bitstring5 := 0;
+    var idx := buf.begin;
+    while idx < buf.end
+    {
+	temp := temp + bfe[0][4](buf.value(idx));
+	if bvand(temp,0x10) ~= 0
+	{
+	    temp := bvand(temp + 1,0xf);
+	};
+	idx := idx.next;
+    };
+    sum := bvnot(bfe[0][3](temp));
+}
+
+action testcheck(buf: header) =
+{
+    var sum:= check(buf);
+    buf:= buf.append(sum);
+    sum := check(buf);
+    ensure sum = 0;
+}
+
+attribute pos.cardinality = 20
+export testcheck
+
+
+
+
+	    
+	
+	
+	
+
+# bfe[low_bit][high_bit]  extract
+# bve[2][5](x)
+# bvand, bvor, 
+
+
+ 
+    

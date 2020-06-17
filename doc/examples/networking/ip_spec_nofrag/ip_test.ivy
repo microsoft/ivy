@@ -1,0 +1,107 @@
+#lang ivy1.7
+
+#
+
+include ip_spec
+include ip_packet
+include ip_codec
+
+interpret ip.host -> {host1,router1}
+interpret ip.network -> {net1,net2}
+
+instance ethaddr : bit_vector(48)
+
+parameter host_addr1 : ip.addr = 0x0a010102
+parameter host_addr2 : ip.addr = 0x0a010202
+parameter router_addr1 : ip.addr = 0x0a010101
+parameter router_addr2 : ip.addr = 0x0a010201
+parameter host_intf1 : pos = 2
+parameter host_intf2 : pos = 3
+parameter router_mac1 : ethaddr = 0xc2016eb80000
+parameter router_mac2 : ethaddr = 0xc2016eb80001
+
+action host_intf(n:ip.network) returns (intf:pos) = {
+    intf := host_intf1 if n = net1 else host_intf1;
+}
+
+action router_mac(n:ip.network) returns (mac:ethaddr) = {
+    mac := router_mac1 if n = net1 else router_mac1;
+}
+
+action host_adapter(n:ip.network) returns (addr:ip.addr) = {
+    addr := host_addr2 if n = net2 else host_addr1;
+}
+
+action router_adapter(n:ip.network) returns (addr:ip.addr) = {
+    addr := router_addr2 if n = net2 else router_addr1;
+}
+
+after init {
+    ip.intf(H,N,A) := false;
+    ip.intf(host1,net1,host_addr1) := true;
+    ip.intf(host1,net2,host_addr2) := true;
+    ip.intf(router1,net1,router_addr1) := true;
+    ip.intf(router1,net2,router_addr2) := true;
+}
+
+
+# An IP packet socket to send and receive IP datagrams.
+
+instance ip_sock : ip_packet_socket(stream,pos,ethaddr)
+
+# Mock the IP-level interface of the UDP implementation
+
+implement ip.transmit(h:ip.host,src:ip.addr,dst:ip.addr,n:ip.network,d:ip.datagram) {
+    if _generating {
+        call ip_sock.send(ip.encode(d),host_intf(n),router_mac(n));
+    }
+}
+
+# Infer transmit events for the datagrams received on the raw IP
+# socket.  Filter out all packets except those sent from port 1234,
+# our UDP socket, in case there is noise on the network.
+
+implement ip_sock.recv(raw:stream,intf:pos) {
+    var pkt := ip.decode(raw);
+    var net := net1 if intf = host_intf1 else net2;
+    call ip_sock_received_pkt(pkt,intf,net);
+    var src := router_adapter(net);
+    var dst := host_adapter(net);
+    call infer_ip_transmit(router1,src,dst,net,pkt);
+    call ip.transmit(router1,src,dst,net,pkt);
+}
+
+
+# Add some constraints on the generation
+#
+# 1) Only IPv4
+# 2) Only generate packets transmitted by host1
+#
+
+before ip.transmit(h:ip.host,src:ip.addr,dst:ip.addr,net:ip.network,pkt:ip.datagram) {
+
+    if _generating {
+	require pkt.version_field = 4;
+	require h = host1;
+        require net = net1;
+#        require pkt.protocol_field = 17;
+        require ~pkt.false_flag;
+        require ~pkt.may_fragment_flag;
+        require ~pkt.more_flag;
+        require pkt.offset_field = 0;
+        require pkt.ttl_field = 64;
+        require dst = router_addr1 | dst = router_addr2;
+#        require pkt.destination_addr_field = host_addr1;
+    }
+}
+
+
+# Generate abstract protocol events at both the app and the protocol level
+
+export ip.transmit
+
+# Debugging output
+
+import action ip_sock_received_pkt(pkt:ip.datagram,intf:pos,net:ip.network)
+import action infer_ip_transmit(h:ip.host,src:ip.addr,dst:ip.addr,n:ip.network,d:ip.datagram)
+attribute radix=16

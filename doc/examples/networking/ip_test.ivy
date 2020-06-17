@@ -1,0 +1,171 @@
+#lang ivy1.7
+
+#
+# This file contains a tester for an IP router based on our IP
+# specification.
+#
+# We make use of our IP spec, as well as our IP codec (for encoding
+# and decoding datagrams) and the system library `ip_packet` for
+# connecting to the Ethernet.
+
+include ip_spec
+include ip_packet
+include ip_codec
+
+# We instnatiate types `ip.host` and `ip.network` to create a small
+# network, with just one host, one router, and two networks.  The host
+# will run our tester.
+
+interpret ip.host -> {host1,router1}
+interpret ip.network -> {net1,net2}
+
+# We need ethernet addresses to talk to the ethernet. These are 48-bit
+# numbers.
+
+instance ethaddr : bit_vector(48)
+
+# These parameters describe our network. The router and host each have
+# an interface to each of the two networks, with the given IP
+# addresses configured. The last four paramters are the host interface
+# indexes (used by the `ip_packet` API) and the router ethernet
+# addresses, which we need to send ethernet datagrams.
+
+parameter host_addr1 : ip.addr = 0x0a010102
+parameter host_addr2 : ip.addr = 0x0a010202
+parameter router_addr1 : ip.addr = 0x0a010101
+parameter router_addr2 : ip.addr = 0x0a010201
+parameter host_intf1 : pos = 2
+parameter host_intf2 : pos = 3
+parameter router_mac1 : ethaddr = 0xc2016eb80000
+parameter router_mac2 : ethaddr = 0xc2016eb80001
+
+# These are some convenience procedures
+
+action host_intf(n:ip.network) returns (intf:pos) = {
+    intf := host_intf1 if n = net1 else host_intf1;
+}
+
+action router_mac(n:ip.network) returns (mac:ethaddr) = {
+    mac := router_mac1 if n = net1 else router_mac1;
+}
+
+action host_adapter(n:ip.network) returns (addr:ip.addr) = {
+    addr := host_addr2 if n = net2 else host_addr1;
+}
+
+action router_adapter(n:ip.network) returns (addr:ip.addr) = {
+    addr := router_addr2 if n = net2 else router_addr1;
+}
+
+# Initialization sets up the model of our test network by configuring
+# the raletion `ip.intf`.
+
+after init {
+    ip.intf(H,N,A) := false;
+    ip.intf(host1,net1,host_addr1) := true;
+    ip.intf(host1,net2,host_addr2) := true;
+    ip.intf(router1,net1,router_addr1) := true;
+    ip.intf(router1,net2,router_addr2) := true;
+}
+
+
+# We create an IP packet socket to send and receive IP datagrams on
+# the ethernets.
+
+instance ip_sock : ip_packet_socket(stream,pos,ethaddr)
+
+# When testing, we need to cause the generated `ip.transmit` events to
+# send actual ethernet frames. We do this bu implemening the
+# `ip.transmit` action, like this. If we are generating, then we call
+# the `send` method of our socket, with the encoded datagram, the host
+# interface index, and the ethernet (MAC) address of the receiving
+# router.
+
+implement ip.transmit(n:ip.network,sh:ip.host,sip:ip.addr,rh:ip.host,rip:ip.addr,d:ip.datagram,len:pos) {
+    if _generating {
+        call ip_sock.send(ip.encode(d),host_intf(n),router_mac(n));
+    }
+}
+
+# Here, we infer transmit events corresponding to the datagrams
+# received on the socket.
+#
+# Tricky: When we get a packet that is *originated* at the router, we
+# *infer* that there must have been an `ip.send` event inside the
+# router that we can't see. The call below [*] simulates this inferred
+# event. Without this, the `ip.transmit` event would not be legal.
+
+implement ip_sock.recv(raw:stream,intf:pos) {
+    var pkt := ip.decode(raw);
+    var net := net1 if intf = host_intf1 else net2;
+    call ip_sock_received_pkt(pkt,intf,net);
+    var src := router_adapter(net);
+    var dst := host_adapter(net);
+    if pkt.offset_field = 0 & ~pkt.more_flag &
+        (pkt.source_addr_field = router_addr1 | pkt.source_addr_field = router_addr2)  {
+        call infer_ip_send(router1,pkt,net,pkt.ident_field);
+        var snet := net1 if pkt.source_addr_field = router_addr1 else net2;
+        call ip.send(router1,pkt,snet,pkt.ident_field);  # [*]
+    };
+    call infer_ip_transmit(router1,src,dst,net,pkt);
+    call ip.transmit(net,router1,src,host1,dst,pkt,pkt.payload.end);
+}
+
+
+# Here, we add some constraints on the sending of packets. 
+#
+# 1) Only IPv4
+# 2) Only generate packets transmitted by host1
+# 3) Only send to via net1 or net2.
+# 4) Send packets of 16 bytes
+# 5) Use just two identifier fields: 0 and 1
+# 6) Use ony protocol 17
+# 7) Only send to two destinations
+#
+# The last three constraints aren't necessary, but they make our
+# testing more effective. Whenever we have a big range of identifiers,
+# such as IP address, protocol identifiers, etc, we want to narrow
+# down to just a few values, so that collisions will occur. For
+# example, if we chose IP addresses uniformly over the whole space, it
+# is unlikely that the same identifier would occur twice.
+
+before ip.send(h:ip.host,pkt:ip.datagram,net:ip.network,id:ip.ident) {
+
+    if _generating {
+	require pkt.version_field = 4;
+	require h = host1;
+        require net = net1 | net = net2;
+        require pkt.payload.end = 16;
+        require id = 0 | id = 1;
+        require pkt.protocol_field = 17;
+        require pkt.destination_addr_field = host_addr1 |
+                pkt.destination_addr_field = host_addr2;
+    }
+}
+
+# We take a similar approach to generating `ip.transmit` events.
+
+before ip.transmit(net:ip.network,sh:ip.host,sip:ip.addr,rh:ip.host,rip:ip.addr,pkt:ip.datagram,len:pos) {
+
+    if _generating {
+        require net = net1 | net = net2;
+	require sh = host1;
+	require rh =  router1;
+        require rip = router_addr1 | rip = router_addr2;
+        require len = 4;
+        require pkt.offset_field = 0 | pkt.offset_field = 1;
+    }
+}
+
+
+# Generate abstract protocol events at both the app and the protocol level
+
+export ip.send
+export ip.transmit
+
+# Debugging output
+
+import action ip_sock_received_pkt(pkt:ip.datagram,intf:pos,net:ip.network)
+import action infer_ip_send(h:ip.host,d:ip.datagram,n:ip.network,id:ip.ident)
+import action infer_ip_transmit(h:ip.host,src:ip.addr,dst:ip.addr,n:ip.network,d:ip.datagram)
+attribute radix=16

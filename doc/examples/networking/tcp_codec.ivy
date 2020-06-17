@@ -1,0 +1,125 @@
+#lang ivy1.7
+
+# Codec for TCP packets.
+
+include tcp_spec
+include ip_codec
+
+# Here, we extend the tcp object with some additional traits to encode
+# and decode datagrams. Notice the `...` at the beginning of the
+# declarations, which tells us we are extending the object.
+
+# The TCP header layour is:
+#
+# bytes    field
+# 0-1      src port
+# 2-3      dst port
+# 4-7      sequence number
+# 8-11     ack number
+# 12       data offset [4 bits], reserved [4 bits]
+# 13       bits: reserved,reserved,URG,ACK,PSH,RST,SYN,FIN
+# 14-15    window
+# 16-17    checksum
+# 18-19    urgent pointer
+#
+# These fields are follow by options and zero padding needed to
+# produce a header of a multple of four bytes.
+#
+# Note, the checksum includes some information from the IP header
+#
+# Notice here that the header contains some fields that are not
+# present in the high-level datagram, but can be computed from it.
+# In general, we leave out redundant information from high-level
+# formats, and compute the information during encoding.
+#
+#
+
+object tcp = { ...
+
+    # instantiate codecs for various types occuring in header
+
+    instance port_codec : bv_codec(port,2)
+    instance seq_num_codec : bv_codec(seq_num,4)
+    instance window_codec : bv_codec(wind_size,2)
+    
+    # Decode a raw TCP packet, returning a `datagram` structure
+    # TODO: verify checksum
+    # TODO: decode options
+
+    action decode(raw:stream) returns (dgram:datagram) = {
+        require raw.end >= 20;
+        dgram.src_port_field := port_codec.decode(raw,0);
+        dgram.dst_port_field := port_codec.decode(raw,2);
+        dgram.seq_num_field := seq_num_codec.decode(raw,4);
+        dgram.ack_num_field := seq_num_codec.decode(raw,8);
+        var data_offset : pos := bfe[4][7](raw.value(12)) * 4;
+        var flags := raw.value(13);
+        dgram.urg := bvand(flags,0x20) ~= 0;
+        dgram.ack := bvand(flags,0x10) ~= 0;
+        dgram.psh := bvand(flags,0x08) ~= 0;
+        dgram.rst := bvand(flags,0x04) ~= 0;
+        dgram.syn := bvand(flags,0x02) ~= 0;
+        dgram.fin := bvand(flags,0x01) ~= 0;
+        dgram.window_field := window_codec.decode(raw,14);
+        dgram.urgent_pointer := window_codec.decode(raw,18);
+        dgram.payload := raw.segment(data_offset,raw.end);
+    }
+
+    # Encode a TCP datagram into a raw byte stream
+    #
+    # Note: we need the `src` and `dst` IP addresses even though these
+    # don't appear in the TCP datagram, because they are used to
+    # compute the checksum.
+
+    action encode(dgram:datagram, src:ip.addr, dst:ip.addr) returns (raw:stream) = {
+        raw := raw.resize(20,0);
+        raw := port_codec.encode(raw,0,dgram.src_port_field);
+        raw := port_codec.encode(raw,2,dgram.dst_port_field);
+        raw := seq_num_codec.encode(raw,4,dgram.seq_num_field);
+        raw := seq_num_codec.encode(raw,8,dgram.ack_num_field);
+        raw := raw.set(12,0x50);  # encodes 20 byte offset
+        var flags : byte := 0;
+        flags := flags + (0x20 if dgram.urg else 0);
+        flags := flags + (0x10 if dgram.ack else 0);
+        flags := flags + (0x08 if dgram.psh else 0);
+        flags := flags + (0x04 if dgram.rst else 0);
+        flags := flags + (0x02 if dgram.syn else 0);
+        flags := flags + (0x01 if dgram.fin else 0);
+        raw := raw.set(13,flags);
+        raw := window_codec.encode(raw,14,dgram.window_field);
+        raw := window_codec.encode(raw,18,dgram.urgent_pointer);
+        raw := raw.extend(dgram.payload);
+        raw := add_checksum(raw,src,dst);
+    }
+
+    # Add the TCP checksum.
+
+    action add_checksum(raw:stream, src:ip.addr, dst:ip.addr) returns (raw:stream) = {
+        var bytes := stream.create(12,0);
+
+        # Pseudo header
+        
+        bytes := ip.addr_codec.encode(bytes,0,src);
+        bytes := ip.addr_codec.encode(bytes,4,dst);
+        bytes := bytes.set(9,6); # protocol 6 is TCP
+        bytes := ip.pos_codec.encode(bytes,10,raw.end);
+
+        # Add the TCP datagram, with data
+
+        bytes := bytes.extend(raw);
+
+        # Pad with a zero byte if length is odd
+
+        if bytes.end / 2 * 2 ~= bytes.end {
+            bytes := bytes.append(0);
+        };
+
+        # Compute the checksum of the bytes using the IP checksum
+        # algorithm and insert it in the TCP datagram in position 16.
+        
+        raw := ip.checksum_codec.encode(raw,16,ip.get_checksum(bytes));
+
+    }
+    
+}
+

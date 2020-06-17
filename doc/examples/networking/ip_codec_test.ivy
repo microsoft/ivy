@@ -1,0 +1,22 @@
+#lang ivy1.7
+
+include ip_codec
+
+# Test that decoding is the inverse of encoding
+
+export action test(dgram:ip.datagram) = {
+    var raw := ip.encode(dgram);
+    call show_encoded(raw);
+    var redec := ip.decode(raw);
+    call show_decoded(redec);
+    assert redec = dgram;
+}
+
+before test {
+    require dgram.valid;
+}
+
+import action show_encoded(raw:stream)
+import action show_decoded(dgram:ip.datagram)
+
+attribute radix = 16

@@ -1,0 +1,153 @@
+#lang ivy1.7
+
+#
+# Here we have a specification-based test harness for
+# the UDP implementation in the OS kernel.
+#
+# Testing code in the kernel is tricky, since we can't call it
+# directly. Instead, we communicate with it through its two
+# interfaces: the OS sockets API the the IP network. This means
+# we need a test shim to translate between abstract protocol events
+# and input/output operations on these two interfaces.
+#
+# For the application-level interface of UDP, we will create an OS
+# socket and use API calls on the socket. For the IP network
+# interface, we will create a raw IP socket and exchange IP packets
+# with UDP over this socket.
+#
+# The following is the test shim using this approach.
+
+include udp_spec
+include udp_codec
+include udp_host
+include ip_raw
+include ip_codec
+
+parameter test_addr : ip.addr = 0x7f000001
+parameter test_port : udp.port = 1234
+
+# Create an OS UDP socket to test
+
+instance udp_intf : udp_host(udp.endpoint,stream)
+
+var udp_endpoint : udp.endpoint
+var udp_sock : udp_intf.socket
+
+# On initialization, we set the endpoint to use for our UDP socket and
+# open the socket.
+
+after init {
+    udp_endpoint := udp.endpoint.make(test_addr,test_port);
+    udp_sock := udp_intf.open(udp_endpoint)
+}
+
+# A raw IP socket to feed generated UDP datagrams into the UDP
+# implementation. Notice we use protocol 17 for UDP.
+
+instance ip_sock : ip_raw_socket(stream,17)
+
+# Mock the IP-level interface of the UDP implementation
+
+# Send generated datagrams to UDP, via the raw IP socket
+
+implement udp.protocol.transmit(src:ip.addr,dst:ip.addr,dgram:udp.datagram) {
+    if _generating {
+        var pkt := ip.make_datagram(src,dst,4,17,udp.encode(dgram));
+        call ip_sock.send(ip.encode(pkt));
+    }
+}
+
+# Infer transmit events for the datagrams received on the raw IP
+# socket.  Filter out all packets except those sent from port 1234,
+# our UDP socket, in case there is noise on the network.
+
+implement ip_sock.recv(raw:stream) {
+    var pkt := ip.decode(raw);
+#    call ip_sock_received_pkt(pkt);
+    var src := pkt.source_addr_field;
+    var dst := pkt.destination_addr_field;
+    var dgram := udp.decode(pkt.payload);
+    if dgram.src_port_field = test_port {
+        call inferred_protocol_transmit(src,dst,dgram);
+        call udp.protocol.transmit(src,dst,dgram)
+    }
+}
+
+# Mock the app-level interface of the UDP implementation
+
+# Send the app-level transmit events for our test socket to the socket
+
+implement udp.app.transmit(src:udp.endpoint,dst:udp.endpoint,pyld:stream) {
+    if _generating {
+        if src.addr = test_addr & src.port = test_port {
+            call udp_sending_pkt(dst,pyld);
+            call udp_sock.send(dst,pyld);
+        }
+    }
+}
+
+# Infer an app-level transmit even when receving on the UDP socket
+
+implement udp_intf.recv(s:udp_intf.socket,src:udp.endpoint,dst:udp.endpoint,pyld:stream) {
+    call inferred_app_receive(src,dst,pyld);
+    call udp.app.receive(src,dst,pyld);
+}
+
+# Generate abstract protocol events at both the app and the protocol level
+
+# export udp.app.transmit
+# export udp.protocol.transmit
+
+# Add some constraints on the generation
+
+before udp.app.transmit(src:udp.endpoint,dst:udp.endpoint,pyld:stream) {
+
+    if _generating {
+        # don't spray packets into the universe
+        require dst.addr = test_addr;
+
+        # All packets should be either to or from our UDP socket
+        require src.port = test_port | dst.port = test_port;
+
+        # If the source port is our test port, then send form the socket
+        # This is a hack to occasionally cause us to send a packet on the
+        # the UDP socket. We should have a way to control this so that half the
+        # traffic goes to each side.
+        require src.port = test_port -> src.addr = test_addr
+    }
+}
+
+# Don't generate protocol-level events on behalf of the socket
+
+before udp.protocol.transmit(src:ip.addr,dst:ip.addr,dgram:udp.datagram) {
+    if _generating {
+        require ~(src = test_addr & dgram.src_port_field = test_port);
+    }
+}
+
+
+import action ip_sock_received_pkt(pkt:ip.datagram)
+import action inferred_protocol_transmit(src:ip.addr,dst:ip.addr,dgram:udp.datagram)
+import action inferred_app_receive(src:udp.endpoint,dst:udp.endpoint,pyld:stream)
+import action udp_sending_pkt(dst:udp.endpoint,pyld:stream)
+
+#
+# To see the problem with zero-length datagrams and the Posix API, modify line 132
+# of file `~/ivy/ivy/include/1.7/udp_host.ivy` from this:
+#
+#     if (bytes == 0 && was_shut_down) {
+#
+# to this:
+#
+#     if (bytes == 0) {
+#
+# Recompile and run this file.
+#
+#     $ ivyc target=test udp_test.ivy
+#     $ sudo ./udp_test
+#
+# You will probably see a "sendto failed" error, cause by the UDP socket being
+# closed. 
+#
+
+    

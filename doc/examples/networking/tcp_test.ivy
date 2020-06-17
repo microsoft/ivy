@@ -1,0 +1,376 @@
+#lang ivy1.7
+
+#
+# Here we have a specification-based test harness for
+# the TCP implementation in the OS kernel.
+#
+# Testing code in the kernel is tricky, since we can't call it
+# directly. Instead, we communicate with it through its two
+# interfaces: the OS sockets API the the IP network. This means
+# we need a test shim to translate between abstract protocol events
+# and input/output operations on these two interfaces.
+#
+# For the application-level interface of TCP, we will create an OS
+# socket and use API calls on the socket. For the IP network
+# interface, we will create a raw IP socket and exchange IP packets
+# with TCP over this socket.
+#
+# The following is the test shim using this approach.
+
+include tcp_spec
+include tcp_codec
+include tcp_host
+include ip_packet
+include ip_codec
+
+# We need ethernet addresses to talk to the ethernet. These are 48-bit
+# numbers.
+
+instance ethaddr : bit_vector(48)
+
+parameter server_addr : ip.addr = 0x0a000001
+parameter server_port : tcp.port = 1234
+
+parameter client_addr : ip.addr = 0x0a000002
+parameter client_port : tcp.port = 1235
+
+# Set this parameter to true if the tester should take only
+# the passive role in a connection.
+
+parameter passive : bool = false
+
+# These parameters give the interface index and the ethernet address
+# we will use to run the tester. These wil have to be set on the
+# command line.
+#
+# Find them using this command:
+#
+#    ip link show
+# 
+parameter host_intf : pos = 1 # The loopback address
+parameter router_mac : ethaddr = 0x0 # Doesn't need ethernet address?
+
+#
+# The starting sequence number for the client.
+#
+
+parameter seq0 : tcp.seq_num = 0
+
+
+# Create an OS TCP socket to test
+
+instance tcp_intf : tcp_host(tcp.endpoint,stream)
+
+var tcp_endpoint : tcp.endpoint
+var tcp_sock : tcp_intf.socket
+
+# On initialization, we set the endpoint to use for our TCP socket and
+# open the socket.
+#
+# TODO: really the "open" should occur when an app-level "open" event occurs.
+
+var client_endpoint : tcp.endpoint
+var server_endpoint : tcp.endpoint
+
+after init {
+    client_endpoint := tcp.endpoint.make(client_addr,client_port);
+    server_endpoint := tcp.endpoint.make(server_addr,server_port);
+#    tcp_sock := tcp_intf.open(server_endpoint);
+    # In non-passive mode, generate some text to send (`FOO`)
+    var text := stream.empty;
+    text := text.append(70);
+    text := text.append(79);
+    text := text.append(79);
+    text := text.append(0xd);
+    text := text.append(0xa);
+    call tcp.app.transmit(client_endpoint,server_endpoint,text);
+    if ~passive {
+        call tcp.app.listen(server_endpoint,client_endpoint)
+    }
+}
+
+var peer : tcp.endpoint
+
+implement tcp_intf.accept(s:tcp_intf.socket,other:tcp.endpoint) {
+    peer := other;
+}
+
+
+# A raw IP socket to feed generated TCP datagrams into the TCP
+# implementation. 
+
+instance ip_sock : ip_packet_socket(stream,pos,ethaddr)
+
+# To generate 16-bit random numbers
+
+instance uint16 : bit_vector(16)
+
+# To simulate network delays, we use a queue of delayed packets
+
+object queue_elem = {
+    type this = struct {
+        src:ip.addr,dst:ip.addr,dgram:tcp.datagram
+    }
+    action make(src:ip.addr,dst:ip.addr,dgram:tcp.datagram) returns (res:this) = {
+        res.src := src;
+        res.dst := dst;
+        res.dgram := dgram;
+    }
+}
+
+instance queue_elem_array : array(pos,queue_elem)
+var delay_queue : queue_elem_array
+var delay_queue_len : pos
+after init {
+    delay_queue_len := 0;
+}
+
+# This corresponds to 1/4 chance of packet delay
+
+parameter delay_prob : uint16 = 0x2000
+
+# Mock the IP-level interface of the TCP implementation
+
+# Send a TCP datagram from `src` to `dst` via the raw IP socket
+
+action tcp_send(src:ip.addr,dst:ip.addr,dgram:tcp.datagram) = {
+    var pkt := ip.make_datagram(src,dst,4,6,tcp.encode(dgram,src,dst));
+    call ip_sock.send(ip.encode(pkt),host_intf,router_mac);
+}
+
+# Send generated datagrams to TCP
+
+implement tcp.protocol.transmit(src:tcp.endpoint,dst:tcp.endpoint,dgram:tcp.datagram) {
+    if _generating {
+        if uint16.random < delay_prob {
+            delay_queue := delay_queue.append(queue_elem.make(src.addr,dst.addr,dgram));
+            delay_queue_len := delay_queue.end;
+            call packet_delayed;
+        } else {
+            call infer_receive(src,dst,dgram);
+            call tcp.protocol.receive(src,dst,dgram,dgram.seq_num_field,dgram.window_field,bfe[0][15](dgram.payload.end));
+            call tcp_send(src.addr,dst.addr,dgram);
+        }
+    }
+}
+
+# Randomly send the delayed datagrams
+
+export action send_delayed = {
+    if delay_queue.end > 0 {
+        if delay_queue.end > 1 & uint16.random < delay_prob {
+            var tmp := delay_queue.value(0);
+            delay_queue := delay_queue.set(0,delay_queue.value(1));
+            delay_queue := delay_queue.set(1,tmp);
+            call packet_delayed;
+        } else {
+            var e := delay_queue.value(0);
+            call tcp_send(e.src,e.dst,e.dgram);
+            delay_queue := delay_queue.segment(1,delay_queue.end);
+        };
+        delay_queue_len := delay_queue.end;
+    }
+}
+
+before send_delayed {
+    require delay_queue_len > 0;
+}
+attribute send_delayed.weight = "0.3"
+
+# Infer transmit events for the datagrams received on the raw IP
+# socket.  Filter out all packets except those sent from port 1234,
+# our TCP socket, in case there is noise on the network. Howver, in passive
+# mode allow packets from anywhere.
+
+implement ip_sock.recv(raw:stream,intf:pos) {
+    var pkt := ip.decode(raw);
+#    call ip_sock_received_pkt(pkt);
+    if pkt.protocol_field = 6 {
+        var src_addr := pkt.source_addr_field;
+        var dst_addr := pkt.destination_addr_field;
+        var dgram := tcp.decode(pkt.payload);
+        if dgram.src_port_field = server_port | (passive & dst_addr = client_addr)  {
+            call inferred_protocol_transmit(src_addr,dst_addr,dgram);
+            var src := tcp.endpoint.make(src_addr,dgram.src_port_field);
+            var dst := tcp.endpoint.make(dst_addr,dgram.dst_port_field);
+            var st := tcp.protocol.state(src,dst);
+            if st = tcp.closed & dgram.syn & dgram.ack {
+                call infer_listen(src,dst);
+                call tcp.app.listen(src,dst);
+            };
+            st := tcp.protocol.state(src,dst);
+            if st = tcp.closed & dgram.fin |
+               st = tcp.syn_rcvd & dgram.fin |
+               st = tcp.close_wait & dgram.fin |
+               st = tcp.syn_sent & dgram.syn |
+               st = tcp.listening & dgram.syn {
+                call tcp.app.close(src,dst);
+            };            
+            st := tcp.protocol.state(src,dst);
+            if st = tcp.closed & dgram.syn & ~dgram.ack {
+                call tcp.app.connect(src,dst,dgram.seq_num_field,dgram.window_field);
+            };
+            st := tcp.protocol.state(src,dst);
+            if dgram.seq_num_field = tcp.protocol.send_wind_next(src,dst)
+                & dgram.payload.end > 0 {
+                call tcp.app.transmit(src,dst,dgram.payload)
+            };
+            st := tcp.protocol.state(src,dst);
+            if st ~= tcp.closed & st ~= tcp.listening &
+               st ~= tcp.fin_wait_2 & st ~= tcp.time_wait &
+               tcp.mod_lt(dgram.seq_num_field,tcp.protocol.send_wind_next(src,dst)) {
+               call tcp.protocol.retry(src,dst,dgram.seq_num_field,dgram.window_field,bfe[0][15](dgram.payload.end));
+            };
+            st := tcp.protocol.state(src,dst);
+            if st = tcp.time_wait {
+                call tcp.protocol.timeout(src,dst);
+            };
+            call tcp.protocol.transmit(src,dst,dgram)
+        }
+    }
+}
+
+# Mock the app-level interface of the TCP implementation
+
+# Send the app-level transmit events for our test socket to the socket
+
+implement tcp.app.transmit(src:tcp.endpoint,dst:tcp.endpoint,pyld:stream) {
+    if _generating {
+        if src.addr = server_addr & src.port = server_port {
+            call tcp_sending_pkt(dst,pyld);
+            var ok := tcp_sock.send(pyld);
+        }
+    }
+}
+
+# Infer an app-level transmit even when receving on the TCP socket
+
+implement tcp_intf.recv(s:tcp_intf.socket,pyld:stream) {
+    # TODO: look the peer up by socket id
+    var src := peer;
+    var dst := server_endpoint;
+    call inferred_app_receive(src,dst,pyld);
+    call tcp.app.receive(src,dst,pyld);
+}
+
+# Generate abstract protocol events at both the app and the protocol level
+
+# export tcp.app.transmit
+export tcp.app.listen
+export tcp.app.connect
+export tcp.app.close
+
+export tcp.protocol.transmit
+export tcp.protocol.send
+export tcp.protocol.retry
+export tcp.protocol.timeout
+
+
+# Add some constraints on the generation
+
+before tcp.app.transmit(src:tcp.endpoint,dst:tcp.endpoint,pyld:stream) {
+
+    if _generating {
+        # don't spray packets into the universe
+        require dst.addr = server_addr;
+
+        # All packets should be either to or from our TCP socket
+        require src.port = server_port | dst.port = server_port;
+
+        # If the source port is our test port, then send form the socket
+        # This is a hack to occasionally cause us to send a packet on the
+        # the TCP socket. We should have a way to control this so that half the
+        # traffic goes to each side.
+        require src.port = server_port -> src.addr = server_addr
+    }
+}
+
+before tcp.app.listen(src:tcp.endpoint,dst:tcp.endpoint) {
+    if _generating {
+        require passive;
+        require src.addr = client_addr & src.port = client_port;
+        require dst.addr = server_addr & (dst.port = server_port | passive);
+    }
+}
+
+before tcp.app.connect(src:tcp.endpoint,dst:tcp.endpoint,sn:tcp.seq_num,wind:tcp.wind_size) {
+    if _generating {
+        require ~passive;
+        require sn = seq0 | sn = 0xdeadbeef;
+        require src.addr = client_addr & src.port = client_port;
+        require dst.addr = server_addr & (dst.port = server_port | passive);
+    }
+}
+
+before tcp.app.listen(src:tcp.endpoint,dst:tcp.endpoint) {
+    if _generating {
+        require src.addr = client_addr & src.port = client_port;
+        require dst.addr = server_addr & (dst.port = server_port | passive);
+    }
+}
+
+before tcp.protocol.send(src:tcp.endpoint,dst:tcp.endpoint,wind:tcp.wind_size,len:tcp.wind_size) {
+    if _generating {
+        require src.addr = client_addr & src.port = client_port;
+        require dst.addr = server_addr & (dst.port = server_port | passive);
+        require len = 0 | len = 1;
+    }
+}
+
+before tcp.protocol.send(src:tcp.endpoint,dst:tcp.endpoint,wind:tcp.wind_size,len:tcp.wind_size) {
+    if _generating {
+        require src.addr = client_addr & src.port = client_port;
+        require dst.addr = server_addr & (dst.port = server_port | passive);
+        require len = 0 | len = 1;
+    }
+}
+
+before tcp.protocol.timeout(src:tcp.endpoint,dst:tcp.endpoint) {
+    if _generating {
+        require src.addr = client_addr & src.port = client_port;
+        require dst.addr = server_addr & (dst.port = server_port | passive);
+    }
+}
+
+
+# Don't generate protocol-level events on behalf of the socket
+
+before tcp.protocol.transmit(src:tcp.endpoint,dst:tcp.endpoint,d:tcp.datagram) {
+    if _generating {
+#        require ~(src.addr = server_addr & src.port = server_port);
+        require src.addr = client_addr & src.port = client_port;
+        require dst.addr = server_addr & (dst.port = server_port | passive);
+    }
+}
+
+attribute tcp.protocol.transmit.weight = "0.1"
+
+import action ip_sock_received_pkt(pkt:ip.datagram)
+import action inferred_protocol_transmit(src:ip.addr,dst:ip.addr,dgram:tcp.datagram)
+import action inferred_app_receive(src:tcp.endpoint,dst:tcp.endpoint,pyld:stream)
+import action tcp_sending_pkt(dst:tcp.endpoint,pyld:stream)
+import action packet_delayed
+import action infer_receive(src:tcp.endpoint,dst:tcp.endpoint,dgram:tcp.datagram)
+import action infer_listen(src:tcp.endpoint,dst:tcp.endpoint)
+
+
+#
+# To see the problem with zero-length datagrams and the Posix API, modify line 132
+# of file `~/ivy/ivy/include/1.7/tcp_host.ivy` from this:
+#
+#     if (bytes == 0 && was_shut_down) {
+#
+# to this:
+#
+#     if (bytes == 0) {
+#
+# Recompile and run this file.
+#
+#     $ ivyc target=test tcp_test.ivy
+#     $ sudo ./tcp_test
+#
+# You will probably see a "sendto failed" error, cause by the TCP socket being
+# closed. 
+#
+
+        

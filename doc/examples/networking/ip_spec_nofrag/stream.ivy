@@ -1,0 +1,57 @@
+#lang ivy1.7
+
+# As in most programs, we start by declaring some useful datatypes.
+# In Ivy, there aren't any pre-defined datatypes, except for
+# `bool`. There are, however, various templates we can use to create
+# datatypes. These are found in the Ivy standard libraries.  Here, we
+# include the `order` library, to get ordered datatypes like integers
+# and natural numbers. We also include the `collections` library to get
+# arrays (the library includes various datatypes). 
+
+include order
+include collections
+
+# We instantiate some templates here to get a general index type `pos`
+# (basically, unsigned numbers with arbitrary precision) a type `byte`
+# represented by vectors of 8 bits, and a type `stream` represented by
+# variable-length arrays of `byte`, indexed by the `pos` type. The
+# `stream` datatype will be used to represent IP datagram payloads.
+
+instance pos : unbounded_sequence
+instance byte : bit_vector(8)
+instance stream : array(pos,byte)
+
+#
+# Here, we have some generic procedures for encoding bit vector types
+# as streams. This is a template that takes two parameter:
+#
+# - ty : the type to be encoded/decoded
+# - bytes : the number of bytes used for encoding
+#
+
+module bv_codec(ty,bytes) = {
+
+    # Decode a value of the type at byte position `idx` in stream `raw`
+    
+    action decode(raw:stream,idx:pos) returns(val:ty) = {
+        val := 0;
+        var end := idx + bytes;
+        while idx < end {
+            val := 256 * val + bfe[0][7](raw.value(idx));
+            idx := idx + 1;
+        }
+    }
+
+    # Encode a value of the type at byte position `idx` in stream `raw`
+    
+    action encode(raw:stream,idx:pos,val:ty) returns(raw:stream) = {
+        var end := idx + bytes;
+        while idx < end {
+            end := end - 1;
+            raw := raw.set(end,bfe[0][7](val));
+            val := val / 256;
+        }
+    }
+}
+
+

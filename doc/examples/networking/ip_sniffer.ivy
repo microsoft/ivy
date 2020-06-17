@@ -1,0 +1,28 @@
+#lang ivy1.7
+
+# A basic packet IP packet sniffer using the Unix raw sockets interface
+
+include ip_spec
+include ip_raw
+include ip_codec
+
+# A raw IP socket for the UDP protocol (protocol 17)
+
+instance sock : ip_raw_socket(stream,17)
+
+# Implement the `recv` action of `sock` to receive raw packets on
+# protocol 17. Decode the raw bytes and call `received` on the resulting
+# decoded datagram
+
+implement sock.recv(pkt:stream) {
+    call received(ip.decode(pkt))
+}
+
+# Print out received packets
+
+import action received(pkt:ip.datagram)
+
+# Print in hex
+
+attribute radix = 16
+

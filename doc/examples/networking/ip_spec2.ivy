@@ -229,9 +229,11 @@ object ip = {
         seen(H,d) := seen(H,d) | intf(H,n,dst);
     }
     before forward {
+        var prior := d;
+        prior.ttl := d.ttl+1;  # construct the previous version of the packet
         require intf(h,n,src); # host must control the local source address
         require exists H. intf(H,n,dst); # destination interface must exist
-        require seen(h,d);
+        require seen(h,prior);
         require src ~= dst; # interface should never send to itself 
         
         seen(H,d) := seen(H,d) | intf(H,n,dst);
