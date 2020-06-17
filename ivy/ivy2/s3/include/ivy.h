@@ -387,9 +387,11 @@ namespace ivy {
         
         T& operator() (PrimaryD idx) {
             if (PrimaryD::__is_seq()) {
-                if (((std::size_t)idx) < data.size())
-                    return data[((std::size_t)idx)];
-                else if (((std::size_t)idx) == data.size()) {
+                //                return data[((std::size_t)idx)];
+                auto ptr = data.begin() + ((std::size_t)idx);
+                if (ptr < data.end())
+                    return *ptr;
+                else if (ptr == data.end()) {
                     if (map) {
                         map_type &m = *map;
                         typename map_type::iterator it = m.find(idx);
@@ -494,6 +496,7 @@ namespace ivy {
         native_int() : value(0) {}
         native_int(const native_int &) = default; 
         native_int(long long value) : value(value) {}
+        native_int(double value) : value(value) {}
         native_int(native_int &&) = default; 
         native_int &operator = (const native_int &) = default; 
         native_int &operator = (native_int &&) = default; 
