@@ -3282,6 +3282,18 @@ class z3_thunk : public thunk<D,R> {
     emit_tick(header,impl,classname)
     header.append('};\n')
 
+    for sort_name in [s for s in sorted(il.sig.sorts) if isinstance(il.sig.sorts[s],il.EnumeratedSort)]:
+        csname = varname(sort_name)
+        cfsname = classname + '::' + csname
+        header.append("""
+namespace hash_space {
+
+    template <>
+        class hash<CLASS> : public hash<int> {
+    };
+}
+        """.replace('CLASS',cfsname))
+        
     impl.append(classname + '::')
     emit_param_decls(impl,classname,im.module.params)
     impl.append('{\n')
