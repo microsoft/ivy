@@ -36,7 +36,9 @@ object char = {
         else (bracket if is_bracket(X) else punct)
     function non_printing(X:char) = (X < 32 | X = 127)
     function is_digit(X:char) = (48 <= X & X < 58)
+    function is_hex(X:char) = is_digit(X:char) | (65 <= X & X < 71) | (97 <= X & X < 103)
     function is_capital(X:char) =  (65 <= X & X < 91)
+    function downcase(X:char) = (X+32) if is_capital(X:char) else X
 }
     
 # Character strings
@@ -320,6 +322,7 @@ object pstate = {
 # - A singleton characeter in the bracket set
 # - A maximal sequence of characters in the alphanumeric set
 # - A maximal sequence of characters in the punctuation set
+# - A numeric literal
 # - A string literal
 #
 # Tokens may be separated by whitespace, which consists of space,
@@ -406,12 +409,66 @@ action read_string_literal(st:pstate) returns (st:pstate) = {
     } else { st.ok := false }
 }
 
+module chars_reader(pred) = {
+    action read(st:pstate) returns (st:pstate) = {
+        if st.ok & st.p < st.b.end & pred(st.b.value(st.p)) {
+            while st.ok & st.p < st.b.end & pred(st.b.value(st.p)) {
+                st.tok := st.tok.append(st.b.value(st.p));
+	        st.p := st.p.next;
+            }
+        } else {
+            st.ok := false;
+        }
+    }    
+}
+
+instance decimals : chars_reader(char.is_digit)
+instance hexes : chars_reader(char.is_hex)
+
+# Parsing numeric literals. A numeric literal has one of these
+# forms:
+#
+# - [0..9]+{\.[0..9]+{[eE]{[+-]}[0..9]+}}
+# - 0[xX][0-9A-Fa-f]+ 
+#
+# That is, we allow the usual formats for non-negative integers,
+# and floating point numbers, including hex integers. 
+
+
+action read_numeric_literal(st:pstate) returns (st:pstate) = {
+    st.tok := "";
+    if st.p.next < st.b.end & st.b.value(st.p) = 48 & st.b.value(st.p.next).downcase = 120 {
+        st.tok := st.tok.append(48);
+        st.tok := st.tok.append(120);
+	st.p := st.p.next.next;
+        st := hexes.read(st);
+    } else {
+        st := decimals.read(st);
+        if st.ok & st.p < st.b.end & st.b.value(st.p) = 46 {
+            st.tok := st.tok.append(46);
+            st.p := st.p.next;
+            st := decimals.read(st);
+            if st.ok & st.p < st.b.end & st.b.value(st.p).downcase = 101 {
+                st.tok := st.tok.append(101);
+                st.p := st.p.next;
+                if st.p < st.b.end & (st.b.value(st.p) = 45 | st.b.value(st.p) = 43) {
+                    st.tok := st.tok.append(st.b.value(st.p));
+                    st.p := st.p.next;
+                };
+                st := decimals.read(st);
+            }
+        }
+    }
+}
+
 action lex(st:pstate) returns (st:pstate) = {
     # Get the next lexical token in the stream
     st := get_annot(st);
     var start := st.p;
     if st.p < st.b.end & st.b.value(st.p) = 34 { # double quote
         st := read_string_literal(st);
+    } else if st.b.value(st.p).is_digit {
+        st := read_numeric_literal(st);
     } else {
         var last : char := 32;
         while st.p < st.b.end & ~st.b.value(st.p).is_white
