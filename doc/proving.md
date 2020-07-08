@@ -228,7 +228,7 @@ since its type couldn't be inferred (and in fact it's not the same
 as the type of *X* on the left-hand side, which is *d*). 
 
 It's also possible to write constraints that do not allow for any
-assignment. In this case, Ivy complains that the provided match is
+assignment. In this case, IVy complains that the provided match is
 inconsistent.
 
 Proof chaining
@@ -327,7 +327,7 @@ like this:
 When checking the proof, the `showgoals` tactic has the effect of
 printing the current list of proof goals, leaving the goals unchanged.
 A good way to develop a proof is to start with just the tactic `showgoals`, and to add tactics
-before it. Running the Ivy proof checker in an Emacs compilation buffer
+before it. Running the IVy proof checker in an Emacs compilation buffer
 is a convenient way to do this. 
 
 Theorems
@@ -404,7 +404,7 @@ We think this theorem holds because `f(f(f(X)))` is equal to `f(f(X))`
 (by idempotence of *f*) which in turn is equal to `f(X)` (again, by
 idempotence of *f*). This means we want to apply the transitivy rule, where
 the intermediate term *Y* is `f(f(x))`. Notice we have to give the value of *Y*
-explicitly. Ivy isn't clever enough to guess this intermediate term for us.
+explicitly. IVy isn't clever enough to guess this intermediate term for us.
 This gives us the following two proof subgoals:
 
     # theorem [prop2] {
@@ -440,7 +440,7 @@ This substituion produces a new subgoal as follows:
     # }
 
 This goal is trivial, since the conclusion is exactly the same as one
-of the premises, except for the names of bound variables. Ivy proves
+of the premises, except for the names of bound variables. IVy proves
 this goal automatically and drops it from the list. This leaves the
 second subgoal `prop3` above. We can also prove this using `elimA`. In
 this case `X` in the `elimA` rule corresponds to `X` in our goal.
@@ -449,7 +449,7 @@ strange, but keep in mind that the `X` on the left refers to `X` in
 the `elimA` rule, while `X` on the right refers to `X` in our goal. It
 just happens that we chose the same name for both variables.
 
-Once again, the subgoal we obtain is trivial and Ivy drops it. Since
+Once again, the subgoal we obtain is trivial and IVy drops it. Since
 there are no more subgoals, the proof is now complete.
 
 #### The deduction library
@@ -504,7 +504,7 @@ fragment. Because this definition is a schema, when we want to use it,
 we'll have to apply it explicitly,
 
 In order to admit this definition, we applied the definition
-schema `rec[u]`. Ivy infers the following assignment:
+schema `rec[u]`. IVy infers the following assignment:
 
     # q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
@@ -547,7 +547,7 @@ The extended schema matches the definition, with the following assignment:
     
 This is somewhat as if the functions were "curried", in which case the
 free symbol `fun` would match the partially applied term `sumdiv N`.
-Since Ivy's logic doesn't allow for partial application of functions,
+Since IVy's logic doesn't allow for partial application of functions,
 extended matching provides an alternative. Notice that, 
 to match the recursion schema, a function definition must be
 recursive in its *last* parameter.
@@ -649,7 +649,7 @@ in the following way:
 Provided we can prove the property, and that `next` is fresh, we can
 infer that, for all *X*, `succ(X,next(X))` holds. Defining a function
 in this way, (that is, as a Skolem function) can be quite useful in
-constructing a proof.  However, since proofs in Ivy are not generally
+constructing a proof.  However, since proofs in IVy are not generally
 constructive, we have no way to *compute* the function `next`, so we
 can't use it in extracted code.
 
