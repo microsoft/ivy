@@ -42,6 +42,8 @@ object ivy = { ...
         cpp_reserved_word("and") := true;
         cpp_reserved_word("or") := true;
         cpp_reserved_word("not") := true;
+        cpp_reserved_word("float") := true;
+        cpp_reserved_word("double") := true;
     }
 
 
@@ -303,7 +305,12 @@ object ivy = { ...
 
             # Annotation of current assignment
 
-            asgn_ann : annot
+            asgn_ann : annot,
+
+            # Depth of nesting of "inbounds" pragma
+
+            inbounds_nesting : pos
+
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -610,6 +617,16 @@ object ivy = { ...
         res := cpp.app.make1(cpp.symbol.make(name,ann),arg,ann);
     }
 
+    # Make a C++ expression of the form `ivy::from_flt<ty>(arg)`
+
+    action make_from_float(ty:cpp.expr,arg:cpp.expr,ann:annot) returns(res:cpp.expr) = {
+        var id : cpp.strident;
+        id.val := "from_flt";
+        id.subscrs := id.subscrs.append(ty.get_name);
+        var name := cpp.dotident.make(cpp.strident.make("ivy"),id);
+        res := cpp.app.make1(cpp.symbol.make(name,ann),arg,ann);
+    }
+
     # Returns true if the C++ express is `*this`. This case requires special
     # handling for indirect calls. 
 
@@ -834,6 +851,10 @@ object ivy = { ...
                         var ty : cpp.expr;
                         (ty,st) := s.args.value(1).to_cpp(st);
                         res := make_from_string(ty,res,s.get_ann);
+                    } else if arg.get_verb = verb.fltnum {
+                        var ty : cpp.expr;
+                        (ty,st) := s.args.value(1).to_cpp(st);
+                        res := make_from_float(ty,res,s.get_ann);
                     } else if st.globals.is_action.mem(arg.get_name) {
                         if ~(s.args.value(1).is(verb.arrow)) {
                             var args : vector[cpp.expr];
@@ -917,6 +938,23 @@ object ivy = { ...
                             capp.args := capp.args.set(0,capp.args.value(1));
                             capp.args := capp.args.set(1,tmp);
                         };
+
+                        # For inbounds array accesses, we use the
+                        # member function __inp rather than
+                        # operator(). This does an ordinary unchecked
+                        # vector access.
+
+                        if st.inbounds_nesting > 0 {
+                            var is_data := s.func.is(verb.dot);
+                            if s.func.is(verb.colon) {
+                                var arg := s.func.get_arg(0);
+                                is_data := arg isa symbol & arg.get_verb = verb.none;
+                            };
+                            if is_data {
+                                var inb := cpp.symbol.makestr("__inb",capp.func.get_ann);
+                                capp.func := cpp.dot.make(capp.func,inb,s.ann);
+                            }
+                        }
 
                         # If of the form (x:t).f, where t is a variant
                         # type, convert to x->f, since variant types are
@@ -1332,6 +1370,32 @@ object ivy = { ...
 	res := vst;
     }
 
+    # Open or close scope of a pragma. Pragmas:
+    #
+    # - inbounds: promises array references in the following code are within
+    #      the allocated bounds, turns of bounds checking
+
+    action pragma_stmt(s:stmt,start:bool,st:tocppst) returns(st:tocppst) = {
+        if s isa pragmast {
+            var ok : bool := false;
+            var e := s.get_expr;
+            if e isa symbol {
+                var name := e.get_name.to_str;
+                if name = "inbounds" {
+                    ok := true;
+                    if start {
+                        st.inbounds_nesting := st.inbounds_nesting.next;
+                    } else {
+                        st.inbounds_nesting := st.inbounds_nesting.prev;
+                    }
+                }
+            }
+            if ~ok {
+                report_error(bad_syntax.make(e),e.get_ann);
+            }
+        }
+    }
+
     # Notice here that for a sequence `s1;s2`, we compile `s2` first and then `s1`. This
     # allows the compilation of `s1` to depend on whether locals are live in `s2`.
 
@@ -1341,7 +1405,9 @@ object ivy = { ...
             res.ann := s.ann;
             st.locals := st.locals.push_stmt(s.lhs,st.loop_nesting);
 	    st, var ok, var bid := setup_borrowing(s.lhs,st);
+            st := pragma_stmt(s.lhs,true,st);
             (res.rhs,st) := s.rhs.to_cpp(st);
+            st := pragma_stmt(s.lhs,false,st);
 	    var br:borrowing;
 	    if ok {
 		br := st.borrowings.value(bid);
@@ -2126,7 +2192,7 @@ object ivy = { ...
     # like `x+y`, where `x` and `y` are of the derived class. Since the only available
     # conversion is to the base class, the `+` operator of the base class is used. On
     # assignment, the constructor is used.
-
+    
     action add_derived_traits(s:cpp.structdecl) returns (s:cpp.structdecl) = {
 
         s.members := s.members.append(make_cpp_cons(s));

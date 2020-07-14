@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <math.h>
+#include <sstream>
 
 namespace ivy {
 
@@ -387,9 +389,10 @@ namespace ivy {
         
         T& operator() (PrimaryD idx) {
             if (PrimaryD::__is_seq()) {
-                if (((std::size_t)idx) < data.size())
-                    return data[((std::size_t)idx)];
-                else if (((std::size_t)idx) == data.size()) {
+                auto ptr = data.begin() + ((std::size_t)idx);
+                if (ptr < data.end())
+                    return *ptr;
+                else if (ptr == data.end()) {
                     if (map) {
                         map_type &m = *map;
                         typename map_type::iterator it = m.find(idx);
@@ -405,6 +408,14 @@ namespace ivy {
                 map = ptr_null< map_type  > (new map_type);
             }
             return (*map)[idx];
+        }
+
+        const T& __inb(PrimaryD idx) const {
+            return data[((std::size_t)idx)];
+        }
+
+        T& __inb(PrimaryD idx) {
+            return data[((std::size_t)idx)];
         }
 
         static void resize(vector &x, std::size_t size) {
@@ -480,6 +491,14 @@ namespace ivy {
             return data(idx)(parameters...);
         }
 
+        const T& __inb (PrimaryD idx, RestD... parameters) const {
+            return data(idx)(parameters...);
+        }
+
+        T& __inb (PrimaryD idx, RestD... parameters) {
+            return data(idx)(parameters...);
+        }
+
         static void resize(vector &x, std::size_t size) {
             x.data.resize(size);
         }
@@ -493,7 +512,8 @@ namespace ivy {
         T value;
         native_int() : value(0) {}
         native_int(const native_int &) = default; 
-        native_int(long long value) : value(value) {}
+        native_int(T value) : value(value) {}
+        //        native_int(double value) : value(value) {}
         native_int(native_int &&) = default; 
         native_int &operator = (const native_int &) = default; 
         native_int &operator = (native_int &&) = default; 
@@ -888,7 +908,7 @@ namespace ivy {
         return res;
     }
 
-    template <class N, class D> static inline void read_file(const N &name, D &data, __bool &ok) {
+    template <class N, class D> static inline void read_file(const N &name, D &data, native_bool &ok) {
         std::string sname;
         for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
             sname.push_back(name.value(idx));
@@ -957,6 +977,16 @@ namespace ivy {
         return x;
     }
 
+    // This template is used by the compiler to build float literals
+    // of any type. Native numeric types use the standard C++ conversions.
+    // TODO: currently fails for non-numeric types.
+
+    template <class T> inline T from_flt(double v) {
+        T x;
+        x.value = v;
+        return x;
+    }
+    
     // Globals to hold the arguments to main
 
     int __argc;
@@ -1002,6 +1032,21 @@ namespace ivy {
         int status;
         ::waitpid(pid,&status,0);
         return status;
+    }
+
+    template <class T> static inline native_int<T> sqrt(const native_int<T> &f) {
+        return ::sqrt(f.value);
+    }
+
+    // Conversion of native numeric types to string types. The result
+    // type must have array traits.
+    
+    template <class T,class U> static inline void num_to_str(const native_int<T> &f, U &a) {
+        std::ostringstream s;
+        s << f.value;
+        for (std::size_t i = 0; i < s.str().size(); i++) {
+            a.append(s.str()[i]);
+        }
     }
 
 }

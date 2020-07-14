@@ -84,41 +84,79 @@ object ivy = {
 	}
     }
 
+    object pragmast = {
+        variant this of stmt = struct {
+            prg : expr,
+            ann : annot
+        }
+
+        action make (prg:expr,ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.prg := prg;
+            s.ann := ann;
+            res := s;
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("@");
+            b := s.prg.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+
+	action get_expr(s:this) returns (res:expr) = {
+	    res := s.prg;
+	}
+    }
+        
+
     object stmt = { ...
 
+        action parse_stmt_term(st : pstate) returns(st : pstate) = {
+            if st.ok & st.tok = ";" {
+                st := st.consume;
+            } else {
+                st.ok := st.ok & st.tok = "}";  # allow to omit final semicolon
+            }
+        }
+
         action parse_lang_stmt(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
-	    var s : asgn;
-	    (st,s.ann) := st.get_ann;
-	    if st.tok = "call" {
-		st := st.consume;
-	    };
-	    (st,s.lhs) := expr.parse(st,0);
-	    if st.ok & st.tok = ":=" {
-		st := st.consume;
-		(st,s.rhs) := expr.parse(st,0);
-		if st.ok & st.tok = ";" {
-		    st := st.consume;
-		} else {
-		    st.ok := st.tok = "}";  # allow to omit final semicolon
-		};
-		res := s;
-	    } else if st.ok & (st.tok = ";" | st.tok = "}") {
-		if st.tok = ";" {
-		    st := st.consume;
-		};
-		if s.lhs.is(verb.varv) {
-		    var vst : varst;
-		    vst.ann := s.ann;
-		    vst.name := s.lhs.get_arg(0);
-		    res := vst;
-		} else {
-		    s.rhs := s.lhs;
-		    s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
-		    res := s;
-		}
-	    } else {
-		st.ok := false; 
-	    };
+            if st.ok & st.tok = "@" {
+                st := st.consume;
+                var s : pragmast;
+                (st,s.prg) := expr.parse(st,0);
+                st := parse_stmt_term(st);
+                res := s;
+            } else {
+                var s : asgn;
+                (st,s.ann) := st.get_ann;
+                if st.tok = "call" {
+                    st := st.consume;
+                };
+                (st,s.lhs) := expr.parse(st,0);
+                if st.ok & st.tok = ":=" {
+                    st := st.consume;
+                    (st,s.rhs) := expr.parse(st,0);
+                    st := parse_stmt_term(st);
+                    res := s;
+                } else {
+                    st := parse_stmt_term(st);
+                    if s.lhs.is(verb.varv) {
+                        var vst : varst;
+                        vst.ann := s.ann;
+                        vst.name := s.lhs.get_arg(0);
+                        res := vst;
+                    } else {
+                        s.rhs := s.lhs;
+                        s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
+                        res := s;
+                    }
+                }
+            }
         }
     }
 

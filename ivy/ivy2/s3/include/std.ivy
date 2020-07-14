@@ -1,0 +1,21 @@
+#lang ivy
+
+include arith
+include order
+include string
+include collections
+include io
+
+instance char : arith_char
+instance pos : unbounded_sequence
+instance str : string(pos,char)
+instance stdio : io_stdio(str,pos,char)
+
+object dbl = {
+    type this
+    interpret this -> ivy.native_int[double]
+    action sqrt(self:this) returns (res:this) = {
+        res := cast(ivy.sqrt(cast(self)));
+    }
+    instantiate string.conv(str,this)
+}
