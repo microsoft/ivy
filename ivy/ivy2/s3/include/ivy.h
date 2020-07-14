@@ -965,10 +965,6 @@ namespace ivy {
         T::resize(f,size);
     }
 
-    template <class T> static inline typename T::type::value_type &getelem(T &f, std::size_t idx) {
-        return const_cast<typename T::type::value_type &>(f.data[((std::size_t)idx)]);
-    }
-
     // This template is used by the compiler to build string literals
     // of any type with string traits (that is, having array traits
     // and a numeric domain type).

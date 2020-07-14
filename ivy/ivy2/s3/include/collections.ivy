@@ -57,12 +57,6 @@ module array(domain,range) = {
         s.end := end;
     }
     
-    # The `resize` action sets the end marker of the string. 
-    
-    action get(s:this,idx:domain) returns (r:range) = {
-        r := cast(ivy.getelem(cast(s.value),cast(idx)));
-    }
-
     # The `back` action returns the last element of an array, or zero
     # if the array is empty.
 
