@@ -218,19 +218,63 @@ def check_final_cond(ag,post,final_cond,rels_to_min=[],shrink=False,handler_clas
     axioms = im.module.background_theory()
     clauses = history.post
     clauses = lut.and_clauses(clauses,axioms)
+    assert all(x is not None for x in history.actions)
+    # work around a bug in ivy_interp
+    actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
+    action = act.Sequence(*actions)
+    return check_vc(clauses,action,final_cond,rels_to_min,shrink,handler_class)
+
+def check_vc(clauses,action,final_cond=None,rels_to_min=[],shrink=False,handler_class=None):
     model = slv.get_small_model(clauses,lg.uninterpreted_sorts(),rels_to_min,final_cond=final_cond,shrink=shrink)
     if model is not None:
-        failed = ([final_cond] if not isinstance(final_cond,list)
+        failed = ([] if final_cond is None
+                  else [final_cond] if not isinstance(final_cond,list)
                   else [c.cond() for c in ffcs if c.failed])
         mclauses = lut.and_clauses(*([clauses] + failed))
         vocab = lut.used_symbols_clauses(mclauses)
         handler = (handler_class(mclauses,model,vocab) if handler_class is not None
                    else Trace(mclauses,model,vocab))
-        assert all(x is not None for x in history.actions)
-        # work around a bug in ivy_interp
-        actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
-        action = act.Sequence(*actions)
         act.match_annotation(action,clauses.annot,handler)
         handler.end()
         return handler
     return None
+
+# Generate a VC for an action
+#
+# - action: an action
+# - precond: precondition as list of Clauses
+# - postcond: postcondition as list of Clauses
+# - check_asserts: True if checking asserts in action
+
+
+def make_vc(action,precond=[],postcond=[],check_asserts=True):
+
+    ag = art.AnalysisGraph()
+    
+    pre = itp.State()
+    pre.clauses = lut.Clauses([lf.formula for lf in precond])
+    pre.clauses.annot = act.EmptyAnnotation()
+    
+    with itp.EvalContext(check=False): # don't check safety
+        post = ag.execute(action, pre)
+        post.clauses = lut.true_clauses()
+
+    fail = itp.State(expr = itp.fail_expr(post.expr))
+
+    history = ag.get_history(post)
+    axioms = im.module.background_theory()
+    clauses = history.post
+    clauses = lut.and_clauses(clauses,axioms)
+    fc = lut.Clauses([lf.formula for lf in postcond])
+    fc.annot = act.EmptyAnnotation()
+    used_names = frozenset(x.name for x in lg.sig.symbols.values())
+    def witness(v):
+        c = lg.Const('@' + v.name, v.sort)
+        assert c.name not in used_names
+        return c
+    fcc = lut.dual_clauses(fc, witness)
+    clauses = lut.and_clauses(clauses,fcc)
+
+    return clauses
+
+

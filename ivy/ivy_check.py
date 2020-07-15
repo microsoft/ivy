@@ -26,6 +26,7 @@ import ivy_printer
 import ivy_l2s
 import ivy_mc
 import ivy_bmc
+import ivy_tactics
 
 import sys
 from collections import defaultdict
@@ -110,15 +111,16 @@ def check_temporals():
     pmap = dict((prop.id,p) for prop,p in mod.proofs)
     pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
     for prop in props:
-        print '\n    The following temporal property is being proved:\n'
-        print pretty_lf(prop)
         if prop.temporal:
-            proof = pmap.get(prop.id,None)
-            model = itmp.normal_program_from_module(im.module)
-            subgoal = prop.clone([prop.args[0],itmp.TemporalModels(model,prop.args[1])])
-            subgoals = [subgoal]
-            subgoals = pc.admit_proposition(prop,proof,subgoals)
-            check_subgoals(subgoals)
+            print '\n    The following temporal property is being proved:\n'
+            print pretty_lf(prop)
+            if prop.temporal:
+                proof = pmap.get(prop.id,None)
+                model = itmp.normal_program_from_module(im.module)
+                subgoal = prop.clone([prop.args[0],itmp.TemporalModels(model,prop.args[1])])
+                subgoals = [subgoal]
+                subgoals = pc.admit_proposition(prop,proof,subgoals)
+                check_subgoals(subgoals)
             
         # else:
         #     # Non-temporal properties have already been proved, so just
@@ -396,7 +398,7 @@ def check_isolate():
         model = itmp.normal_program_from_module(im.module)
         prop = ivy_ast.LabeledFormula(ivy_ast.Atom('safety'),lg.And())
         subgoal = ivy_ast.LabeledFormula(ivy_ast.Atom('safety'),itmp.TemporalModels(model,lg.And()))
-        print 'subgoal = {}'.format(subgoal)
+#        print 'subgoal = {}'.format(subgoal)
         subgoals = [subgoal]
         subgoals = pc.admit_proposition(prop,mod.isolate_proof,subgoals)
         check_subgoals(subgoals)
@@ -454,12 +456,12 @@ def check_isolate():
 
         apply_conj_proofs(mod)
 
-        if mod.isolate_info.implementations:
+        if mod.isolate_info is not None and mod.isolate_info.implementations:
             print "\n    The following action implementations are present:"
             for mixer,mixee,action in sorted(mod.isolate_info.implementations,key=lambda x: x[0]):
                 print "        {}implementation of {}".format(pretty_lineno(action),mixee)
 
-        if mod.isolate_info.monitors:
+        if mod.isolate_info is not None and mod.isolate_info.monitors:
             print "\n    The following action monitors are present:"
             for mixer,mixee,action in sorted(mod.isolate_info.monitors,key=lambda x: x[0]):
                 print "        {}monitor of {}".format(pretty_lineno(action),mixee)
@@ -617,10 +619,12 @@ def check_subgoals(goals):
             # mod.labeled_axioms.extend(proved)
             mod.labeled_props = [goal]
             mod.concept_spaces = []
-            mod.conjs = []
+            mod.labeled_conjs = []
             mod.public_actions = set()
             mod.actions = dict()
             mod.initializers = []
+            mod.isolate_proof = None
+            mod.isolate_info = None
         with mod:
             check_isolate()
                 

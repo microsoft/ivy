@@ -323,6 +323,8 @@ def goal_prems(g):
 # Make a goal with given label, premises (goals), conclusion (formula)
 
 def make_goal(lineno,label,prems,conc):
+    if isinstance(label,str):
+        label = ia.Atom(label)
     res =  ia.LabeledFormula(label,ia.SchemaBody(*(prems+[conc])) if prems else conc)
     res.lineno = lineno
     return res

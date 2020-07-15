@@ -232,6 +232,24 @@ def normal_program_from_module(mod):
     calls = sorted(mod.public_actions)
     return NormalProgram(bindings,init,invars,asms,calls)
 
+# The creates an "environment action" from a list of action
+# bindings. This represents the environment nondeterministically
+# calling one of the actions. Using an environment action for VC
+# checking is necessary to make counterexamples look right.
+
+def env_action(bindings):
+    racts = []
+    for b in bindings:
+        name = b.name
+        act = b.action
+        ract = iact.Sequence(act.stmt,iact.ReturnAction())
+        ract.formal_params = act.inputs
+        ract.formal_returns = act.outputs
+        ract.label = name[4:] if name.startswith('ext:') else name
+        racts.append(ract)
+    action = iact.EnvAction(*racts)
+    return action
+
 #
 # This is a test tactic for temporal properties that proves a "globally" formula using
 # the invariance rule.
