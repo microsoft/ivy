@@ -22,12 +22,18 @@ def vcgen(self,decls,proof):
     if not isinstance(conc,tm.TemporalModels) or not lg.is_true(conc.fmla):
         raise iu.IvyError(self,'vcgen tactic applies only to safety properties')
     model = conc.model
-    initiation = tr.make_vc(model.init,postcond=model.invars)
-    env = tm.env_action(model.bindings)
-    consecution = tr.make_vc(env,precond=model.invars+model.asms,postcond=model.invars)
-    goal1 = pr.make_goal(proof.lineno,'initiation',[],lg.Not(lu.clauses_to_formula(initiation)))
-    goal2 = pr.make_goal(proof.lineno,'consecution',[],lg.Not(lu.clauses_to_formula(consecution)))
+    goal1 = triple_to_goal(proof.lineno,'initiation',model.init,postcond=model.invars)
+    goal2 = triple_to_goal(proof.lineno,'consecution',tm.env_action(model.bindings),
+                           precond=model.invars+model.asms,postcond=model.invars)
     return [goal1,goal2] + decls[1:]
+
+def vc_to_goal(lineno,name,vc,action):
+    return pr.make_goal(lineno,name,[],lg.Not(lu.clauses_to_formula(vc)),
+                        annot=(action,vc.annot))
+
+def triple_to_goal(lineno,name,action,precond=[],postcond=[]):
+    vc = tr.make_vc(action,precond,postcond)
+    return vc_to_goal(lineno,name,vc,action)
 
 pf.register_tactic('vcgen',vcgen)
     

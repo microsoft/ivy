@@ -192,6 +192,8 @@ class Checker(object):
             print('PASS')
     def assume(self):
         return False
+    def get_annot(self):
+        return None
 
 def pretty_label(label):
     return "(no name)" if label is None else label
@@ -210,6 +212,8 @@ class ConjChecker(Checker):
     def start(self):
         print pretty_lf(self.lf,self.indent),
         print_dots()
+    def get_annot(self):
+        return self.lf.annot if hasattr(self.lf,'annot') else None
     
 class ConjAssumer(Checker):
     def __init__(self,lf):
@@ -330,11 +334,16 @@ def check_fcs_in_state(mod,ag,post,fcs):
             vocab = lut.used_symbols_clauses(mclauses)
 #            handler = MatchHandler(mclauses,model,vocab) if opt_trace.get() else ivy_trace.Trace(mclauses,model,vocab)
             handler = ivy_trace.Trace(mclauses,model,vocab)
-            assert all(x is not None for x in history.actions)
-            # work around a bug in ivy_interp
-            actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
-            action = act.Sequence(*actions)
-            act.match_annotation(action,clauses.annot,handler)
+            thing = failed[-1].get_annot()
+            if thing is None:
+                assert all(x is not None for x in history.actions)
+                # work around a bug in ivy_interp
+                actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
+                action = act.Sequence(*actions)
+                annot = clauses.annot
+            else:
+                action,annot = thing
+            act.match_annotation(action,annot,handler)
             handler.end()
             ff = failed[0]
             handler.is_cti = (lut.formula_to_clauses(ff.lf.formula) if isinstance(ff,ConjChecker)

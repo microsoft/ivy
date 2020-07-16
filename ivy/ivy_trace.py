@@ -264,6 +264,16 @@ def make_vc(action,precond=[],postcond=[],check_asserts=True):
     history = ag.get_history(post)
     axioms = im.module.background_theory()
     clauses = history.post
+
+    #Tricky: fix the annotation so it matches the original action
+    stack = []
+    while isinstance(clauses.annot,act.RenameAnnotation):
+        stack.append(clauses.annot.map)
+        clauses.annot = clauses.annot.arg
+    clauses.annot = clauses.annot.args[1]
+    while stack:
+        clauses.annot = act.RenameAnnotation(clauses.annot,stack.pop())
+    
     clauses = lut.and_clauses(clauses,axioms)
     fc = lut.Clauses([lf.formula for lf in postcond])
     fc.annot = act.EmptyAnnotation()

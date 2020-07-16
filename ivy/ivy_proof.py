@@ -322,11 +322,13 @@ def goal_prems(g):
 
 # Make a goal with given label, premises (goals), conclusion (formula)
 
-def make_goal(lineno,label,prems,conc):
+def make_goal(lineno,label,prems,conc,annot=None):
     if isinstance(label,str):
         label = ia.Atom(label)
     res =  ia.LabeledFormula(label,ia.SchemaBody(*(prems+[conc])) if prems else conc)
     res.lineno = lineno
+    if annot is not None:
+        res.annot = annot
     return res
 
 # Replace the premises and conclusions of a goal, keeping label and lineno
