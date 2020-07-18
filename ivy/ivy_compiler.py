@@ -929,6 +929,11 @@ def compile_tactic_tactic(self):
     
 ivy_ast.TacticTactic.compile = compile_tactic_tactic
 
+def compile_proof_tactic(self):
+    return self.clone([self.label,self.proof.compile()])
+    
+ivy_ast.ProofTactic.compile = compile_proof_tactic
+
 def resolve_alias(name): 
     if name in im.module.aliases:
         return im.module.aliases[name]

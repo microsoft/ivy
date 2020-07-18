@@ -159,7 +159,15 @@ class ProofChecker(object):
                 return self.property_tactic(decls,proof)
             elif isinstance(proof,ia.TacticTactic):
                 return self.tactic_tactic(decls,proof)
+            elif isinstance(proof,ia.ProofTactic):
+                return self.proof_tactic(decls,proof)
             assert False,"unknown proof type {}".format(type(proof))
+
+    def proof_tactic(self,decls,proof):
+        for idx,decl in enumerate(decls):
+            if decl.label.rep == proof.label.rep:
+                return decls[:idx] + decls[idx+1:] + self.apply_proof([decl],proof.proof)
+        raise IvyError(proof,'no goal with label {}'.format(proof.label))
 
     def tactic_tactic(self,decls,proof):
         tn = proof.tactic_name
@@ -236,11 +244,14 @@ class ProofChecker(object):
             cut = clone_goal(cut,[],fmla)
             goal = goal_add_prem(goal,ia.ConstantDecl(sym),goal.lineno)
         
-        return [goal_add_prem(goal,cut,cut.lineno)] + decls[1:] + [subgoal]
+        subgoals = [subgoal]
+        pf = proof.args[2]
+        if not isinstance(pf,ia.NoneAST):
+            subgoals = self.apply_proof(subgoals,pf)
+        return [goal_add_prem(goal,cut,cut.lineno)] + decls[1:] + subgoals
 
 
-    def setup_matching(self,decl,proof):
-        schemaname = proof.schemaname()
+    def lookup_schema(self,schemaname,decl,ast):
         if schemaname in self.schemata:
             schema = self.schemata[schemaname]
         elif schemaname in self.definitions:
@@ -251,14 +262,20 @@ class ProofChecker(object):
             if schemaname in premmap:
                 schema = premmap[schemaname]
             else:
-                raise ProofError(proof,"No property {} exists in the current context".format(schemaname))
+                raise ProofError(ast,"No property {} exists in the current context".format(schemaname))
+        return schema
+    
+    def setup_matching(self,decl,proof):
+        schemaname = proof.schemaname()
+        schema = self.lookup_schema(schemaname,decl,proof)
         schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
         prob = match_problem(schema,decl)
         prob = transform_defn_match(prob)
         if prob is None:
             raise NoMatch(proof,'definition does not match the given schema')
-        pmatch = compile_match(proof,prob,decl)
+        proof_match,prob = add_prem_match(proof.match(),prob,decl,self)
+        pmatch = compile_match(proof_match,prob,decl)
         if pmatch is None:
             raise ProofError(proof,'Match is inconsistent')
         return prob, pmatch
@@ -630,6 +647,31 @@ def transform_defn_match(prob):
     schema = apply_match_goal(dmatch,schema,apply_match_alt)
     return MatchProblem(schema,concrhs,declrhs,freesyms,constants)
 
+def goal_prems_by_name(goal):
+    gprems = goal_prem_goals(goal)
+    return dict((p.name,p) for p in gprems)
+
+def add_prem_match(proof_match,prob,goal,context):
+    sprems = goal_prems_by_name(prob.schema)
+    pats = []
+    insts = []
+    new_match = []
+    for m in proof_match:
+        lhs,rhs = m.args
+        if isinstance(lhs,ia.Atom) and len(lhs.args) == 0:
+            sprem = sprems.get(lhs.rep,None)
+            if sprem is not None:
+                if isinstance(rhs,ia.Atom) and len(rhs.args) == 0:
+                    gprem = context.lookup_schema(rhs.rep,goal,rhs)
+                    pats.append(sprem)
+                    insts.append(gprem)
+                    continue
+        new_match.append(m)
+    if pats:
+        pat = ia.Tuple(*(pats + [prob.pat]))
+        inst = ia.Tuple(*(insts + [prob.inst]))
+        prob = MatchProblem(prob.schema,pat,inst,prob.freesyms,prob.constants)
+    return new_match,prob
 
 def parameterize_schema(sorts,schema):
     """ Add initial parameters to all the free symbols in a schema.
@@ -657,7 +699,7 @@ def parameterize_schema(sorts,schema):
 # instantiated, while the right-hand sides uses names from the
 # current goal (and both may use names from the globla context
 
-def compile_match_list(proof,left_goal,right_goal):
+def compile_match_list(proof_match,left_goal,right_goal):
     def compile_match(d):
         x,y = d.lhs(),d.rhs()
         x = compile_expr_vocab(x,left_goal_vocab)
@@ -665,7 +707,7 @@ def compile_match_list(proof,left_goal,right_goal):
         return ia.Definition(x,y)
     left_goal_vocab = goal_vocab(left_goal)
     right_goal_vocab = goal_vocab(right_goal)
-    return [compile_match(d) for d in proof.match()]
+    return [compile_match(d) for d in proof_match]
 
 # A "match" is a map from symbols to lambda terms
     
@@ -685,12 +727,12 @@ def compile_one_match(lhs,rhs,freesyms,constants):
     fmatch = merge_matches(vmatch,somatch)
     return fmatch
 
-def compile_match(proof,prob,decl):
+def compile_match(proof_match,prob,decl):
     """ Compiles match in a proof. Only the symbols in
     freesyms may be used in the match."""
 
     schema = prob.schema
-    matches = compile_match_list(proof,schema,decl)
+    matches = compile_match_list(proof_match,schema,decl)
     matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
     res = merge_matches(*matches)
     return res
@@ -698,7 +740,7 @@ def compile_match(proof,prob,decl):
         
     freesyms = prob.freesyms
     res = dict()
-    for m in proof.match():
+    for m in proof_match:
         if il.is_app(m.lhs()):
             res[m.defines()] = il.Lambda(m.lhs().args,m.rhs())
         else:

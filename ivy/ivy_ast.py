@@ -725,6 +725,9 @@ class IfTactic(AST):
 class PropertyTactic(AST):
     def __init__(self,*args):
         self.args = args
+    @property
+    def proof(self):
+        return self.args[2]
     def __str__(self):
         p = self.args[0]
         n = self.args[1]
@@ -742,6 +745,17 @@ class TacticTactic(AST):
         return self.args[1].args
     def __str__(self):
         res = 'tactic ' + str(self.args[0]) + str(self.args[1])
+
+class ProofTactic(AST):
+    @property
+    def label(self):
+        return self.args[0]
+    @property
+    def proof(self):
+        return self.args[1]
+    def __str__(self):
+        res = 'proof [' + str(self.label) + '] {' + str(self.proof) + '}'
+    
 
 class TacticWith(AST):
     def __str__(self):

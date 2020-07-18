@@ -938,6 +938,13 @@ else:
         p[0] = PropertyTactic(prop,name,proof)
         p[0].lineno = get_lineno(p,2)
 
+    def p_proofstep_proof(p):
+        'proofstep : PROOF LABEL proofgroup'
+        label = Atom(p[2][1:-1],[])
+        label.lineno = get_lineno(p,2)
+        p[0] = ProofTactic(label,p[3])
+        p[0].lineno = get_lineno(p,1)
+
 def p_match_defn(p):
     'match : defn'
     p[0] = p[1]
