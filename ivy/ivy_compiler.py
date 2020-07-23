@@ -912,8 +912,9 @@ def compile_if_tactic(self):
 ivy_ast.IfTactic.compile = compile_if_tactic
 
 def compile_property_tactic(self):
-    with top_sort_as_default():
-        prop = self.args[0].compile()
+#    with top_sort_as_default():
+#        prop = self.args[0].compile()
+    prop = self.args[0]
     name = self.args[1]
     if not isinstance(name,ivy_ast.NoneAST):
         with ivy_logic.UnsortedContext():
@@ -923,6 +924,11 @@ def compile_property_tactic(self):
     return self.clone([prop,name,proof])
         
 ivy_ast.PropertyTactic.compile = compile_property_tactic
+
+def compile_function_tactic(self):
+    return self
+        
+ivy_ast.FunctionTactic.compile = compile_function_tactic
 
 def compile_tactic_tactic(self):
     return self.clone(self.args)
@@ -1658,19 +1664,54 @@ def check_definitions(mod):
         prover.admit_definition(d,pmap[d.id])
         
 
-# take a goal with premises and convert it to an implication
+# Take a goal with premises and convert it to an implication. To do this, we have to skolemize
+# the bound vocabulary in the goal. Also, any definitions in the proof goal are made global
+# so that the fragment checker recognizes them as macros.
+# TODO: possibly this should be in ivy_proof
+# TODO: existential second-order quantifiers are changed to universal, which is sound
+# but not complete, and not very transparent. Maybe we should throw an error.
+# TODO: First-order quantifiers in shemata are handled like second-order quantifiers!
+
 def theorem_to_property(prop):
     if isinstance(prop.formula,ivy_ast.SchemaBody):
-        prems = [theorem_to_property(x).formula for x in prop.formula.prems()
-                 if isinstance(x,ivy_ast.LabeledFormula)]
+        vocab = ip.goal_vocab(prop)
+        match = dict()
+        for sym in vocab.symbols:
+            if sym.name in ivy_logic.sig.symbols:
+                newname = unused_name_with_base(sym.name,ivy_logic.sig.symbols)
+                newsym = ivy_logic.add_symbol(newname,sym.sort)
+                match[sym] = newsym
+            else:
+                ivy_logic.add_symbol(sym.name,sym.sort)
+        for sort in vocab.sorts:
+            if sort.name in ivy_logic.sig.sorts:
+                newname = unused_name_with_base(sort.name,ivy_logic.sig.sorts)
+                newsort = ivy_logic.add_sort(newname,sort)
+                match[sort] = newsort
+            else:
+                ivy_logic.add_sort(sort.name,sort)
+        if match:
+            prop = ip.apply_match_goal(match,prop,ip.apply_match_alt)
+        prems = []
+        for x in prop.formula.prems():
+            if isinstance(x,ivy_ast.LabeledFormula):
+                if x.definition:
+                    im.module.definitions.append(prop_to_def(x))
+                else:
+                    prems.append(theorem_to_property(x).formula)
         conc = prop.formula.conc()
         if isinstance(conc,ivy_logic.Definition):
             raise iu.IvyError(prop,"definitional subgoal must be discharged")
         fmla = ivy_logic.Implies(ivy_logic.And(*prems),conc) if prems else conc
+        if vocab.variables:
+            fmla = ivy_logic.ForAll(vocab.variables,fmla)
         res = ivy_ast.LabeledFormula(prop.label,fmla)
         res.lineno = prop.lineno
         return res
     return prop
+
+def prop_to_def(lf):
+    return lf.clone([lf.label,ivy_logic.Definition(*lf.formula.args[0].args)])
 
 # re-order the props so specification props comes afer other props in object
 

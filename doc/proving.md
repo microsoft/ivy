@@ -89,11 +89,11 @@ example:
 
 ```
 A property requires a proof (see below). If a proof is not supplied,
-IVy applies its default proof tactic `auto`.  This calls the
+IVy applies its default proof tactic.  This calls the
 automated prover Z3 to attempt to prove the property from the
 previously admitted judgments in the current context.
 
-The `auto` tactic works by generating a *verification condition* to
+The default tactic works by generating a *verification condition* to
 be checked by Z3. This is a formula whose validity implies that the
 property is true in the current context. In this case, the
 verification condition is:
@@ -176,7 +176,7 @@ Also, notice the declaration of function *f* contains a variable *X*. The scope 
 variable is only the function declaration. It has no relation to the variable *X* in the conclusion.
 
 The keyword `axiom` tells IVy that this schema should be taken as valid
-without proof. However, as we will see, the default `auto`
+without proof. However, as we will see, the default
 tactic treats a schema differently from a simple proposition. That is,
 a schema is never used by default, but instead must be explicitly
 instantiated.  This allows is to express and use facts that, if they
@@ -190,8 +190,9 @@ premises to infer its conclusion.
 
 ```
     property [prop_n] Z = n -> Z + 1 = n + 1
-    proof 
+    proof {
         apply congruence
+    }
 
 ```
 The `proof` declaration tells IVy to apply the axiom schema `congruence` to prove the property. 
@@ -216,8 +217,9 @@ could also have written the proof more explicitly, like this:
 
 ```
     property [prop_n_2] Z = n -> Z + 1 = n + 1
-    proof
+    proof {
         apply congruence with X=Z, Y=n, f(X) = X:t + 1
+    }
 
 ```
 Each of the above equations acts as a constraint on the
@@ -231,13 +233,13 @@ It's also possible to write constraints that do not allow for any
 assignment. In this case, Ivy complains that the provided match is
 inconsistent.
 
-Proof chaining
+Forward proofs
 ==============
 
-A premise of a schema can itself be a property.  When applying the
-schema, we are not required to provide values for the premises that
-are properties. An unsupplied premise becomes a *subgoal* which we
-must then prove.
+In the normal way of writing proofs, we start from a set of premises,
+then procede to prove a sequence of facts (or lemmata), ending in a
+conclusion. Each fact must be seen to follow from thge preceding facts
+by applying a valid schema. 
 
 For example, consider the following axiom schema:
 
@@ -252,6 +254,7 @@ For example, consider the following axiom schema:
     }
 
 ```
+
 The scope of free variables such as *X* occurring in properties is
 the entire schema. Thus, this schema says that, for any term *X* of
 type `t`, if we can prove that `man(X)` is true, we can prove that
@@ -265,55 +268,283 @@ We take as a given that Socrates is a man, and prove he is mortal:
     axiom [soc_man] man(socrates)
 
     property mortal(socrates)
-    proof
-        apply mortality_of_man
+    proof {
+        apply mortality_of_man with prem = soc_man
+    }
 
 ```
-The axiom `mortality _of_man`, requires us supply the premise
-`man(socrates)`. Since this premise isn't present in our theorem,
-IVy sets it up as a proof subgoal. We didn't supply a proof of this
-subgoal, so IVy uses its default tactic `auto`, which in this case
-can easily prove that the axiom `man(socrates)` implies
-`man(socrates)`.
 
-If we wanted to prove this manually, however, we could continue our proof by
-applying the axiom `soc_man`, like this:
+The axiom `mortality_of_man`, requires us supply the premise
+`man(socrates)`.  Fortunately, we have this fact as an axiom.
+To justify the conclusion `mortal(socrates)` we tell Ivy to apply
+axiom `mortality_of_man` with `soc_man` as its premise. 
+
+Ivy achieves this proof by *matching* the axiom `mortality_of_man`
+against the provided premise and conclusion. In this process, it
+discovers the substition `X = socrates`. Applying this substituton to
+the axiom yields the deduction we wish to make.  However, if we wanted
+to be more explicit about the substitution, we could have written:
+
+    proof {
+        apply mortality_of_man with prem = soc_man, X = socrates
+    }
+    
+
+Theorems
+========
+
+Thus far, we have seen schemata used only as axioms. However, we can also
+prove the validity of a schema as a *theorem*. For example, here is a theorem
+expressing the transitivity of equality:
+
+```
+    theorem [trans] {
+        type t
+        property [left] X:t = Y
+        property [right] Y:t = Z
+        #--------------------------------
+        property X:t = Z
+    }
+
+```
+
+We don't need to provide a proof for this Ivy's default tactic using Z3 can handle it. 
+The verification condition that Ivy generates is:
+
+    #   X = Y & Y = Z -> X = Z
+
+Here is a theorem that lets us eliminate universal quantifiers:
+
+```
+    theorem [elimA] {
+        type t
+        function p(W:t) : bool
+        property [prem] forall Y. p(Y)
+        #--------------------------------
+        property p(X)
+    }
+
+```
+It says, for any predicate *p*, if `p(Y)` holds for all *Y*, then
+`p(X)` holds for a particular *X*. Again, Z3 can
+prove this easily. Now let's derive a consequence of these facts. A
+function *f* is *idempotent* if applying it twice gives the same
+result as applying it once. This theorem says that, if *f* is
+idempotent, then applying *f* three times is the same as applying it
+once:
+
+```
+    theorem [idem2] {
+        type t
+        function f(X:t) : t
+        property [idem] forall X. f(f(X)) = f(X)
+        #--------------------------------
+        property f(f(f(X))) = f(X)
+    }
+
+```
+The default tactic can't prove this because the premise contains a
+function cycle with a universally quantified variable. Here's the
+error message it gives:
+
+    # error: The verification condition is not in the fragment FAU.
+    #
+    # The following terms may generate an infinite sequence of instantiations:
+    #   proving.ivy: line 331: f(f(X_h))
+
+This means we'll need to apply some other tactic. Here is one possible proof:
+
+```
+    proof {
+        property [lem1] f(f(f(X))) = f(f(X)) proof {apply elimA with prem=idem};
+        property [lem2] f(f(X)) = f(X) proof {apply elimA with prem=idem};
+        apply trans with left = lem1
+    }
+```
+We think this theorem holds because `f(f(f(X)))` is equal to `f(f(X))`
+(by idempotence of *f*) which in turn is equal to `f(X)` (again, by
+idempotence of *f*). We then apply transitivity to infer `f(f(f(X))) = f(X)`.
+
+To prove that `f(f(f(X))) = f(f(X))` from idempotence, we apply the
+`elimA` theorem with `idem` as the premise. Let's look in a little more detail at how this works.
+The `elimA` theorem has a premise `forall X. p(X)`. Ivy matches has to find a substitution that
+will match this formulas `idem`, the premise that we want to use, which is `forall X. f(f(X)) = f(X)`.
+It discovers the following substitution:
+
+    t = t
+    p(Y) = f(f(Y)) = f(Y)
+    
+Now Ivy tries to match the conclusion `p(X)` against the property `lem1` we are proving, which
+is `f(f(f(X))) = f(f(X))`. It first plugs in the above substitution, so `p(X)` becomes:
+
+    f(f(X)) = f(X)
+    
+Matching this with our goal `lem1`, it then gets this subtitution:
+
+    X = f(X)
+    
+Plugging these substitutions into `elimA` as defined above, we obtain:
+
+    theorem [elimA] {
+        property [prem] forall Y. f(f(Y)) = f(Y)
+        #--------------------------------
+        property f(f(f(X))) = f(f(X))
+    }
+
+which is just the inference we want to make. This might give the impression that Ivy can
+magically arrive at the instantiation of a lemma needed to produce a desired inference.
+In general, however, this is a hard problem. If Ivy fails, we can still write out the
+full substituion manually, like this:
+
+        property [lem1] f(f(f(X))) = f(f(X)) proof {apply elimA with t=t, p(Y) = f(f(Y)) = f(Y), X=f(X) };
+
+The second step of our proof, deriving the fact `f(f(X) = f(X)` is a similar application of `idem`.
+The final step uses transitivity, with our two lemmas as premises. In this case, we only have to
+specify the the `left` premise of `trans` is `lem1`. This is enough to infer the needed substitution.
+There would be no harm, however, in writing `right=lem2`. 
+
+
+Natural deduction
+=================
+
+The above proof is an example of reasoning in a style called 
+[natural deduction](https://en.wikipedia.org/wiki/Natural_deduction).
+In fact, `elimA` is a primitive inference rule in natural deduction. 
+In the natural deduction style, a premise of a theorem is often itself a theorem.
+For example, here is a rule of natural deduction that is used to prove an implication:
+
+    theorem [introImp] {
+        function p : bool
+        function q : bool
+        theorem [lem] {
+            property [prem] p
+            #----------------------
+            property q
+        }
+        #----------------------
+        property p -> q
+    }
+
+This rule says that, for any predicates *p* abnd *q*, if we can prove *q* from *p*, then
+we can prove `p -> q`. The premise `lem` of this rule is itself a lemma, which we have to
+supply in order to use the rule.
+
+As an application of `introImp`, let's try to prove the following theorem:
+
+    theorem [mp] {
+        function p : bool
+        function q : bool
+        #---------
+        property p & (p->q) -> q
+    }
+
+To apply `introImp` to prove the implication `p & (p->q) -> q`, we first need a proof of `q`
+from `p & (p->q)`. So here's the start of a proof:
+
+    proof {
+        theorem [lem1] {
+            property [p1] p & (p -> q)
+            property q
+        }; 
+        apply introImp
+    }
+
+Notice we didn't actually prove `lem1`. By leaving out the proof, we
+effectively pass the problem of proving `lem1` on to Z3. With this
+lemma, we can then apply `introImp` to give us our goal. We could also
+have said `with lem=lem1`, but we didn't have to because Ivy can
+figure out the premise needed by `introImp` jsut by matching the
+conclusions. Now, if we don't want to burden Z3 with the proof of `lem1`,
+we can fill it in. Here's a slightly more detailed proof:
+
+    proof {
+        theorem [lem1] {
+            property [p1] p & (p -> q)
+            property q
+        } proof {
+            property [p2] p;
+            property [p3] p -> q; 
+            apply elimImp with prem1 = p1
+        };
+        apply introImp
+    }
+
+That is, from `p & (p -> q)` we can infer `p` and `p -> q`. Now we use the following rule to infer `q`:
+
+    axiom [elimImp] {
+        function p : bool
+        function q : bool
+        property [prem1] p
+        property [prem2] p -> q
+        #----------------------
+        property q
+    }
+
+You might also recognize the `elimImp` rule as *modus ponens*. Notice that when we applioed `elimImp`, we again
+specified only one premise, since this was enough to determine the substitution for `p` in the rule. 
+
+If we want to add more detail to the proof, we can can go another level deeper by adding proofs for
+`p2` and `p3`:
+
+    proof {
+        theorem [lem1] {
+            property [p1] p & (p -> q)
+            property q
+        } proof {
+            property [p2] p proof {apply elimAndL with prem = p1};
+            property [p3] p -> q proof {apply elimAndR with prem = p1};
+            apply elimImp with prem1 = p2
+        };
+        apply introImp
+    }
+
+We have proved `p2` and `p3` from `p1` using the natural deduction rules for
+elimination of 'and' (which we omit here).
+
+Notice the hierarchical style of proofs in natural deduction. Each lemma is
+proved by a sequence of sub-lemmas, until we reach the bottom level at which
+the lemmas are proved by primitive rules.
+
+The full set of inference rules of natural deduction (including
+equality) can be found in the the Ivy standard header `deduction`.
+Many tutorial resources may be found on the World-Wide Web on writing
+natural deduction proofs.
+
+Backward proof
+==============
+
+An alternative way to construct a proof in Ivy is *backward chaining*.
+While it is perhaos most natural to use proof rules to work forward
+from premises to conclusions, it is equally possible to use the same
+rules to work backward from conclusions to premises.  When applying a
+rule, Ivy does not require that all premises of the rule be
+immediately supplied.  An unsupplied premise becomes a *subgoal* which
+we must prove later. In effect, the proof of the missing premise is
+"pushed on the stack". 
+
+As an example, let's look at an alternative proof of the mortality
+of Socrates:
 
 ```
     property mortal(socrates)
-    proof
+    proof {
         apply mortality_of_man;
         apply soc_man
+    }
 
 ```
-The prover maintains a list of proof goals, to be proved in order
-from first to last.  Applying a rule, if it succeeds, removes the
-first goal from the list, possibly replacing it with subgoals. At
-the end of the proof, the prover applies its default tactic `auto`
-to the remaining goals.
 
-In the above proof, we start with this goal:
+When we apply `mortality_of_man` to prove `man(socrates)` we lack the
+necessary premise `man(socrates)`. Ivy is undeterred by this. It simply
+matches the conclusion `mortal(X)` to `mortal(socrates)`, instatiates
+the axiom `mortality_of_man` and pushes the needed premise `man(socrates)`
+on the goal stack. We then discharge this goal using `soc_man`, leaving the
+goal stack empty. Each proof step is applied to the top goal on the stack. 
+As you may have guessed, goals remaining on the stack at the end of the 'proof'
+are passed to Z3. 
 
-    # property mortal(socrates)
-
-Applying axiom `mortality_of_man` we are left with the following subgoal:
-
-    # property man(socrates)
-
-Applying axiom `soc_man` then leaves us with no subgoals.
-
-Notice that the proof works backward from conclusions to premises.
-
-A note on matching: There may be many ways to match a given proof
-goal to the conclusion of a schema. Different matches can result in
-different sub-goals, which may affect whether a proof succeeds. IVy
-doesn't attempt to verify that the match it finds is unique. For
-this reason, when it isn't obvious there there is a single match, it
-may be a good idea to give the match explicitly (though we didn't
-above, as in this case there is only one possible match).
-
-When chaining proof rules, it is helpful to be able to see the
-intermediate subgoals. This can be done with the `showgoals` tactic,
+When chaining proof rules backward, it is helpful to be able to see the
+intermediate subgoals, since we do not write them explicitly. This can be done with the `showgoals` tactic,
 like this:
 
 ```
@@ -326,51 +557,14 @@ like this:
 ```
 When checking the proof, the `showgoals` tactic has the effect of
 printing the current list of proof goals, leaving the goals unchanged.
-A good way to develop a proof is to start with just the tactic `showgoals`, and to add tactics
+A good way to develop a backward proof is to start with just the tactic `showgoals`, and to add tactics
 before it. Running the Ivy proof checker in an Emacs compilation buffer
 is a convenient way to do this. 
 
-Theorems
-========
+More examples of backward proofs
+--------------------------------
 
-Thus far, we have seen schemata used only as axioms. However, we can also
-prove the validity of a schema as a *theorem*. For example, here is a theorem
-expressing the transitivity of equality:
-
-```
-    theorem [trans] {
-        type t
-        property X:t = Y
-        property Y:t = Z
-        #--------------------------------
-        property X:t = Z
-    }
-
-```
-We don't need a proof for this, since the `auto` tactic can handle
-it. The verification condition that ivy generates is:
-
-    #   X = Y & Y = Z -> X = Z
-
-Here is a theorem that lets us eliminate universal quantifiers:
-
-```
-    theorem [elimA] {
-        type t
-        function p(X:t) : bool
-        property forall Y. p(Y)
-        #--------------------------------
-        property p(X)
-    }
-
-```
-It says, for any predicate *p*, if `p(Y)` holds for all *Y*, then
-`p(X)` holds for a particular *X*. Again, the `auto` tactic can
-prove this easily. Now let's derive a consequence of these facts. A
-function *f* is *idempotent* if applying it twice gives the same
-result as applying it once. This theorem says that, if *f* is
-idempotent, then applying *f* three times is the same as applying it
-once:
+Here, once again, is our theorem about idempotence:
 
 ```
     theorem [idem2] {
@@ -382,83 +576,38 @@ once:
     }
 
 ```
-The auto tactic can't prove this because the premise contains a
-function cycle with a universally quantified variable. Here's the
-error message it gives:
 
-    # error: The verification condition is not in the fragment FAU.
-    #
-    # The following terms may generate an infinite sequence of instantiations:
-    #   proving.ivy: line 331: f(f(X_h))
-
-This means we'll need to apply some other tactic. Here is one possible proof:
+Here is one possible proof in the backward style:
 
 ```
-    proof
+    proof {
         apply trans with Y = f(f(X));
         apply elimA with X = f(X);
         apply elimA with X = X
-
+    }
 ```
-We think this theorem holds because `f(f(f(X)))` is equal to `f(f(X))`
-(by idempotence of *f*) which in turn is equal to `f(X)` (again, by
-idempotence of *f*). This means we want to apply the transitivy rule, where
-the intermediate term *Y* is `f(f(x))`. Notice we have to give the value of *Y*
-explicitly. Ivy isn't clever enough to guess this intermediate term for us.
-This gives us the following two proof subgoals:
 
-    # theorem [prop2] {
-    #     type t
-    #     function f(V0:t) : t
-    #     property [prop5] forall X. f(f(X)) = f(X)
-    #     #----------------------------------------
-    #     property f(f(f(X))) = f(f(X))
-    # }
+In fact, it is the same proof that we wrote in the forward style, but
+it is now both more succint and more difficult to understand. 
 
+As another example, here is our proof of theorem `mp` written in the
+backward style:
 
-    # theorem [prop3] {
-    #     type t
-    #     function f(V0:t) : t
-    #     property [prop5] forall X. f(f(X)) = f(X)
-    #     #----------------------------------------
-    #     property f(f(X)) = f(X)
-    # }
+    proof {
+        apply introImp;
+        apply elimImp with p = p;
+        apply elimAndL with q = (p->q);
+        apply elimAndR with p = p;
+    }
 
-Now we see that the conclusion in both cases is an instance of the
-idempotence assumption, for a particular value of *X*. This means
-we can apply the `elimA` rule that we proved above. In the first case,
-the value of `X` for which we are claiming idempotence is `f(X)`.
-With this assignment, IVy can match `p(X)` in theorem `elimA` to `f(f(f(X))) = f(X)`.
-This substituion produces a new subgoal as follows:
+Again, it is much more succint, but offers no intuition as to *why* the
+theorem is true. 
 
-    # theorem [prop2] {
-    #     type t
-    #     function f(V0:t) : t
-    #     property [prop5] forall X. f(f(f(X))) = f(f(X))
-    #     #----------------------------------------
-    #     property forall Y. f(f(f(Y))) = f(f(Y))
-    # }
-
-This goal is trivial, since the conclusion is exactly the same as one
-of the premises, except for the names of bound variables. Ivy proves
-this goal automatically and drops it from the list. This leaves the
-second subgoal `prop3` above. We can also prove this using `elimA`. In
-this case `X` in the `elimA` rule corresponds to `X` in our goal.
-Thus, we write `apply elimA with X = X`. This might seem a little
-strange, but keep in mind that the `X` on the left refers to `X` in
-the `elimA` rule, while `X` on the right refers to `X` in our goal. It
-just happens that we chose the same name for both variables.
-
-Once again, the subgoal we obtain is trivial and Ivy drops it. Since
-there are no more subgoals, the proof is now complete.
-
-#### The deduction library
-
-Facts like `trans` and `elimA` above are included in the library
-`deduction`. This library contains a complete set of rules of a system
-[natural deduction](https://en.wikipedia.org/wiki/Natural_deduction)
-for first-order logic with equality.
-
+When is a backward proof appropriate? One use case is when we wish to
+make a small transformation to a very complex formula before passing
+the problem to Z3. In this situation, writing out the resulting formula
+as an explicit lemma is probably a waste of effort, since the formula is
+intended to be consumed by an automated tool rather than a human user. 
 
 Recursion
 =========
@@ -489,24 +638,25 @@ adds the non-negative numbers less than or equal to *X* like this:
 ```
     function sum(X:u) : u
 
-    definition [defsum] {
+    definition {
        sum(X:u) = 0 if X <= 0 else (X + sum(X-1))
     }
-    proof
+    proof {
        apply rec[u]
+    }
 ```
 
 Notice that we wrote the definition in curly brackets. This causes Ivy to 
-treat it as an axioms schema, as opposed to a simple axiom.
+treat it as an axiom schema, as opposed to a simple axiom.
 We did this because the definition has a universally quantified variable
 `X` under arithmetic operators, which puts it outside the decidable
 fragment. Because this definition is a schema, when we want to use it,
 we'll have to apply it explicitly,
 
 In order to admit this definition, we applied the definition
-schema `rec[u]`. Ivy infers the following assignment:
+schema `rec[u]`. Ivy infers the following substitution:
 
-    # q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
+    #  q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
 This allows the recursive definition to be admitted, providing that
 `sum` is fresh in the current context (i.e., we have not previously refered to
@@ -555,7 +705,7 @@ recursive in its *last* parameter.
 Induction
 =========
 
-The `auto` tactic can't generally prove properties by induction. For
+The default tactic can't generally prove properties by induction. For
 that IVy needs manual help. To prove a property by induction, we define
 an invariant and prove it by instantiating an induction schema. Here is
 an example of such a schema, that works for the non-negative integers:
@@ -563,11 +713,11 @@ an example of such a schema, that works for the non-negative integers:
 ```
     axiom [ind[u]] {
         relation p(X:u)
-        {
+        theorem [base] {
             individual x:u
             property x <= 0 -> p(x)
         }
-        {
+        theorem [step] {
             individual x:u
             property p(x) -> p(x+1)
         }
@@ -585,30 +735,41 @@ to *Y*, that is:
 
 ```
     property sum(Y) >= Y
+```
+
+We can prove this by applying our induction schema. Here is a backward version of the proof:
 
 ```
-We can prove this by applying our induction schema:
-
-```
-    proof
+    proof {
         apply ind[u] with X = Y;
-        assume sum with X = x;
-        defergoal;
-        assume sum with X = x + 1
-
+        proof [base] {
+            instantiate sum with X = x
+        };
+        proof [step] {
+            instantiate sum with X = x + 1
+        }
+    }
 ```
 Applying `ind[u]` produces two sub-goals, a base case and an induction step:
 
-    # property x <= 0 -> sum(x) <= x
+    # theorem [base] {
+    #    individual x:u
+    #    property x <= 0 -> sum(x) >= x
+    # }
 
-    # property sum(x) <= x -> sum(x+1) <= x + 1
+    # theorem [step] {
+    #     individual x:u
+    #     property [step] sum(x) >= x -> sum(x+1) >= x + 1
+    # }
 
-The `auto` tactic can't prove these goals because the definition of
+The default tactic can't prove these goals because the definition of
 `sum` is a schema that must explicitly instantiated. Fortunately, it
 suffices to instantiate this schema just for the specific arguments
 of `sum` in our subgoals. For the base case, we need to instantiate
 the definition for `X`, while for the induction step, we need
-`X+1`. Notice that we referred to the definiton of `sum` by the name
+`X+1`. The effect of the `instantiate` tactic is to add an instance of the definition of
+`sum` to the proof context, so in particular, it will be used by the default tactic.
+Notice that we referred to the definiton of `sum` by the name
 `sum`.  Alternatively, we can name the definition itself and refer
 to it by this name.
 
@@ -626,8 +787,29 @@ After instantiating the definition of `sum`, our two subgoals look like this:
     # }
 
 
-Because these goals are quantifier-free the `auto` tactic can easily
+Because these goals are quantifier-free the default tactic can easily
 handle them, so our proof is complete.
+
+As an alternative, here is the slightly more verbose forward version of this proof:
+
+    proof {
+        theorem [base] {
+            individual x:t
+            property x <= 0 -> sum(x) >= x
+        } proof {
+            instantiate sum with X = x
+        };
+        theorem [step] {
+            individual x:t
+            property sum(x) >= x -> sum(x+1) >= x + 1
+        } proof {
+            instantiate sum with X = x + 1
+        };
+        apply ind[u];
+    }
+
+This version is more clear than the backward version in that the base
+case and inductive step of the proof are stated explicitly.
 
 
 Naming
@@ -701,7 +883,7 @@ is to be interpreted as the integers. This instantiates the theory
 of the integers for type `t`, giving the usual meaning to operators
 like `+` and `<`. The second defines *f* to be the integer successor
 function.  These two declarations are contained an *implementation*
-section. This means that the `auto` tactic will use them only within
+section. This means that the default tactic will use them only within
 the isolate and not outside.
 
 The remaining two statements are properties about *t* and *f* to
@@ -716,19 +898,20 @@ Now suppose we want to prove an extra property using `t_theory`:
         theorem [prop] {  
             property Y < Z -> Y < f(Z)
         }
-        proof
-            assume t_theory.expanding with X = Z
+        proof {
+            instantiate t_theory.expadending with X = Z
+        }
     }
     with t_theory
 
 ```
 The 'with' clause says that the properties in `t_theory` should be
-used by the `auto` tactic within the isolate. In this case, the `transitivy` 
+used by the default tactic within the isolate. In this case, the `transitivy` 
 property will be used by default. This pattern is particularly useful when
 we have a collection of properties of an abstract datatype that we wish to
 use widely without explicitly instantiating them. 
 
-Notice that `auto` will not use the interpretation of *t* as the
+Notice that the default tactic will not use the interpretation of *t* as the
 integers and the definiton of *f* as the successor function, since
 these are in the implementation section of isolate `t_theory` and are therefore
 hidden from other isolates. Similarly, theorem `expanding` is not used by default

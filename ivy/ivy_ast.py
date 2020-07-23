@@ -503,7 +503,7 @@ class RelationSort(Sort):
     
 class Tuple(AST):
     def __repr__(self):
-        return '(' + ','.join(repr(s) for s in self.args) + ')' 
+        return '(' + ','.join(str(s) for s in self.args) + ')' 
 
 def lineno(c):
     try:
@@ -558,6 +558,7 @@ class LabeledFormula(AST):
         self.id = lf_counter
         self.temporal = None
         self.explicit = False
+        self.definition = False
         lf_counter += 1
     @property
     def label(self):
@@ -577,6 +578,7 @@ class LabeledFormula(AST):
         res.id = self.id
         res.temporal = self.temporal
         res.explicit = self.explicit
+        res.definition = self.definition
         return res
 
     def clone_with_fresh_id(self,args):
@@ -584,6 +586,7 @@ class LabeledFormula(AST):
         res = AST.clone(self,args)
         res.temporal = self.temporal
         res.explicit = self.explicit
+        res.definition = self.definition
         return res
 
 class LabeledDecl(Decl):
@@ -736,6 +739,14 @@ class PropertyTactic(AST):
                 + 'property ' + str(p)
                 + ('' if isinstance(n,NoneAST) else ('named ' + str(n)))
                 + ('' if isinstance(pr,NoneAST) else ('proof ' + str(pr))))
+
+class FunctionTactic(AST):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'function ' + ','.join(map(str,self.args))
+    
+
 class TacticTactic(AST):
     @property
     def tactic_name(self):

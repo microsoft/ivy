@@ -21,8 +21,9 @@ class CaptureError(iu.IvyError):
 
 
 class MatchProblem(object):
-    def __init__(self,schema,pat,inst,freesyms,constants):
+    def __init__(self,schema,pat,inst,freesyms,constants,prem_matches=[]):
         self.schema,self.pat,self.inst,self.freesyms,self.constants = schema,pat,inst,set(freesyms),constants
+        self.prem_matches=prem_matches
         self.revmap = dict()
     def __str__(self):
         return '{{pat:{},inst:{},freesyms:{}}}'.format(self.pat,self.inst,map(str,self.freesyms))
@@ -157,6 +158,8 @@ class ProofChecker(object):
                 return decls
             elif isinstance(proof,ia.PropertyTactic):
                 return self.property_tactic(decls,proof)
+            elif isinstance(proof,ia.FunctionTactic):
+                return self.function_tactic(decls,proof)
             elif isinstance(proof,ia.TacticTactic):
                 return self.tactic_tactic(decls,proof)
             elif isinstance(proof,ia.ProofTactic):
@@ -205,8 +208,9 @@ class ProofChecker(object):
         return attrib_goals(proof,[subgoal]) + decls[1:]
 
     def property_tactic(self,decls,proof):
-        cut = proof.args[0]
         goal = decls[0]
+        vocab = goal_vocab(goal)
+        cut = compile_expr_vocab(proof.args[0],vocab)
         subgoal = goal_subst(goal,cut,cut.lineno)
         lhs = proof.args[1]
         if not isinstance(lhs,ia.NoneAST):
@@ -248,15 +252,49 @@ class ProofChecker(object):
         pf = proof.args[2]
         if not isinstance(pf,ia.NoneAST):
             subgoals = self.apply_proof(subgoals,pf)
+            if subgoals is None:
+                return None
         return [goal_add_prem(goal,cut,cut.lineno)] + decls[1:] + subgoals
 
+    def function_tactic(self,decls,proof):
+        goal = decls[0]
+        vocab = goal_vocab(goal)
+        free = goal_free(goal)
+        for df in proof.args:
+            if isinstance(df,ia.ConstantDecl):
+                assert False
+            else:
+                lf = df.args[0]
+                lhs = lf.formula.args[0]
+                ts = il.TopFunctionSort(len(lhs.args))
+                newsym = il.Symbol(lhs.rep,ts)
+                with il.WithSymbols([newsym]):
+                    vars = lf.formula.args[0].args
+                    fmla = ia.Forall(vars,ia.Atom('=',lf.formula.args))
+                    elf = lf.clone([lf.label,fmla])
+                    lf = compile_expr_vocab(elf,vocab)
+                sym = lf.formula.body.args[0].rep
+                deps = list(lu.symbols_ast(lf.formula.body.args[1]))
+                if sym in deps:
+                    raise NoMatch(lf,"no proof given for recursive definition")
+                # TODO: allow proofs of recursive definitions
+                cd = ia.ConstantDecl(sym)
+                cd.lineno = lf.lineno
+                lf.definition = True
+                goal = goal_add_prem(goal,cd,lf.lineno)
+                goal = goal_add_prem(goal,lf,lf.lineno)
+            if sym in vocab.sorts or sym in vocab.symbols or sym in free:
+                raise Redefinition(df,"redefinition of {}".format(sym))
+        return [goal] + decls[1:]
 
     def lookup_schema(self,schemaname,decl,ast):
         if schemaname in self.schemata:
             schema = self.schemata[schemaname]
+            check_schema_capture(schema,decl)
         elif schemaname in self.definitions:
             schema = self.definitions[schemaname]
             schema = clone_goal(schema,goal_prems(schema),goal_conc(schema).to_constraint())
+            check_schema_capture(schema,decl)
         else:
             premmap = dict((x.name,x) for x in goal_prem_goals(decl))
             if schemaname in premmap:
@@ -308,21 +346,31 @@ class ProofChecker(object):
         
         prob, pmatch = self.setup_matching(decl,proof)
         apply_match_to_problem(pmatch,prob,apply_match_alt)
-        fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-        if fomatch is not None:
-            apply_match_to_problem(fomatch,prob,apply_match)
-        somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-        if somatch is not None:
+        if isinstance(prob.pat,ia.Tuple):
+            for idx in range(len(prob.pat.args)):
+                fomatch = fo_match(prob.pat.args[idx],prob.inst.args[idx],prob.freesyms,prob.constants)
+                if fomatch is not None:
+                    apply_match_to_problem(fomatch,prob,apply_match)
+                somatch = match(prob.pat.args[idx],prob.inst.args[idx],prob.freesyms,prob.constants)
+                if somatch is None:
+                    return None
+                apply_match_to_problem(somatch,prob,apply_match_alt)
+        else:
+            fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
+            if fomatch is not None:
+                apply_match_to_problem(fomatch,prob,apply_match)
+            somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
+            if somatch is None:
+                return None
             apply_match_to_problem(somatch,prob,apply_match_alt)
-            detect_nonce_symbols(prob)
+        detect_nonce_symbols(prob)
 #            schema = apply_match_goal(pmatch,schema,apply_match_alt)
 #            schema = apply_match_goal(fomatch,schema,apply_match)
 #            schema = apply_match_goal(somatch,schema,apply_match_alt)
             # tmatch = apply_match_match(fomatch,pmatch,apply_match)
             # tmatch = apply_match_match(somatch,tmatch,apply_match_alt)
             # schema = apply_match_goal(tmatch,schema,apply_match_alt)
-            return goal_subgoals(prob.schema,decl,proof.lineno)
-        return None
+        return goal_subgoals(prob.schema,decl,proof.lineno)
 
 
 # A proof goal is a LabeledFormula whose body is either a Formula or a SchemaBody
@@ -479,7 +527,9 @@ def goal_subgoals(schema,goal,lineno):
     upds = get_unprovided_defns(schema,goal)
     g = clone_goal(goal,upds,goal_conc(goal))
     goal = goal_subst(goal,g,lineno)
-    subgoals = [goal_subst(goal,x,lineno) for x in goal_prem_goals(schema)]
+    gpms = goal_prem_goals(goal)
+    subgoals = [goal_subst(goal,x,lineno) for x in goal_prem_goals(schema)
+                if not any(goals_eq_mod_alpha(x,y) for y in gpms)]
     subgoals = [s for s in subgoals if not trivial_goal(s)]
     return subgoals
 
@@ -511,6 +561,16 @@ def goal_free(goal):
     res = set()
     rec(goal,res)
     return res
+
+# Make sure the free vocabulry of the schema we are about to use is not captured
+# by bindings in the goal. 
+
+def check_schema_capture(schema,goal):
+    gvocab = goal_vocab(goal)
+    fvocab = goal_free(schema)
+    for sym in fvocab:
+        if sym in gvocab.sorts or sym in gvocab.symbols:
+            raise CaptureError(None,'"{}" is captured when importing "{}"'.format(sym,schema.name))
 
 def check_alpha_capture(goal,match):
     rev_match = dict((y,x) for x,y in match.iteritems())
@@ -670,7 +730,7 @@ def add_prem_match(proof_match,prob,goal,context):
     if pats:
         pat = ia.Tuple(*(pats + [prob.pat]))
         inst = ia.Tuple(*(insts + [prob.inst]))
-        prob = MatchProblem(prob.schema,pat,inst,prob.freesyms,prob.constants)
+        prob = MatchProblem(prob.schema,pat,inst,prob.freesyms,prob.constants,pats)
     return new_match,prob
 
 def parameterize_schema(sorts,schema):
@@ -834,6 +894,33 @@ def trivial_goal(goal):
             if il.equal_mod_alpha(goal_conc(prem),conc):
                 return True
     return False
+
+# Test whether two goals are equivalent mod alpha renaming
+# TODO: for now just tests syntactic equality
+
+def goals_eq_mod_alpha(x,y):
+    if isinstance(x.formula,ia.SchemaBody):
+        if not isinstance(y.formula,ia.SchemaBody):
+            return False
+        xps, yps = goal_prems(x), goal_prems(y)
+        if len(xps) != len(yps):
+            return False
+        for xp,yp in zip(xps,yps):
+            if type(xp) is not type(yp):
+                return False
+            if isinstance(xp,ia.LabeledFormula):
+                if not goals_eq_mod_alpha(xp,yp):
+                    return False
+            elif isinstance(xp,ia.ConstantDecl):
+                if xp.args[0] != yp.args[0]:
+                    return False
+            elif isinstance(xp,il.UninterpretedSort):
+                if xp != yp:
+                    return False
+    else:
+        if isinstance(y,ia.SchemaBody):
+            return False
+    return il.equal_mod_alpha(goal_conc(x),goal_conc(y))
 
 def apply_match(match,fmla,env = None):
     """ apply a match to a formula. 

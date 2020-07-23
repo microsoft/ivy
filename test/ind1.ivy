@@ -8,15 +8,16 @@ function sum(X:t) : t
 definition {
     sum(X:t) = 0 if X <= 0 else (X + sum(X-1))
 }
-proof
+proof {
     apply rec[t]
+}
 
 property sum(Y) >= Y
-proof
+proof {
     apply ind[t] with X = Y;
     showgoals;
     assume sum with X = Y;
     defergoal;
     assume sum with X = Y + 1;
     showgoals
-    
+}    

@@ -23,11 +23,25 @@ theories = {
 
     schema ind[t] = {
         relation p(X:t)
-        property forall X. X <= 0 -> p(X)
-        property forall X. p(X) -> p(X+1)
+        theorem [base] {
+            individual x:t
+            property x <= 0 -> p(x)
+        }
+        theorem [step] {
+            individual x:t
+            property p(x) -> p(x+1)
+        }
         #--------------------------
         property p(X)    
     }
+
+#    schema ind[t] = {
+#        relation p(X:t)
+#        property [base] forall X. X <= 0 -> p(X)
+#        property [step] forall X. p(X) -> p(X+1)
+#        #--------------------------
+#        property p(X)    
+#    }
 
     schema lep[t] = {
         function n : t

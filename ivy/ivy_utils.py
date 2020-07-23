@@ -166,7 +166,6 @@ def unused_name_with_base(base,used_names):
         name = base + '_' + suffix
         if name not in used_names:
             return name
-    
 
 class UniqueRenamer(object):
     def __init__(self,prefix='',used=[]):

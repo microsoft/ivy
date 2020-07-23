@@ -574,6 +574,9 @@ else:
         'schdecl : PROPERTY lgprop'
         p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
 
+    def p_schdecl_theorem_lgprop(p):
+        'schdecl : THEOREM lgprop'
+        p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
@@ -936,6 +939,18 @@ else:
         name = p[4] if p[4] else NoneAST()
         proof = p[5] if p[5] else NoneAST()
         p[0] = PropertyTactic(prop,name,proof)
+        p[0].lineno = get_lineno(p,2)
+
+    def p_proofstep_function(p):
+        'proofstep : FUNCTION funs'
+        p[0] = FunctionTactic(*p[2])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_theorem(p):
+        'proofstep : THEOREM lgprop optproofgroup'
+        lf = addlabel(p[2],'thm')
+        proof = p[3] if p[3] else NoneAST()
+        p[0] = PropertyTactic(lf,NoneAST(),proof)
         p[0].lineno = get_lineno(p,2)
 
     def p_proofstep_proof(p):

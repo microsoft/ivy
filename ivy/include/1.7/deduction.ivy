@@ -24,7 +24,7 @@ axiom [introImp] {
     function p : bool
     function q : bool
     {
-        property [premise] p
+        property [prem] p
         #----------------------
         property q
     }
@@ -40,8 +40,8 @@ axiom [introImp] {
 axiom [elimImp] {
     function p : bool
     function q : bool
-    property [premise1] p
-    property [premise2] p -> q
+    property [prem1] p
+    property [prem2] p -> q
     #----------------------
     property q
 }
@@ -67,7 +67,7 @@ axiom [introAnd] {
 axiom [elimAndL] {
     function p : bool
     function q : bool
-    property [premise] p & q
+    property [prem] p & q
     #----------------------
     property p
 }
@@ -77,7 +77,7 @@ axiom [elimAndL] {
 axiom [elimAndR] {
     function p : bool
     function q : bool
-    property [premise] p & q
+    property [prem] p & q
     #----------------------
     property q
 }
