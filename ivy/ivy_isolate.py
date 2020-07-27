@@ -1212,7 +1212,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             if sym not in all_syms and sym.name not in all_names:
                 mod.sig.remove_symbol(sym)
 
-
     # check that any properties have dependencies present
 
     if enforce_axioms.get():
@@ -1232,7 +1231,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     #check non-interference (temporarily put back in old_actions)
 
     if do_check_interference.get():
-        interf_syms = set(ivy_logic.all_symbols())
+        interf_syms = set(x for x in ivy_logic.all_symbols() if x in all_syms)
         follow_definitions(orig_defs,interf_syms)
         save_new_actions = mod.actions
         mod.actions = old_actions
