@@ -1676,20 +1676,23 @@ def theorem_to_property(prop):
     if isinstance(prop.formula,ivy_ast.SchemaBody):
         vocab = ip.goal_vocab(prop)
         match = dict()
-        for sym in vocab.symbols:
-            if sym.name in ivy_logic.sig.symbols:
-                newname = unused_name_with_base(sym.name,ivy_logic.sig.symbols)
-                newsym = ivy_logic.add_symbol(newname,sym.sort)
-                match[sym] = newsym
-            else:
-                ivy_logic.add_symbol(sym.name,sym.sort)
         for sort in vocab.sorts:
             if sort.name in ivy_logic.sig.sorts:
                 newname = unused_name_with_base(sort.name,ivy_logic.sig.sorts)
-                newsort = ivy_logic.add_sort(newname,sort)
+                newsort = UninterpretedSort(newname)
+                ivy_logic.add_sort(newsort)
                 match[sort] = newsort
             else:
                 ivy_logic.add_sort(sort.name,sort)
+        for sym in vocab.symbols:
+            if sym.name in ivy_logic.sig.symbols:
+                newname = unused_name_with_base(sym.name,ivy_logic.sig.symbols)
+                newsym = ivy_logic.Symbol(newname,sym.sort)
+                newsym = ip.apply_match_func(match,newsym)
+                ivy_logic.add_symbol(newsym.name,newsym.sort)
+                match[sym] = newsym
+            else:
+                ivy_logic.add_symbol(sym.name,sym.sort)
         if match:
             prop = ip.apply_match_goal(match,prop,ip.apply_match_alt)
         prems = []
@@ -1842,6 +1845,7 @@ def check_properties(mod):
             v = list(fmla.variables)[0]
             fmla = fmla.body
             fmla = lu.substitute_ast(fmla,{v.name:name})
+            fmla = ivy_logic.drop_universals(fmla)
             prop = prop.clone([prop.label,fmla])
         return prop
             
@@ -1855,6 +1859,8 @@ def check_properties(mod):
 #            print 'checking {}...'.format(prop.label)
             subgoals = prover.admit_proposition(prop,pmap[prop.id])
             prop = named_trans(prop)
+            prover.axioms[-1] = prop
+            prover.schemata[prop.name] = prop
             if len(subgoals) == 0:
                 if not isinstance(prop.formula,ivy_ast.SchemaBody):
                     if isinstance(prop.formula,ivy_logic.Definition):

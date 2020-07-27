@@ -112,9 +112,9 @@ axiom [elimOr] {
     function p : bool
     function q : bool
     function r : bool
-    { property p property r }
-    { property q property r }
-    property p | q
+    theorem [left] { property p property r }
+    theorem [right] { property q property r }
+    property [prem] p | q
     #----------------------
     property r
 }
@@ -126,10 +126,10 @@ axiom [elimOr] {
 axiom [introIff] {
     function p : bool
     function q : bool
-    {property p property q}
-    {property q property p}
+    theorem [fwd] {property p property q}
+    theorem [rev] {property q property p}
     #----------------------
-    property p & q
+    property p <-> q
 }
 
 # ###  Iff elimination forward
@@ -244,7 +244,7 @@ axiom [introA] {
 axiom [elimA] {
     type t
     function p(X:t) : bool
-    property forall Y. p(Y)
+    property [prem] forall Y. p(Y)
     #--------------------------------
     property p(X)
 }

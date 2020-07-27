@@ -130,6 +130,9 @@
     "autoinstance"
     "temporal"
     "tactic"
+    "theorem"
+    "apply"
+    "named"
 ))
 
 (defconst ivy-types '("bool" "int" "bv"))

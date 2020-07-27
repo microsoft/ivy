@@ -28,8 +28,8 @@ On such primitive is a type declaration, like this:
 
 ```
     type t
-```
 
+```
 This judgment can be read as "let `t` be a type". It is admissible
 provided `t` is new symbol that has not been used up to this point
 in the development.
@@ -53,6 +53,7 @@ Similarly, we can introduce new function and relation symbols:
     function f(X:t) : t
     relation r(X:t,Y:t)
 
+
 ```
 The first judgment can be read as "for any term *X* of type *t*, let
 *f*(*X*) be a term of type *t*".  The second says "for any terms
@@ -67,6 +68,7 @@ example:
 
 ```
     axiom [symmety_r] r(X,Y) -> r(Y,X)
+
 
 ```
 The free variables *X*,*Y* in the formula are taken as universally
@@ -87,6 +89,7 @@ example:
 ```
     property [myprop] r(n,X) -> r(X,n)
 
+
 ```
 A property requires a proof (see below). If a proof is not supplied,
 IVy applies its default proof tactic.  This calls the
@@ -98,7 +101,7 @@ be checked by Z3. This is a formula whose validity implies that the
 property is true in the current context. In this case, the
 verification condition is:
 
-    #   (forall X,Y. r(X,Y) -> r(Y,X)) -> (r(n,X) -> r(X,n))
+  (forall X,Y. r(X,Y) -> r(Y,X)) -> (r(n,X) -> r(X,n))
 
 That is, it states that axiom `symmetry_r` implies property `myprop`. 
 IVy checks that this formula is within a logical fragment that Z3 can
@@ -201,11 +204,11 @@ values for premises, that is, the types *d*,*r* and function *f*. It also choose
 the free variables *X*,*Y* occurring in the schema. In this case, it
 discovers the following assignment:
 
-    # d = t
-    # r = t
-    # X = Z
-    # Y = n
-    # f(N) = N + 1
+d = t
+r = t
+X = Z
+Y = n
+f(N) = N + 1
 
 After plugging in this assignment, the conclusion of the rule exactly matches
 the property to be proved, so the property is admitted.
@@ -253,8 +256,8 @@ For example, consider the following axiom schema:
         property mortal(X)
     }
 
-```
 
+```
 The scope of free variables such as *X* occurring in properties is
 the entire schema. Thus, this schema says that, for any term *X* of
 type `t`, if we can prove that `man(X)` is true, we can prove that
@@ -272,8 +275,8 @@ We take as a given that Socrates is a man, and prove he is mortal:
         apply mortality_of_man with prem = soc_man
     }
 
-```
 
+```
 The axiom `mortality_of_man`, requires us supply the premise
 `man(socrates)`.  Fortunately, we have this fact as an axiom.
 To justify the conclusion `mortal(socrates)` we tell Ivy to apply
@@ -285,11 +288,14 @@ discovers the substition `X = socrates`. Applying this substituton to
 the axiom yields the deduction we wish to make.  However, if we wanted
 to be more explicit about the substitution, we could have written:
 
+```
+    property mortal(socrates)
     proof {
         apply mortality_of_man with prem = soc_man, X = socrates
     }
-    
 
+
+```
 Theorems
 ========
 
@@ -306,12 +312,12 @@ expressing the transitivity of equality:
         property X:t = Z
     }
 
-```
 
+```
 We don't need to provide a proof for this Ivy's default tactic using Z3 can handle it. 
 The verification condition that Ivy generates is:
 
-    #   X = Y & Y = Z -> X = Z
+  X = Y & Y = Z -> X = Z
 
 Here is a theorem that lets us eliminate universal quantifiers:
 
@@ -347,19 +353,20 @@ The default tactic can't prove this because the premise contains a
 function cycle with a universally quantified variable. Here's the
 error message it gives:
 
-    # error: The verification condition is not in the fragment FAU.
-    #
-    # The following terms may generate an infinite sequence of instantiations:
-    #   proving.ivy: line 331: f(f(X_h))
+error: The verification condition is not in the fragment FAU.
+
+The following terms may generate an infinite sequence of instantiations:
+  proving.ivy: line 331: f(f(X_h))
 
 This means we'll need to apply some other tactic. Here is one possible proof:
 
 ```
     proof {
-        property [lem1] f(f(f(X))) = f(f(X)) proof {apply elimA with prem=idem};
-        property [lem2] f(f(X)) = f(X) proof {apply elimA with prem=idem};
+        property [lem1] f(f(f(X))) = f(f(X)) proof {apply elimA with prem=idem}
+        property [lem2] f(f(X)) = f(X) proof {apply elimA with prem=idem}
         apply trans with left = lem1
     }
+
 ```
 We think this theorem holds because `f(f(f(X)))` is equal to `f(f(X))`
 (by idempotence of *f*) which in turn is equal to `f(X)` (again, by
@@ -371,37 +378,42 @@ The `elimA` theorem has a premise `forall X. p(X)`. Ivy matches has to find a su
 will match this formulas `idem`, the premise that we want to use, which is `forall X. f(f(X)) = f(X)`.
 It discovers the following substitution:
 
-    t = t
-    p(Y) = f(f(Y)) = f(Y)
-    
+t = t
+p(Y) = f(f(Y)) = f(Y)
+
 Now Ivy tries to match the conclusion `p(X)` against the property `lem1` we are proving, which
 is `f(f(f(X))) = f(f(X))`. It first plugs in the above substitution, so `p(X)` becomes:
 
-    f(f(X)) = f(X)
-    
+f(f(X)) = f(X)
+
 Matching this with our goal `lem1`, it then gets this subtitution:
 
-    X = f(X)
-    
+X = f(X)
+
 Plugging these substitutions into `elimA` as defined above, we obtain:
 
-    theorem [elimA] {
-        property [prem] forall Y. f(f(Y)) = f(Y)
-        #--------------------------------
-        property f(f(f(X))) = f(f(X))
-    }
+theorem [elimA] {
+    property [prem] forall Y. f(f(Y)) = f(Y)
+    #--------------------------------
+    property f(f(f(X))) = f(f(X))
+}
 
 which is just the inference we want to make. This might give the impression that Ivy can
 magically arrive at the instantiation of a lemma needed to produce a desired inference.
 In general, however, this is a hard problem. If Ivy fails, we can still write out the
 full substituion manually, like this:
 
-        property [lem1] f(f(f(X))) = f(f(X)) proof {apply elimA with t=t, p(Y) = f(f(Y)) = f(Y), X=f(X) };
+property [lem1] f(f(f(X))) = f(f(X))
+proof {
+    apply elimA with t=t, p(Y) = f(f(Y)) = f(Y), X=f(X)
+}
 
-The second step of our proof, deriving the fact `f(f(X) = f(X)` is a similar application of `idem`.
-The final step uses transitivity, with our two lemmas as premises. In this case, we only have to
-specify the the `left` premise of `trans` is `lem1`. This is enough to infer the needed substitution.
-There would be no harm, however, in writing `right=lem2`. 
+The second step of our proof, deriving the fact `f(f(X) = f(X)` is a
+similar application of `idem`.  The final step uses transitivity,
+with our two lemmas as premises. In this case, we only have to
+specify the the `left` premise of `trans` is `lem1`. This is enough
+to infer the needed substitution.  There would be no harm, however,
+in writing `right=lem2`.
 
 
 Natural deduction
@@ -413,6 +425,7 @@ In fact, `elimA` is a primitive inference rule in natural deduction.
 In the natural deduction style, a premise of a theorem is often itself a theorem.
 For example, here is a rule of natural deduction that is used to prove an implication:
 
+```
     theorem [introImp] {
         function p : bool
         function q : bool
@@ -425,53 +438,45 @@ For example, here is a rule of natural deduction that is used to prove an implic
         property p -> q
     }
 
+```
 This rule says that, for any predicates *p* abnd *q*, if we can prove *q* from *p*, then
 we can prove `p -> q`. The premise `lem` of this rule is itself a lemma, which we have to
 supply in order to use the rule.
 
 As an application of `introImp`, let's try to prove the following theorem:
 
-    theorem [mp] {
-        function p : bool
-        function q : bool
-        #---------
-        property p & (p->q) -> q
-    }
+```
+    relation p
+    relation q
 
+    property p & (p->q) -> q
+
+```
 To apply `introImp` to prove the implication `p & (p->q) -> q`, we first need a proof of `q`
 from `p & (p->q)`. So here's the start of a proof:
 
+```
     proof {
         theorem [lem1] {
             property [p1] p & (p -> q)
             property q
-        }; 
+        } 
         apply introImp
     }
 
+```
 Notice we didn't actually prove `lem1`. By leaving out the proof, we
 effectively pass the problem of proving `lem1` on to Z3. With this
 lemma, we can then apply `introImp` to give us our goal. We could also
 have said `with lem=lem1`, but we didn't have to because Ivy can
-figure out the premise needed by `introImp` jsut by matching the
-conclusions. Now, if we don't want to burden Z3 with the proof of `lem1`,
-we can fill it in. Here's a slightly more detailed proof:
+figure out the premise needed by `introImp` just by matching the
+conclusions. 
 
-    proof {
-        theorem [lem1] {
-            property [p1] p & (p -> q)
-            property q
-        } proof {
-            property [p2] p;
-            property [p3] p -> q; 
-            apply elimImp with prem1 = p1
-        };
-        apply introImp
-    }
+Now, if we don't want to burden Z3 with the proof of `lem1`, we can
+fill it in. We'll use this rule for eliminating implications:
 
-That is, from `p & (p -> q)` we can infer `p` and `p -> q`. Now we use the following rule to infer `q`:
-
-    axiom [elimImp] {
+```
+    theorem [elimImp] {
         function p : bool
         function q : bool
         property [prem1] p
@@ -480,27 +485,73 @@ That is, from `p & (p -> q)` we can infer `p` and `p -> q`. Now we use the follo
         property q
     }
 
-You might also recognize the `elimImp` rule as *modus ponens*. Notice that when we applioed `elimImp`, we again
-specified only one premise, since this was enough to determine the substitution for `p` in the rule. 
+```
+This rule says that, for any predicates *p* abnd *q*, if we can
+prove *p* and we can prove `p -> q`, then we can prove `q`.  You
+might also recognize the `elimImp` rule as *modus ponens*.
 
-If we want to add more detail to the proof, we can can go another level deeper by adding proofs for
-`p2` and `p3`:
+Here's a slightly more detailed proof of our theorem that includes a
+proof of `lem1`::
 
+```
+    property p & (p->q) -> q
     proof {
         theorem [lem1] {
             property [p1] p & (p -> q)
             property q
         } proof {
-            property [p2] p proof {apply elimAndL with prem = p1};
-            property [p3] p -> q proof {apply elimAndR with prem = p1};
-            apply elimImp with prem1 = p2
-        };
+            property [p2] p
+            property [p3] p -> q 
+            apply elimImp with prem1 = p1
+        }
         apply introImp
     }
 
-We have proved `p2` and `p3` from `p1` using the natural deduction rules for
-elimination of 'and' (which we omit here).
+```
+That is, from `p & (p -> q)` we can infer `p` and `p -> q`.
+Notice that when we applied `elimImp`, we again specified
+only one premise, since this was enough to determine the
+substitution for `p` in the rule.
 
+If we want to add more detail to the proof, we can can go another
+level deeper by adding proofs for `p2` and `p3`. We'll use thse two
+additional rules for eliminating "and" operators:
+
+```
+    axiom [elimAndL] {
+        function p : bool
+        function q : bool
+        property [prem] p & q
+        #----------------------
+        property p
+    }
+
+    axiom [elimAndR] {
+        function p : bool
+        function q : bool
+        property [prem] p & q
+        #----------------------
+        property q
+    }
+
+```
+Here is the more detailed proof using `elimAndL` and `elimAndR`:
+
+```
+    property p & (p->q) -> q
+    proof {
+        theorem [lem1] {
+            property [p1] p & (p -> q)
+            property q
+        } proof {
+            property [p2] p proof {apply elimAndL with prem = p1}
+            property [p3] p -> q proof {apply elimAndR with prem = p1}
+            apply elimImp with prem1 = p2
+        }
+        apply introImp
+    }
+
+```
 Notice the hierarchical style of proofs in natural deduction. Each lemma is
 proved by a sequence of sub-lemmas, until we reach the bottom level at which
 the lemmas are proved by primitive rules.
@@ -528,12 +579,12 @@ of Socrates:
 ```
     property mortal(socrates)
     proof {
-        apply mortality_of_man;
+        apply mortality_of_man
         apply soc_man
     }
 
-```
 
+```
 When we apply `mortality_of_man` to prove `man(socrates)` we lack the
 necessary premise `man(socrates)`. Ivy is undeterred by this. It simply
 matches the conclusion `mortal(X)` to `mortal(socrates)`, instatiates
@@ -543,23 +594,25 @@ goal stack empty. Each proof step is applied to the top goal on the stack.
 As you may have guessed, goals remaining on the stack at the end of the 'proof'
 are passed to Z3. 
 
-When chaining proof rules backward, it is helpful to be able to see the
-intermediate subgoals, since we do not write them explicitly. This can be done with the `showgoals` tactic,
-like this:
+When chaining proof rules backward, it is helpful to be able to see
+the intermediate subgoals, since we do not write them
+explicitly. This can be done with the `showgoals` tactic, like this:
 
 ```
     property mortal(socrates)
-    proof
-        apply mortality_of_man;
-        showgoals;
+    proof {
+        apply mortality_of_man
+        showgoals
         apply soc_man
+    }
 
 ```
 When checking the proof, the `showgoals` tactic has the effect of
-printing the current list of proof goals, leaving the goals unchanged.
-A good way to develop a backward proof is to start with just the tactic `showgoals`, and to add tactics
-before it. Running the Ivy proof checker in an Emacs compilation buffer
-is a convenient way to do this. 
+printing the current list of proof goals, leaving the goals
+unchanged.  A good way to develop a backward proof is to start with
+just the tactic `showgoals`, and to add tactics before it. Running
+the Ivy proof checker in an Emacs compilation buffer is a convenient
+way to do this.
 
 More examples of backward proofs
 --------------------------------
@@ -567,39 +620,42 @@ More examples of backward proofs
 Here, once again, is our theorem about idempotence:
 
 ```
-    theorem [idem2] {
-        type t
-        function f(X:t) : t
-        property forall X. f(f(X)) = f(X)
-        #--------------------------------
-        property f(f(f(X))) = f(X)
+    theorem [idem3] {
+       type t
+       function f(X:t) : t
+       property forall X. f(f(X)) = f(X)
+       #--------------------------------
+       property f(f(f(X))) = f(X)
     }
 
 ```
-
 Here is one possible proof in the backward style:
 
 ```
-    proof {
-        apply trans with Y = f(f(X));
-        apply elimA with X = f(X);
+    proof  {
+        apply trans with Y = f(f(X))
+        apply elimA with X = f(X)
         apply elimA with X = X
     }
-```
 
+```
 In fact, it is the same proof that we wrote in the forward style, but
 it is now both more succint and more difficult to understand. 
 
 As another example, here is our proof of theorem `mp` written in the
 backward style:
 
+
+```
+    property p & (p->q) -> q
     proof {
-        apply introImp;
-        apply elimImp with p = p;
-        apply elimAndL with q = (p->q);
-        apply elimAndR with p = p;
+        apply introImp
+        apply elimImp with p = p
+        apply elimAndL with q = (p->q)
+        apply elimAndR with p = p
     }
 
+```
 Again, it is much more succint, but offers no intuition as to *why* the
 theorem is true. 
 
@@ -615,14 +671,14 @@ Recursion
 Recursive definitions are permitted in IVy by instantiating a
 *definitional schema*. As an example, consider the following axiom schema:
 
-    # axiom [rec[u]] {
-    #     type q
-    #     function base(X:u) : q
-    #     function step(X:q,Y:u) : q
-    #     fresh function fun(X:u) : q
-    #     #---------------------------------------------------------
-    #     definition fun(X:u) = base(X) if X <= 0 else step(fun(X-1),X)
-    # }
+axiom [rec[u]] {
+    type q
+    function base(X:u) : q
+    function step(X:q,Y:u) : q
+    fresh function fun(X:u) : q
+    #---------------------------------------------------------
+    definition fun(X:u) = base(X) if X <= 0 else step(fun(X-1),X)
+}
 
 This axiom was provided as part of the integer theory when we
 interpreted type *u* as `int`.  It gives a way to construct a fresh
@@ -644,8 +700,8 @@ adds the non-negative numbers less than or equal to *X* like this:
     proof {
        apply rec[u]
     }
-```
 
+```
 Notice that we wrote the definition in curly brackets. This causes Ivy to 
 treat it as an axiom schema, as opposed to a simple axiom.
 We did this because the definition has a universally quantified variable
@@ -656,7 +712,7 @@ we'll have to apply it explicitly,
 In order to admit this definition, we applied the definition
 schema `rec[u]`. Ivy infers the following substitution:
 
-    #  q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
+ q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
 This allows the recursive definition to be admitted, providing that
 `sum` is fresh in the current context (i.e., we have not previously refered to
@@ -682,19 +738,19 @@ In matching the recursion schema `rec[u]`, IVy will extend the
 function symbols in the premises of `rec[u]` with an extra parameter *N* so that
 schema becomes:
 
-    # axiom [rec[u]] = {
-    #     type q
-    #     function base(N:u,X:u) : q
-    #     function step(N:u,X:q,Y:u) : q
-    #     fresh function fun(N:u,X:u) : q
-    #     #---------------------------------------------------------
-    #     definition fun(N:u,X:u) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
-    # }
+axiom [rec[u]] = {
+    type q
+    function base(N:u,X:u) : q
+    function step(N:u,X:q,Y:u) : q
+    fresh function fun(N:u,X:u) : q
+    #---------------------------------------------------------
+    definition fun(N:u,X:u) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
+}
 
 The extended schema matches the definition, with the following assignment:
 
-    # q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
-    
+q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
+
 This is somewhat as if the functions were "curried", in which case the
 free symbol `fun` would match the partially applied term `sumdiv N`.
 Since Ivy's logic doesn't allow for partial application of functions,
@@ -734,33 +790,34 @@ Suppose we want to prove that `sum(Y)` is always greater than or equal
 to *Y*, that is:
 
 ```
-    property sum(Y) >= Y
-```
+    property [sumprop] sum(Y) >= Y
 
+```
 We can prove this by applying our induction schema. Here is a backward version of the proof:
 
 ```
-    proof {
-        apply ind[u] with X = Y;
+    proof [sumprop] {
+        apply ind[u] with X = Y
         proof [base] {
             instantiate sum with X = x
-        };
+        }
         proof [step] {
             instantiate sum with X = x + 1
         }
     }
+
 ```
 Applying `ind[u]` produces two sub-goals, a base case and an induction step:
 
-    # theorem [base] {
-    #    individual x:u
-    #    property x <= 0 -> sum(x) >= x
-    # }
+theorem [base] {
+   individual x:u
+   property x <= 0 -> sum(x) >= x
+}
 
-    # theorem [step] {
-    #     individual x:u
-    #     property [step] sum(x) >= x -> sum(x+1) >= x + 1
-    # }
+theorem [step] {
+    individual x:u
+    property [step] sum(x) >= x -> sum(x+1) >= x + 1
+}
 
 The default tactic can't prove these goals because the definition of
 `sum` is a schema that must explicitly instantiated. Fortunately, it
@@ -775,16 +832,16 @@ to it by this name.
 
 After instantiating the definition of `sum`, our two subgoals look like this:
 
-    # theorem [prop5] {
-    #     property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
-    #     property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
-    # }
+theorem [prop5] {
+    property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
+    property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
+}
 
 
-    # theorem [prop4] {
-    #     property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
-    #     property Y:u <= 0 -> sum(Y) >= Y
-    # }
+theorem [prop4] {
+    property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
+    property Y:u <= 0 -> sum(Y) >= Y
+}
 
 
 Because these goals are quantifier-free the default tactic can easily
@@ -792,26 +849,56 @@ handle them, so our proof is complete.
 
 As an alternative, here is the slightly more verbose forward version of this proof:
 
-    proof {
+```
+    property [sumprop2] sum(Y) >= Y
+
+    proof [sumprop2] {
         theorem [base] {
-            individual x:t
+            individual x:u
             property x <= 0 -> sum(x) >= x
         } proof {
             instantiate sum with X = x
-        };
+        }
         theorem [step] {
-            individual x:t
+            individual x:u
             property sum(x) >= x -> sum(x+1) >= x + 1
         } proof {
             instantiate sum with X = x + 1
-        };
-        apply ind[u];
+        }
+        apply ind[u]
     }
 
+```
 This version is more clear than the backward version in that the base
-case and inductive step of the proof are stated explicitly.
+case and inductive step of the proof are stated explicitly. For a complex
+inductive hypothesis, this style might get a bit verbose. To reduce
+the amount of text we need to type, we can introduce a function definition
+inside a proof, like this:
+
+```
+    theorem [foo] {property sum(X) >= X}
+    proof {
+        function inv(X) = sum(X) >= X
+        property inv(X) proof {
+            theorem [base] {
+                individual x:u
+                property x <= 0 -> inv(x)
+            } proof {
+                instantiate sum with X = x
+            }
+            theorem [step] {
+                individual x:u
+                property inv(x) -> inv(x + 1)
+            } proof {
+                instantiate sum with X = x + 1
+            }
+            apply ind[u]
+        }
+    }
 
 
+
+```
 Naming
 ======
 
@@ -899,7 +986,7 @@ Now suppose we want to prove an extra property using `t_theory`:
             property Y < Z -> Y < f(Z)
         }
         proof {
-            instantiate t_theory.expadending with X = Z
+            instantiate t_theory.expanding with X = Z
         }
     }
     with t_theory

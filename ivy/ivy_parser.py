@@ -1082,12 +1082,17 @@ else:
         p[0] = p[1]
         p[0].append(p[2])
 
+    def p_opttacticwith_with_lcb_tacticwithlist_rcb(p):
+        'opttacticwith : WITH LCB tacticwithlist RCB'
+        p[0] = TacticWith(*p[3])
+        p[0].lineno = get_lineno(p,1)
+
 def p_proofseq_proofstep(p):
     'proofseq : proofstep'
     p[0] = p[1]
 
 def p_proofseq_proofseq_semi_proofstep(p):
-    'proofseq : proofseq SEMI proofstep'
+    'proofseq : proofseq optsemi proofstep'
     p[0] = ComposeTactics(p[1],p[3])
     p[0].lineno = get_lineno(p,2)
 

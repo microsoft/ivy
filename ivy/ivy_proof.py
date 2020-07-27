@@ -107,6 +107,7 @@ class ProofChecker(object):
         subgoals = subgoals or [prop]
         subgoals = self.apply_proof(subgoals,proof)
         if subgoals is None:
+            print proof
             raise NoMatch(proof,"goal does not match the given schema")
         self.axioms.append(prop)
         self.schemata[prop.name] = prop
@@ -353,7 +354,7 @@ class ProofChecker(object):
                     apply_match_to_problem(fomatch,prob,apply_match)
                 somatch = match(prob.pat.args[idx],prob.inst.args[idx],prob.freesyms,prob.constants)
                 if somatch is None:
-                    return None
+                    raise NoMatch(proof,"goal does not match the given schema")
                 apply_match_to_problem(somatch,prob,apply_match_alt)
         else:
             fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
@@ -361,7 +362,7 @@ class ProofChecker(object):
                 apply_match_to_problem(fomatch,prob,apply_match)
             somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
             if somatch is None:
-                return None
+                raise NoMatch(proof,"goal does not match the given schema")
             apply_match_to_problem(somatch,prob,apply_match_alt)
         detect_nonce_symbols(prob)
 #            schema = apply_match_goal(pmatch,schema,apply_match_alt)
@@ -774,18 +775,22 @@ def compile_match_list(proof_match,left_goal,right_goal):
 def compile_one_match(lhs,rhs,freesyms,constants):
     if il.is_variable(lhs):
         return fo_match(lhs,rhs,freesyms,constants)
-    rhsvs = dict((v.name,v) for v in lu.used_variables_ast(rhs))
-    vmatches = [{v.sort:rhsvs[v.name].sort} for v in lu.used_variables_ast(lhs)
-                  if v.name in rhsvs and v.sort in freesyms]
-    vmatch = merge_matches(*vmatches)
-    if vmatch is None:
-        return None
-    lhs = apply_match_alt(vmatch,lhs)
-    newfreesyms = apply_match_freesyms(vmatch,freesyms)
-    somatch = match(lhs,rhs,newfreesyms,constants)
-    somatch = compose_matches(freesyms,vmatch,somatch,vmatch)
-    fmatch = merge_matches(vmatch,somatch)
-    return fmatch
+    if not isinstance(rhs,il.UninterpretedSort):
+        rhsvs = dict((v.name,v) for v in lu.used_variables_ast(rhs))
+        vmatches = [{v.sort:rhsvs[v.name].sort} for v in lu.used_variables_ast(lhs)
+                    if v.name in rhsvs and v.sort in freesyms]
+        vmatch = merge_matches(*vmatches)
+        if vmatch is None:
+            return None
+        lhs = apply_match_alt(vmatch,lhs)
+        newfreesyms = apply_match_freesyms(vmatch,freesyms)
+        somatch = match(lhs,rhs,newfreesyms,constants)
+        somatch = compose_matches(freesyms,vmatch,somatch,vmatch)
+        fmatch = merge_matches(vmatch,somatch)
+        return fmatch
+    else:
+        return match_sort(lhs,rhs,freesyms)
+
 
 def compile_match(proof_match,prob,decl):
     """ Compiles match in a proof. Only the symbols in
