@@ -1152,7 +1152,7 @@ def match_quants(pat,inst,freesyms,constants):
             bodyfreesyms = apply_match_freesyms(mat,freesyms)
             bodymat = match(mbody,inst.body,bodyfreesyms,constants)
             bodymat = compose_matches(freesyms,mat,bodymat,pat.variables)
-        mat = merge_matches(mat,bodymat)
+            mat = merge_matches(mat,bodymat)
 #        matches.append(match(pat.body,inst.body,freesyms,constants))
 #        mat = merge_matches(*matches)
         if mat is not None:
