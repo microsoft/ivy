@@ -137,8 +137,8 @@ axiom [introIff] {
 axiom [elimIffFwd] {
     function p : bool
     function q : bool
-    property p
-    property p <-> q
+    property [prem1] p
+    property [prem2] p <-> q
     #----------------------
     property q
 }
