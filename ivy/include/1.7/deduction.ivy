@@ -148,8 +148,8 @@ axiom [elimIffFwd] {
 axiom [elimIffRev] {
     function p : bool
     function q : bool
-    property q
-    property p <-> q
+    property [prem1] q
+    property [prem2] p <-> q
     #----------------------
     property p
 }
