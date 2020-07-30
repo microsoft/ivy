@@ -1560,8 +1560,8 @@ def get_symbol_dependencies(mp,res,t):
 # Attach the labeled proofs to their properties. A proof can also attach to an isolate.
 
 def attach_proofs(mod):
-    m = dict((lf.label.rep,lf) for lf in mod.labeled_props)
-    m.update((lf.label.rep,lf) for lf in mod.labeled_conjs)
+    m = dict((lf.label.rep,lf) for lf in mod.labeled_props if lf.label is not None)
+    m.update((lf.label.rep,lf) for lf in mod.labeled_conjs if lf.label is not None)
     used = set()
     pfs = mod.proofs
     mod.proofs = []
