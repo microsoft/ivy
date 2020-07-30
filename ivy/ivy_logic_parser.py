@@ -177,6 +177,8 @@ if not (iu.get_numeric_version() <= [1,2]):
         'term : term IF fmla ELSE term'
         p[0] = Ite(p[3],p[1],p[5])
         p[0].lineno = get_lineno(p,2)
+        if isinstance(p[1],Ite) and not hasattr(p[1],"parenthesized"):
+            iu.warn(p[0],"It is recommended parenthesize nested if/else operators to avoid ambiguity.")
 
 # if not (iu.get_numeric_version() <= [1,5]):
 
@@ -216,6 +218,7 @@ def p_terms_terms_term(p):
 def p_term_lp_term_lp(p):
     'term : LPAREN term RPAREN'
     p[0] = p[2]
+    p[0].parenthesized = True
 
 def p_vars_var(p):
     'vars : var'
@@ -368,6 +371,7 @@ if iu.get_numeric_version() <= [1,6]:
     def p_fmla_lparen_fmla_rparen(p):
         'fmla : LPAREN fmla RPAREN'
         p[0] = p[2]
+        p[0].parenthesized=True
 
     def p_fmla_true(p):
         'fmla : TRUE'
@@ -532,6 +536,8 @@ else:
         'term : term ARROW term'
         p[0] = Implies(p[1],p[3])
         p[0].lineno = get_lineno(p,2)
+        if isinstance(p[1],Implies) and not hasattr(p[1],"parenthesized"):
+            iu.warn(p[0],"It is recommended parenthesize nested -> operators to avoid ambiguity.")
 
     def p_term_term_iff_term(p):
         'term : term IFF term'
