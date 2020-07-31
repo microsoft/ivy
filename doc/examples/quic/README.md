@@ -385,43 +385,6 @@ Note: this is only useful if you want to monitor packets using
 tcpdump, as it helps elimiante background noise. It isn't needed for
 testing purposes.
 
-### Picotls
-
-The testers make use of the `picotls` implementation of TLS. Install
-it according to the instructions
-[here](https://github.com/h2o/picotls). 
-
-Here are some rough instructions on Ubuntu (YMMV):
-
-    $ cd
-    $ sudo apt install libssl-dev pkg-config
-    $ export OPENSSL_INCLUDE_DIR=/usr/include/openssl
-    $ git clone https://github.com/h2o/picotls.git
-    $ cd picotls
-    $ git submodule init
-    $ git submodule update
-    $ cmake .
-    $ make
-
-Windows: Instructions for installing picotls on Windows are
-[here](https://github.com/h2o/picotls/blob/master/WindowsPort.md).
-OpenSSL binaries for Windows can be found
-[here](https://slproweb.com/products/Win32OpenSSL.html).
-These OpenSSL binaries are missing a file `include/ms/applink.c` that
-you will have to get from the OpenSSL source repository.
-You also need to copy the libcrypto DLL into "this directory":
-
-    copy c:\OpenSSL-Win64\bin\libcrypto-1_1-x64.dll
-
-Continuing with general instructions:  Then you need to tell the Ivy
-compiler where to find the `picotls` library and headers (unless you
-copy them to standard locations). Use this command, where
-`PICOTLS_DIR` is the directory in which `picotls` was built:
-
-    $ ivy_libs add picotls $PICOTLS_DIR .
-    
-Notice the dot in the above, which is essential.
-
 ### Build the Ivy packet monitor
 
 *Note: skip this step, as the packet monitor doesn't currently work.*
