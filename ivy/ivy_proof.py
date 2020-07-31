@@ -1201,6 +1201,61 @@ def equiv_alpha(x,y):
     return False
     pass
 
+# Convert a goal to skolem normal form. This means the premises are in
+# universal prenex form and the conclusion is in existential prenex
+# form.
+
+def skolemize_goal(goal):
+    var_uniq = il.VariableUniqifier()
+    vocab = goal_vocab(goal)
+    used_names = set(x.name for x in vocab.symbols)
+    used_names.extend(x.name for x in goal_free(goal))
+    renamer = iu.UniqueRenamer(used = used_names)
+    def rec(goal,pos):
+        prems = [rec(prem,not pos) for prem in goal_prems(goal)]
+        conc = skolemize_fmla(goal_conc(goal),pos,renamer)
+        return clone_goal(goal,prems,conc)
+    return rec(goal,True)
+
+def skolemize_fmla(fmla,pos,renamer,skfuns):
+    univs = []
+    var_uniq = il.VariableUniqifier()
+    def rec( fmla,pos):
+        if isinstance(fmla,il.Not):
+            return fmla.clone([rec(fmla.args[0],not pos)])
+        if isinstance(fmla,il.Implies):
+            return fmla.clone([
+                rec(fmla.args[0],not pos),
+                rec(fmla.args[1],pos),
+            ])
+        if isinstance(fmla,(il.And,il.Or)):
+            return fmla.clone([
+                rec(fmla.args[0],pos),
+                rec(fmla.args[1],pos),
+            ])
+        is_e = il.is_exists(fmla)
+        is_a = il.is_forall(fmla)
+        if is_e and pos or is_a and not pos:
+            fvs = list(iu.unique(lu.variables_ast(fmla)))
+            v = fmla.variables[0] # TODO: handle multiple variables?
+            sym = il.Symbol(renamer('_'+v.name),
+                            il.FuncConstSort([w.sort for w in fvs] + v.sort))
+            term = sym(fvs)
+            sksyms.append(sym)
+            return il.substitute(fmla.body,[(v,term)])
+        if is_a and pos or is_e and not pos:
+            v = fmla.variables[0] # TODO: handle multiple variables?
+            u = var_uniq(v)
+            univs.append(u)
+            return il.substitute(fmla.body,[(v,u)])
+        return fmla
+    body = rec(fmla,pos)
+    if univs:
+        quant = il.Exists if pos else il.ForAll
+        body = quant(univs,body)
+    return body
+
+
 class AddSymbols(object):
     """ temporarily add some symbols to a set of symbols """
     def __init__(self,symset,symlist):

@@ -37,3 +37,9 @@ def triple_to_goal(lineno,name,action,precond=[],postcond=[]):
 
 pf.register_tactic('vcgen',vcgen)
     
+def skolemize(self,decls,proof):
+    goal = decls[0]
+    goal = pr.skolemize_goal(goal)
+    return [goal] + decls[1:]
+
+pf.register_tactic('skolemize',skolemize)
