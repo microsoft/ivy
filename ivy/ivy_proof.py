@@ -108,7 +108,6 @@ class ProofChecker(object):
         subgoals = subgoals or [prop]
         subgoals = self.apply_proof(subgoals,proof)
         if subgoals is None:
-            print proof
             raise NoMatch(proof,"goal does not match the given schema")
         self.axioms.append(prop)
         self.schemata[prop.name] = prop
@@ -332,7 +331,6 @@ class ProofChecker(object):
         conc = goal_conc(prem)
         conc = lu.witness_ast(True,[],pmatch,conc)
         prem = clone_goal(prem,goal_prems(prem),conc)
-        print 'prem = {}'.format(prem)
         prem  = apply_match_goal(pmatch,prem,apply_match_alt)
         return [goal_add_prem(decls[0],prem,proof.lineno)] + decls[1:]
 
@@ -824,11 +822,8 @@ def compile_match(proof_match,prob,decl,allow_witness=False):
     if allow_witness:
         prob.freesyms.update(logic_util.used_variables(goal_conc(schema)))
     matches = compile_match_list(proof_match,schema,decl,allow_witness=allow_witness)
-    print 'matches = {}'.format(matches)
     matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
-    print 'matches = {}'.format(matches)
     res = merge_matches(*matches)
-    print 'res = {}'.format(matches)
     return res
         
         
@@ -1255,7 +1250,6 @@ def skolemize_fmla(fmla,pos,renamer,skfuns):
     univs = []
     var_uniq = il.VariableUniqifier()
     def rec( fmla,pos):
-        print 'fmla: {}'.format(fmla)
         if isinstance(fmla,il.Not):
             return fmla.clone([rec(fmla.args[0],not pos)])
         if isinstance(fmla,il.Implies):

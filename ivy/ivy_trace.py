@@ -279,7 +279,7 @@ def make_vc(action,precond=[],postcond=[],check_asserts=True):
     fc.annot = act.EmptyAnnotation()
     used_names = frozenset(x.name for x in lg.sig.symbols.values())
     def witness(v):
-        c = lg.Const('@' + v.name, v.sort)
+        c = lg.Symbol('@' + v.name, v.sort)
         assert c.name not in used_names
         return c
     fcc = lut.dual_clauses(fc, witness)
