@@ -1055,6 +1055,11 @@ else:
         p[0] = LetTactic(*p[2])
         p[0].lineno = get_lineno(p,1)
 
+    def p_proofstep_witness_pflets(p):
+        'proofstep : WITNESS pflets'
+        p[0] = WitnessTactic(*p[2])
+        p[0].lineno = get_lineno(p,1)
+
     def p_proofstep_if_fmla_proofgroup_else_proofgroup (p):
         'proofstep : IF fmla proofgroup ELSE proofgroup'
         p[0] = IfTactic(p[2],p[3],p[5])

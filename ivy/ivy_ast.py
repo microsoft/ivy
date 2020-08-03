@@ -713,6 +713,13 @@ class LetTactic(AST):
     def __str__(self):
         return 'let ' + ','.join(str(x) for x in self.args)
     
+class WitnessTactic(AST):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'witness ' + ','.join(str(x) for x in self.args)
+    
+
 class SpoilTactic(AST):
     def __init__(self,*args):
         self.args = args

@@ -6,6 +6,7 @@ import ivy_utils as iu
 import ivy_logic as il
 import ivy_logic_utils as lu
 import ivy_ast as ia
+import logic_util
 
 class Redefinition(iu.IvyError):
     pass
@@ -165,6 +166,8 @@ class ProofChecker(object):
                 return self.tactic_tactic(decls,proof)
             elif isinstance(proof,ia.ProofTactic):
                 return self.proof_tactic(decls,proof)
+            elif isinstance(proof,ia.WitnessTactic):
+                return self.witness_tactic(decls,proof)
             assert False,"unknown proof type {}".format(type(proof))
 
     def proof_tactic(self,decls,proof):
@@ -304,7 +307,7 @@ class ProofChecker(object):
                 raise ProofError(ast,"No property {} exists in the current context".format(schemaname))
         return schema
     
-    def setup_matching(self,decl,proof):
+    def setup_matching(self,decl,proof,allow_witness=False):
         schemaname = proof.schemaname()
         schema = self.lookup_schema(schemaname,decl,proof)
         schema = rename_goal(schema,proof.renaming())
@@ -314,16 +317,23 @@ class ProofChecker(object):
         if prob is None:
             raise NoMatch(proof,'definition does not match the given schema')
         proof_match,prob = add_prem_match(proof.match(),prob,decl,self)
-        pmatch = compile_match(proof_match,prob,decl)
+        pmatch = compile_match(proof_match,prob,decl,allow_witness)
         if pmatch is None:
             raise ProofError(proof,'Match is inconsistent')
         return prob, pmatch
 
     def assume_tactic(self,decls,proof):
         decl = decls[0]
-        prob, pmatch = self.setup_matching(decl,proof)
+        schemaname = proof.schemaname()
+        schema = self.lookup_schema(schemaname,decl,proof)
+        prob, pmatch = self.setup_matching(decl,proof,allow_witness=True)
 #        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
-        prem  = apply_match_goal(pmatch,prob.schema,apply_match_alt)
+        prem = prob.schema
+        conc = goal_conc(prem)
+        conc = lu.witness_ast(True,[],pmatch,conc)
+        prem = clone_goal(prem,goal_prems(prem),conc)
+        print 'prem = {}'.format(prem)
+        prem  = apply_match_goal(pmatch,prem,apply_match_alt)
         return [goal_add_prem(decls[0],prem,proof.lineno)] + decls[1:]
 
     def if_tactic(self,decls,proof):
@@ -373,6 +383,18 @@ class ProofChecker(object):
             # schema = apply_match_goal(tmatch,schema,apply_match_alt)
         return goal_subgoals(prob.schema,decl,proof.lineno)
 
+    def witness_tactic(self,decls,proof):
+        wits = compile_witness_list(proof,decls[0])
+        for wit in wits:
+            if not il.is_variable(wit.args[0]):
+                raise iu.IvyError(wit,'left-hand side of witness must be a variable')
+        wit_map = dict((x.args[0],x.args[1]) for x in wits)
+        decl = decls[0]
+        conc = goal_conc(decl)
+        conc = lu.witness_ast(False,[],wit_map,conc)
+        prems = goal_prems(decl)
+        return [clone_goal(decl,prems,conc)] + decls[1:]
+ 
 
 # A proof goal is a LabeledFormula whose body is either a Formula or a SchemaBody
 
@@ -760,7 +782,7 @@ def parameterize_schema(sorts,schema):
 # instantiated, while the right-hand sides uses names from the
 # current goal (and both may use names from the globla context
 
-def compile_match_list(proof_match,left_goal,right_goal):
+def compile_match_list(proof_match,left_goal,right_goal,allow_witness=False):
     def compile_match(d):
         x,y = d.lhs(),d.rhs()
         x = compile_expr_vocab(x,left_goal_vocab)
@@ -768,6 +790,8 @@ def compile_match_list(proof_match,left_goal,right_goal):
         return ia.Definition(x,y)
     left_goal_vocab = goal_vocab(left_goal)
     right_goal_vocab = goal_vocab(right_goal)
+    if allow_witness:
+        left_goal_vocab.variables.extend(list(logic_util.used_variables(goal_conc(left_goal))))
     return [compile_match(d) for d in proof_match]
 
 # A "match" is a map from symbols to lambda terms
@@ -792,14 +816,19 @@ def compile_one_match(lhs,rhs,freesyms,constants):
         return match_sort(lhs,rhs,freesyms)
 
 
-def compile_match(proof_match,prob,decl):
+def compile_match(proof_match,prob,decl,allow_witness=False):
     """ Compiles match in a proof. Only the symbols in
     freesyms may be used in the match."""
 
     schema = prob.schema
-    matches = compile_match_list(proof_match,schema,decl)
+    if allow_witness:
+        prob.freesyms.update(logic_util.used_variables(goal_conc(schema)))
+    matches = compile_match_list(proof_match,schema,decl,allow_witness=allow_witness)
+    print 'matches = {}'.format(matches)
     matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
+    print 'matches = {}'.format(matches)
     res = merge_matches(*matches)
+    print 'res = {}'.format(matches)
     return res
         
         
@@ -1209,18 +1238,24 @@ def skolemize_goal(goal):
     var_uniq = il.VariableUniqifier()
     vocab = goal_vocab(goal)
     used_names = set(x.name for x in vocab.symbols)
-    used_names.extend(x.name for x in goal_free(goal))
+    used_names.update(x.name for x in goal_free(goal))
     renamer = iu.UniqueRenamer(used = used_names)
+    skfuns = []
     def rec(goal,pos):
+        if not isinstance(goal,ia.LabeledFormula):
+            return goal
         prems = [rec(prem,not pos) for prem in goal_prems(goal)]
-        conc = skolemize_fmla(goal_conc(goal),pos,renamer)
+        conc = skolemize_fmla(goal_conc(goal),pos,renamer,skfuns)
         return clone_goal(goal,prems,conc)
-    return rec(goal,True)
+    goal = rec(goal,True)
+    return clone_goal(goal,[ia.ConstantDecl(s) for s in skfuns]+goal_prems(goal), goal_conc(goal))
+
 
 def skolemize_fmla(fmla,pos,renamer,skfuns):
     univs = []
     var_uniq = il.VariableUniqifier()
     def rec( fmla,pos):
+        print 'fmla: {}'.format(fmla)
         if isinstance(fmla,il.Not):
             return fmla.clone([rec(fmla.args[0],not pos)])
         if isinstance(fmla,il.Implies):
@@ -1229,25 +1264,26 @@ def skolemize_fmla(fmla,pos,renamer,skfuns):
                 rec(fmla.args[1],pos),
             ])
         if isinstance(fmla,(il.And,il.Or)):
-            return fmla.clone([
-                rec(fmla.args[0],pos),
-                rec(fmla.args[1],pos),
-            ])
+            return fmla.clone([rec(arg,pos) for arg in fmla.args])
         is_e = il.is_exists(fmla)
         is_a = il.is_forall(fmla)
-        if is_e and pos or is_a and not pos:
-            fvs = list(iu.unique(lu.variables_ast(fmla)))
-            v = fmla.variables[0] # TODO: handle multiple variables?
-            sym = il.Symbol(renamer('_'+v.name),
-                            il.FuncConstSort([w.sort for w in fvs] + v.sort))
-            term = sym(fvs)
-            sksyms.append(sym)
-            return il.substitute(fmla.body,[(v,term)])
         if is_a and pos or is_e and not pos:
-            v = fmla.variables[0] # TODO: handle multiple variables?
-            u = var_uniq(v)
-            univs.append(u)
-            return il.substitute(fmla.body,[(v,u)])
+            fvs = list(iu.unique(lu.variables_ast(fmla)))
+            body = fmla.body
+            for v in fmla.variables:
+                sym = il.Symbol(renamer('_'+v.name),
+                                il.FuncConstSort(*([w.sort for w in fvs] + [v.sort])))
+                term = sym(*fvs) if fvs else sym
+                skfuns.append(sym)
+                body =  il.substitute(body,[(v,term)])
+            return rec(body,pos)
+        if is_e and pos or is_a and not pos:
+            body = fmla.body
+            for v in fmla.variables:
+                u = var_uniq(v)
+                univs.append(u)
+                body = il.substitute(body,[(v,u)])
+            return rec(body,pos)
         return fmla
     body = rec(fmla,pos)
     if univs:
@@ -1255,6 +1291,12 @@ def skolemize_fmla(fmla,pos,renamer,skfuns):
         body = quant(univs,body)
     return body
 
+def compile_witness_list(proof,goal):
+#    the_goal_vocab = goal_vocab(goal,get_bound_vars=True)
+    the_goal_vocab = goal_vocab(goal)
+    the_goal_vocab.variables.extend(list(logic_util.used_variables(goal_conc(goal))))
+    return [compile_expr_vocab(d,the_goal_vocab) for d in proof.args]
+    
 
 class AddSymbols(object):
     """ temporarily add some symbols to a set of symbols """

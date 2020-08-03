@@ -24,6 +24,8 @@ import ivy_logic
 from itertools import chain
 from ivy_logic_parser_gen import formula_parser,term_parser
 from collections import defaultdict
+import logic_util
+
 
 class LogicParseError(Exception):
     """ Exception raised on parser error """
@@ -1431,6 +1433,70 @@ def skolemize_formula(fmla, skolemizer=None):
         insts = clauses_to_formula(instantiator(gts))
         fmla = And(fmla,insts)
     return fmla
+
+def skolemize_ast(pos,vs,used_names,skolems,fmla,prefix=None):
+    if is_quantifier(fmla):
+        if is_exists(fmla) if pos else is_forall(fmla):
+            used_vars = used_variables_ast(fmla.body)
+            mvs = [w for w in vs if w in used_vars]
+            subst = {}
+            for v in fmla.variables:
+                name = '@' + ('prefix' + '.' if prefix else '') + v.name
+                if name in used_names:
+                    count = 1
+                    while True:
+                        new_name = name + '[' + str(count) + ']'
+                        if new_name not in use_skolem_names:
+                            name = new_name
+                            break
+                        count = count + 1
+                used_names.add(name)
+                sksym = Symbol(name,FuncConstSort(*([w.sort for w in mvs] + [v.sort])))
+                skolems.append(sksym)
+                subst[v.name] = sksym(*mvs)
+            return substitute_ast(fmla.body,subst)
+        else:
+            return fmla.clone([skolemize_ast(pos,vs+list(fmla.variables),used_names,skolems,fmla.body,prefix)])
+    if isinstance(fmla,Not):
+        return fmla.clone(skolemize_ast(not pos,vs,used_names,skolems,fmla.body,prefix))
+    if isinstance(fmla,Implies):
+        return fmla.clone([skolemize_ast(not pos,vs,used_names,skolems,fmla.args[0],prefix),
+                           skolemize_ast(pos,vs,used_names,skolems,fmla.args[1],prefix)])
+    return fmla.clone([skolemize_ast(pos,vs,used_names,skolems,arg,prefix) for arg in fmla.args])
+
+def witness_ast(pos,vs,witnesses,fmla):
+    if is_quantifier(fmla):
+        if is_exists(fmla) if not pos else is_forall(fmla):
+            used_vars = used_variables_ast(fmla.body)
+            mvs = [w for w in vs if w in used_vars]
+            subst = {}
+            new_vars = []
+            body = fmla.body
+            fvars = list(fmla.variables)
+            for idx,v in enumerate(fvars):
+                if v in witnesses:
+                    term = witnesses[v]
+                    term_vars = used_variables_ast(term)
+                    for w in fvars[idx+1:]:
+                        if w in term_vars:
+                            raise iu.IvyError(fmla,'variable {} captured by substution'.format(w))
+                    try:
+                        body = logic_util.substitute(body,{v:term})
+                    except logic_util.CaptureError as err:
+                        raise iu.IvyError(fmla,'variable{} {} captured by substution'.format('s' if len(err.variables) > 1 else '',  ','.join(str(w) for w in err.variables)))
+                else:
+                    new_vars.append(v)
+            body = witness_ast(pos,vs,witnesses,body)
+            if new_vars:
+                return fmla.clone_binder(new_vars,body)
+            return body
+    if isinstance(fmla,Not):
+        return fmla.clone(witness_ast(not pos,vs,witnesses,fmla.body))
+    if isinstance(fmla,Implies):
+        return fmla.clone([witness_ast(not pos,vs,witnesses,fmla.args[0]),
+                           witness_ast(pos,vs,witnesses,fmla.args[1])])
+    return fmla.clone([witness_ast(pos,vs,witnesses,arg) for arg in fmla.args])
+
 
 def reskolemize_clauses(clauses, skolemizer):
     print clauses

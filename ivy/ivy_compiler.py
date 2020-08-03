@@ -905,6 +905,11 @@ def compile_let_tactic(self):
     
 ivy_ast.LetTactic.compile = compile_let_tactic
 
+def compile_witness_tactic(self):
+    return self
+    
+ivy_ast.WitnessTactic.compile = compile_witness_tactic
+
 def compile_if_tactic(self):
     cond = sortify_with_inference(self.args[0])
     return self.clone([cond,self.args[1].compile(),self.args[2].compile()])
