@@ -1287,7 +1287,7 @@ class IvyConjectureSetup(IvyDeclInterp):
     def theorem(self,sch):
         self.last_fact = None
     def proof(self,pf):
-        if self.last_fact is None or len(pf.args) >= 2:
+        if self.last_fact is None or isinstance(pf,ivy_ast.LabeledFormula):
             return # this is a not a conjecture, or proof is labeled
         global last_fmla
         last_fmla = self.last_fact.formula
