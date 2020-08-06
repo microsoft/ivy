@@ -690,6 +690,10 @@ class SchemaInstantiation(TacticWithMatch):
 class AssumeTactic(TacticWithMatch):
     def tactic_name(self):
         return 'assume'
+    def clone(self,args):
+        res = AST.clone(self,args)
+        res.label = self.label
+        return res
 
 class ShowGoalsTactic(AST):
     def tactic_name(self):

@@ -309,6 +309,9 @@ class ProofChecker(object):
     def setup_matching(self,decl,proof,allow_witness=False):
         schemaname = proof.schemaname()
         schema = self.lookup_schema(schemaname,decl,proof)
+        return self.setup_schema_matching(decl,proof,schema,allow_witness=allow_witness)
+        
+    def setup_schema_matching(self,decl,proof,schema,allow_witness=False):
         schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
         prob = match_problem(schema,decl)
@@ -324,15 +327,25 @@ class ProofChecker(object):
     def assume_tactic(self,decls,proof):
         decl = decls[0]
         schemaname = proof.schemaname()
-        schema = self.lookup_schema(schemaname,decl,proof)
-        prob, pmatch = self.setup_matching(decl,proof,allow_witness=True)
+        premmap = dict((x.name,x) for x in goal_prem_goals(decl))
+        if schemaname in premmap:
+            schema = premmap[schemaname]
+            if isinstance(proof.label,ia.NoneAST):
+                decl = goal_remove_prem(decl,schemaname)
+        else:
+            schema = self.lookup_schema(schemaname,decl,proof)
+        prob, pmatch = self.setup_schema_matching(decl,proof,schema,allow_witness=True)
 #        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
         prem = prob.schema
         conc = goal_conc(prem)
         conc = lu.witness_ast(True,[],pmatch,conc)
         prem = clone_goal(prem,goal_prems(prem),conc)
         prem  = apply_match_goal(pmatch,prem,apply_match_alt)
-        return [goal_add_prem(decls[0],prem,proof.lineno)] + decls[1:]
+        if not isinstance(proof.label,ia.NoneAST):
+            prem = prem.clone([proof.label,prem.formula])
+        if any(prem.name == x.name for x in goal_prem_goals(decl)):
+            raise ProofError(proof,'instance name {} clashes with context'.format(prem.name))
+        return [goal_add_prem(decl,prem,proof.lineno)] + decls[1:]
 
     def if_tactic(self,decls,proof):
         cond = proof.args[0]
@@ -445,6 +458,14 @@ def fresh_label(goals):
 def goal_add_prem(goal,prem,lineno):
     return make_goal(lineno,goal.label,goal_prems(goal) + [prem], goal_conc(goal))
     
+
+def goal_remove_prem(goal,prem_name):
+    print 'goal = {}'.format(goal)
+    print 'prem_name = {}'.format(prem_name)
+    goal = clone_goal(goal,[x for x in goal_prems(goal) if x.name != prem_name],goal_conc(goal))
+    print 'goal = {}'.format(goal)
+    return goal
+
 # Add a premise to a goal
 
 def goal_prefix_prems(goal,prems,lineno):
@@ -852,6 +873,9 @@ def match_rhs_vars(match):
             res.update(fmla_vocab(v))
     return res
 
+def is_lambda(p):
+    return isinstance(p,ia.ConstantDecl) and isinstance(p.args[0],il.Lambda)
+
 def apply_match_goal(match,x,apply_match,env = None):
     """ Apply a match to a goal """
     env = env if env is not None else set()
@@ -860,8 +884,9 @@ def apply_match_goal(match,x,apply_match,env = None):
         if isinstance(fmla,ia.SchemaBody):
             bound = [s for s in goal_defns(x) if s not in match]
             with il.BindSymbols(env,bound):
-                fmla = fmla.clone([apply_match_goal(match,y,apply_match,env)
-                                   for y in fmla.prems()]+[apply_match(match,fmla.conc(),env)])
+                prems = [apply_match_goal(match,y,apply_match,env) for y in fmla.prems()]
+                prems = [p for p in prems if not is_lambda(p)]
+                fmla = fmla.clone(prems+[apply_match(match,fmla.conc(),env)])
         else:
             fmla = apply_match(match,fmla,env)
         g = x.clone([x.label,fmla])

@@ -8,7 +8,8 @@ theorem [thm14] {
     property forall X. p(X)
     property exists X. p(X)
 }
-proof
+proof {
     apply introE;
     apply elimA with X = witness;
     showgoals
+}

@@ -10,7 +10,48 @@ from itertools import chain
 
 # Here we have definitions relating to IVy's built-in theories.
     
-theories = {
+theories_1_6 = {
+'int' : """#lang ivy
+    schema rec[t] = {
+	type q
+	function base(X:t) : q
+	function step(X:q,Y:t) : q
+	function fun(X:t) : q
+	#---------------------------------------------------------
+	definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1),X)
+    }
+
+    schema ind[t] = {
+        relation p(X:t)
+        {
+            individual x:t
+            property x <= 0 -> p(x)
+        }
+        {
+            individual x:t
+            property p(x) -> p(x+1)
+        }
+        #--------------------------
+        property p(X)    
+    }
+
+#    schema ind[t] = {
+#        relation p(X:t)
+#        property [base] forall X. X <= 0 -> p(X)
+#        property [step] forall X. p(X) -> p(X+1)
+#        #--------------------------
+#        property p(X)    
+#    }
+
+    schema lep[t] = {
+        function n : t
+        function p(X:t) : bool
+        #---------------------------------------------------------
+        property exists L. (L >= n & forall B. (B >= n & p(B)-> p(L) & L <= B))
+    }
+"""
+}
+theories_1_7 = {
 'int' : """#lang ivy
     schema rec[t] = {
 	type q
@@ -52,6 +93,10 @@ theories = {
 """
 }
 
+def theories():
+    return theories_1_6 if iu.version_le("1.6",iu.get_string_version()) else theories_1_7
+
+
 class Theory(object):
     def __init__(self,name,*args):
         self.args = args
@@ -63,7 +108,7 @@ class IntegerTheory(Theory):
     num_params = 0
     @property
     def schemata():
-        return theories['int']
+        return theories()['int']
     
 class BitVectorTheory(Theory):
     num_params = 1
@@ -72,7 +117,7 @@ class BitVectorTheory(Theory):
         return self.args[0]
     @property
     def schemata():
-        return theories['int']
+        return theories()['int']
     
 
 theory_classes = {
@@ -98,8 +143,8 @@ def parse_theory(name):
 def get_theory_schemata(name):
     if iu.version_le("1.6",iu.get_string_version()):
         if name.startswith('bv[') or name == 'nat':
-            return theories['int']
-        return theories.get(name,None)
+            return theories()['int']
+        return theories().get(name,None)
     return None
 
 # This returns the theory associated with a first-order sort, or if the sort

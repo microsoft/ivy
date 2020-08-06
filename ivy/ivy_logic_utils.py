@@ -1491,7 +1491,7 @@ def witness_ast(pos,vs,witnesses,fmla):
                 return fmla.clone_binder(new_vars,body)
             return body
     if isinstance(fmla,Not):
-        return fmla.clone(witness_ast(not pos,vs,witnesses,fmla.body))
+        return fmla.clone([witness_ast(not pos,vs,witnesses,fmla.body)])
     if isinstance(fmla,Implies):
         return fmla.clone([witness_ast(not pos,vs,witnesses,fmla.args[0]),
                            witness_ast(pos,vs,witnesses,fmla.args[1])])

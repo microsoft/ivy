@@ -899,6 +899,7 @@ else:
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
         p[0] = AssumeTactic(a,p[3])
+        p[0].label = NoneAST()
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_instantiate(p):
@@ -906,6 +907,17 @@ else:
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
         p[0] = AssumeTactic(a,p[3])
+        p[0].label = NoneAST()
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_instance(p):
+        'proofstep : INSTANTIATE LABEL atype optrenaming'
+        a = Atom(p[3])
+        a.lineno = get_lineno(p,2)
+        label = Atom(p[2][1:-1],[])
+        label.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(a,p[4])
+        p[0].label = label
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_showgoals(p):
@@ -1027,6 +1039,7 @@ else:
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
         p[0] = AssumeTactic(*([a,p[3]]+p[5]))
+        p[0].label = NoneAST()
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_instantiate_with_defns(p):
@@ -1034,6 +1047,17 @@ else:
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
         p[0] = AssumeTactic(*([a,p[3]]+p[5]))
+        p[0].label = NoneAST()
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_instance_with_matches(p):
+        'proofstep : INSTANTIATE LABEL atype optrenaming WITH matches'
+        a = Atom(p[3])
+        a.lineno = get_lineno(p,2)
+        label = Atom(p[2][1:-1],[])
+        label.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(*([a,p[4]]+p[6]))
+        p[0].label = label
         p[0].lineno = get_lineno(p,1)
 
     def p_pflet_var_eq_fmla(p):
@@ -1056,8 +1080,8 @@ else:
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_witness_pflets(p):
-        'proofstep : WITNESS pflets'
-        p[0] = WitnessTactic(*p[2])
+        'proofstep : INSTANTIATE WITH pflets'
+        p[0] = WitnessTactic(*p[3])
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_if_fmla_proofgroup_else_proofgroup (p):
