@@ -159,7 +159,7 @@
 # following a conclusion. In this case, it says that, given types *d* and *r* and a function *f* from
 # *d* to *r* and any values *X*,*Y* of type *d*,  we can infer that *X*=*Y* implies
 # *f*(*X*) = *f*(*Y*). The dashes separating the premises from the conclusion are
-# just a comment. The conclusion is always the last judgement in the schema.
+# just a comment. The conclusion is always the last judgment in the schema.
 # Also, notice the declaration of function *f* contains a variable *X*. The scope of this
 # variable is only the function declaration. It has no relation to the variable *X* in the conclusion.
 
@@ -221,8 +221,8 @@
 # ==============
 
 # In the normal way of writing proofs, we start from a set of premises,
-# then procede to prove a sequence of facts (or lemmata), ending in a
-# conclusion. Each fact must be seen to follow from thge preceding facts
+# then proceed to prove a sequence of facts (or lemmata), ending in a
+# conclusion. Each fact must be seen to follow from the preceding facts
 # by applying a valid schema. 
 
 # For example, consider the following axiom schema:
@@ -261,7 +261,7 @@
 
 # Ivy achieves this proof by *matching* the axiom `mortality_of_man`
 # against the provided premise and conclusion. In this process, it
-# discovers the substition `X = socrates`. Applying this substituton to
+# discovers the substitution `X = socrates`. Applying this substitution to
 # the axiom yields the deduction we wish to make.  However, if we wanted
 # to be more explicit about the substitution, we could have written:
 
@@ -353,7 +353,7 @@
 
     # f(f(X)) = f(X)
     
-# Matching this with our goal `lem1`, it then gets this subtitution:
+# Matching this with our goal `lem1`, it then gets this substitution:
 
     # X = f(X)
     
@@ -368,7 +368,7 @@
 # which is just the inference we want to make. This might give the impression that Ivy can
 # magically arrive at the instantiation of a lemma needed to produce a desired inference.
 # In general, however, this is a hard problem. If Ivy fails, we can still write out the
-# full substituion manually, like this:
+# full substitution manually, like this:
 
     # property [lem1] f(f(f(X))) = f(f(X))
     # proof {
@@ -404,7 +404,7 @@
         property p -> q
     }
 
-# This rule says that, for any predicates *p* abnd *q*, if we can prove *q* from *p*, then
+# This rule says that, for any predicates *p* and *q*, if we can prove *q* from *p*, then
 # we can prove `p -> q`. The premise `lem` of this rule is itself a lemma, which we have to
 # supply in order to use the rule.
 
@@ -445,7 +445,7 @@
         property q
     }
 
-# This rule says that, for any predicates *p* abnd *q*, if we can
+# This rule says that, for any predicates *p* and *q*, if we can
 # prove *p* and we can prove `p -> q`, then we can prove `q`.  You
 # might also recognize the `elimImp` rule as *modus ponens*.
 
@@ -471,7 +471,7 @@
 # substitution for `p` in the rule.
 
 # If we want to add more detail to the proof, we can can go another
-# level deeper by adding proofs for `p2` and `p3`. We'll use thse two
+# level deeper by adding proofs for `p2` and `p3`. We'll use these two
 # additional rules for eliminating "and" operators:
 
     axiom [elimAndL] {
@@ -538,7 +538,7 @@
 
 # When we apply `mortality_of_man` to prove `mortal(socrates)` we lack the
 # necessary premise `man(socrates)`. Ivy is undeterred by this. It simply
-# matches the conclusion `mortal(X)` to `mortal(socrates)`, instatiates
+# matches the conclusion `mortal(X)` to `mortal(socrates)`, instantiates
 # the axiom `mortality_of_man` and pushes the needed premise `man(socrates)`
 # on the goal stack. We then discharge this goal using `soc_man`, leaving the
 # goal stack empty. Each proof step is applied to the top goal on the stack. 
@@ -585,7 +585,7 @@
     }
 
 # In fact, it is the same proof that we wrote in the forward style, but
-# it is now both more succint and more difficult to understand. 
+# it is now both more succinct and more difficult to understand. 
 
 # As another example, here is our proof of theorem `mp` written in the
 # backward style:
@@ -599,7 +599,7 @@
         apply elimAndR with p = p
     }
 
-# Again, it is much more succint, but offers no intuition as to *why* the
+# Again, it is much more succinct, but offers no intuition as to *why* the
 # theorem is true. 
 
 # When is a backward proof appropriate? One use case is when we wish to
@@ -618,7 +618,7 @@
 # natural deduction, but sometimes very inconvenient. A better alternative is to
 # use Skolemization and instantiation.
 
-# Here is the indempotence lemma done in this style:
+# Here is the idempotence lemma done in this style:
 
     theorem [idem4] {
         type t
@@ -704,7 +704,7 @@
 # All of this wasn't really necessary, since the original theorem is
 # in the decidable fragment.  However, the approach of Skolemization
 # followed by selective instantiation of quantifiers can be a quick
-# way to reduce a proof prolem to a decidable one. First, we try to
+# way to reduce a proof problem to a decidable one. First, we try to
 # get Z3 to discharge the proof goal automatically. If Ivy complains
 # about a quantified variable, we eliminate that variable by
 # Skolemization and instantiation. If we guess the wrong instantiation,
@@ -746,7 +746,7 @@
     #     property exists W,Z. s(a,Z) & s(b,W)
     # }
 
-# The skolem symbol in `p2` was automatically given a fresh name
+# The Skolem symbol in `p2` was automatically given a fresh name
 # `_Y_a` so as not to clash with the symbol `_Y` used in `p1`. Now we
 # could witness the conclusion with `W=_Y` and `Z=_Y_a`. This is
 # fragile, though, because changes to the proof might result in a name
@@ -761,13 +761,13 @@
         instantiate with Z=_Y1, W=_Y2
     }
 
-# By renaming the bound variables in our two copies of the axiomn to
+# By renaming the bound variables in our two copies of the axiom to
 # be `Y1` and `Y2`, we can make sure that the Skolem symbols have
 # predictable names. Again, there was no need to use manual
 # instantiation for this simple problem, but in more complex cases
-# with nested quantifiers, this apprech can make it possible to let Z3
-# do most of the quantifier instatiation work by only instantiating
-# the quantifiers that the fragment checker complaines about.
+# with nested quantifiers, this approach can make it possible to let Z3
+# do most of the quantifier instantiation work by only instantiating
+# the quantifiers that the fragment checker complains about.
 
 
 
@@ -819,7 +819,7 @@
     #  q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
 # This allows the recursive definition to be admitted, providing that
-# `sum` is fresh in the current context (i.e., we have not previously refered to
+# `sum` is fresh in the current context (i.e., we have not previously referred to
 # `sum` except to declare its type).
 
 
@@ -922,7 +922,7 @@
 # the definition for `X`, while for the induction step, we need
 # `X+1`. The effect of the `instantiate` tactic is to add an instance of the definition of
 # `sum` to the proof context, so in particular, it will be used by the default tactic.
-# Notice that we referred to the definiton of `sum` by the name
+# Notice that we referred to the definition of `sum` by the name
 # `sum`.  Alternatively, we can name the definition itself and refer
 # to it by this name.
 
@@ -1016,7 +1016,7 @@
 # ------------------------------
 
 # As the proof context gets larger, it becomes increasingly difficult
-# for the automated prover to handle all of the judgements we have
+# for the automated prover to handle all of the judgments we have
 # admitted. This is especially true as combining facts or theories may
 # take us outside the automated prover's decidable fragment. For this
 # reason, we need some way to break the proof into manageable parts.
@@ -1079,13 +1079,13 @@
     with t_theory
 
 # The 'with' clause says that the properties in `t_theory` should be
-# used by the default tactic within the isolate. In this case, the `transitivy` 
+# used by the default tactic within the isolate. In this case, the `transitivity` 
 # property will be used by default. This pattern is particularly useful when
 # we have a collection of properties of an abstract datatype that we wish to
 # use widely without explicitly instantiating them. 
 
 # Notice that the default tactic will not use the interpretation of *t* as the
-# integers and the definiton of *f* as the successor function, since
+# integers and the definition of *f* as the successor function, since
 # these are in the implementation section of isolate `t_theory` and are therefore
 # hidden from other isolates. Similarly, theorem `expanding` is not used by default
 # because it is a schema. This is as intended, since including any of these facts would
@@ -1139,7 +1139,7 @@
 # =============================
 
 # Thus far, proof developments have been presented in order. That is,
-# judgements occur in the file in the order in which they are admitted
+# judgments occur in the file in the order in which they are admitted
 # to the proof context.
 
 # In practice, this strict ordering can be inconvenient. For example,
