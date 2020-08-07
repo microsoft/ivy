@@ -101,8 +101,10 @@ be checked by Z3. This is a formula whose validity implies that the
 property is true in the current context. In this case, the
 verification condition is:
 
-  (forall X,Y. r(X,Y) -> r(Y,X)) -> (r(n,X) -> r(X,n))
+```
+    #-   (forall X,Y. r(X,Y) -> r(Y,X)) -> (r(n,X) -> r(X,n))
 
+```
 That is, it states that axiom `symmetry_r` implies property `myprop`. 
 IVy checks that this formula is within a logical fragment that Z3 can
 decide, then passes the formula to Z3. If Z3 finds that the formula is
@@ -131,7 +133,7 @@ without proof -- see "Recursion" below).
 Theory instantiations
 =====================
 
-IVy has built-in theories that can be instantated with a specific type
+IVy has built-in theories that can be instantiated with a specific type
 as their carrier. For example, the theory of integer arithmetic is
 called `int`. It has the signature `{+,-,*,/,<}`, plus the integer
 numerals, and provides the axioms of Peano arithmetic. To instantiate
@@ -174,7 +176,7 @@ The schema is contained in curly brackets and gives a list of premises
 following a conclusion. In this case, it says that, given types *d* and *r* and a function *f* from
 *d* to *r* and any values *X*,*Y* of type *d*,  we can infer that *X*=*Y* implies
 *f*(*X*) = *f*(*Y*). The dashes separating the premises from the conclusion are
-just a comment. The conclusion is always the last judgement in the schema.
+just a comment. The conclusion is always the last judgment in the schema.
 Also, notice the declaration of function *f* contains a variable *X*. The scope of this
 variable is only the function declaration. It has no relation to the variable *X* in the conclusion.
 
@@ -204,12 +206,14 @@ values for premises, that is, the types *d*,*r* and function *f*. It also choose
 the free variables *X*,*Y* occurring in the schema. In this case, it
 discovers the following assignment:
 
-d = t
-r = t
-X = Z
-Y = n
-f(N) = N + 1
+```
+    #- d = t
+    #- r = t
+    #- X = Z
+    #- Y = n
+    #- f(N) = N + 1
 
+```
 After plugging in this assignment, the conclusion of the rule exactly matches
 the property to be proved, so the property is admitted.
 
@@ -240,8 +244,8 @@ Forward proofs
 ==============
 
 In the normal way of writing proofs, we start from a set of premises,
-then procede to prove a sequence of facts (or lemmata), ending in a
-conclusion. Each fact must be seen to follow from thge preceding facts
+then proceed to prove a sequence of facts (or lemmata), ending in a
+conclusion. Each fact must be seen to follow from the preceding facts
 by applying a valid schema. 
 
 For example, consider the following axiom schema:
@@ -284,7 +288,7 @@ axiom `mortality_of_man` with `soc_man` as its premise.
 
 Ivy achieves this proof by *matching* the axiom `mortality_of_man`
 against the provided premise and conclusion. In this process, it
-discovers the substition `X = socrates`. Applying this substituton to
+discovers the substitution `X = socrates`. Applying this substitution to
 the axiom yields the deduction we wish to make.  However, if we wanted
 to be more explicit about the substitution, we could have written:
 
@@ -317,8 +321,10 @@ expressing the transitivity of equality:
 We don't need to provide a proof for this Ivy's default tactic using Z3 can handle it. 
 The verification condition that Ivy generates is:
 
-  X = Y & Y = Z -> X = Z
+```
+    #-   X = Y & Y = Z -> X = Z
 
+```
 Here is a theorem that lets us eliminate universal quantifiers:
 
 ```
@@ -353,11 +359,13 @@ The default tactic can't prove this because the premise contains a
 function cycle with a universally quantified variable. Here's the
 error message it gives:
 
-error: The verification condition is not in the fragment FAU.
+```
+    #- error: The verification condition is not in the fragment FAU.
+    #-
+    #- The following terms may generate an infinite sequence of instantiations:
+    #-   proving.ivy: line 331: f(f(X_h))
 
-The following terms may generate an infinite sequence of instantiations:
-  proving.ivy: line 331: f(f(X_h))
-
+```
 This means we'll need to apply some other tactic. Here is one possible proof:
 
 ```
@@ -378,36 +386,46 @@ The `elimA` theorem has a premise `forall X. p(X)`. Ivy matches has to find a su
 will match this formulas `idem`, the premise that we want to use, which is `forall X. f(f(X)) = f(X)`.
 It discovers the following substitution:
 
-t = t
-p(Y) = f(f(Y)) = f(Y)
+```
+    #- t = t
+    #- p(Y) = f(f(Y)) = f(Y)
 
+```
 Now Ivy tries to match the conclusion `p(X)` against the property `lem1` we are proving, which
 is `f(f(f(X))) = f(f(X))`. It first plugs in the above substitution, so `p(X)` becomes:
 
-f(f(X)) = f(X)
+```
+    #- f(f(X)) = f(X)
 
-Matching this with our goal `lem1`, it then gets this subtitution:
+```
+Matching this with our goal `lem1`, it then gets this substitution:
 
-X = f(X)
+```
+    #- X = f(X)
 
+```
 Plugging these substitutions into `elimA` as defined above, we obtain:
 
-theorem [elimA] {
-    property [prem] forall Y. f(f(Y)) = f(Y)
-    #--------------------------------
-    property f(f(f(X))) = f(f(X))
-}
+```
+    #- theorem [elimA] {
+    #-     property [prem] forall Y. f(f(Y)) = f(Y)
+    #-     #--------------------------------
+    #-     property f(f(f(X))) = f(f(X))
+    #- }
 
+```
 which is just the inference we want to make. This might give the impression that Ivy can
 magically arrive at the instantiation of a lemma needed to produce a desired inference.
 In general, however, this is a hard problem. If Ivy fails, we can still write out the
-full substituion manually, like this:
+full substitution manually, like this:
 
-property [lem1] f(f(f(X))) = f(f(X))
-proof {
-    apply elimA with t=t, p(Y) = f(f(Y)) = f(Y), X=f(X)
-}
+```
+    #- property [lem1] f(f(f(X))) = f(f(X))
+    #- proof {
+    #-     apply elimA with t=t, p(Y) = f(f(Y)) = f(Y), X=f(X)
+    #- }
 
+```
 The second step of our proof, deriving the fact `f(f(X) = f(X)` is a
 similar application of `idem`.  The final step uses transitivity,
 with our two lemmas as premises. In this case, we only have to
@@ -439,7 +457,7 @@ For example, here is a rule of natural deduction that is used to prove an implic
     }
 
 ```
-This rule says that, for any predicates *p* abnd *q*, if we can prove *q* from *p*, then
+This rule says that, for any predicates *p* and *q*, if we can prove *q* from *p*, then
 we can prove `p -> q`. The premise `lem` of this rule is itself a lemma, which we have to
 supply in order to use the rule.
 
@@ -486,7 +504,7 @@ fill it in. We'll use this rule for eliminating implications:
     }
 
 ```
-This rule says that, for any predicates *p* abnd *q*, if we can
+This rule says that, for any predicates *p* and *q*, if we can
 prove *p* and we can prove `p -> q`, then we can prove `q`.  You
 might also recognize the `elimImp` rule as *modus ponens*.
 
@@ -514,7 +532,7 @@ only one premise, since this was enough to determine the
 substitution for `p` in the rule.
 
 If we want to add more detail to the proof, we can can go another
-level deeper by adding proofs for `p2` and `p3`. We'll use thse two
+level deeper by adding proofs for `p2` and `p3`. We'll use these two
 additional rules for eliminating "and" operators:
 
 ```
@@ -565,7 +583,7 @@ Backward proof
 ==============
 
 An alternative way to construct a proof in Ivy is *backward chaining*.
-While it is perhaos most natural to use proof rules to work forward
+While it is perhaps most natural to use proof rules to work forward
 from premises to conclusions, it is equally possible to use the same
 rules to work backward from conclusions to premises.  When applying a
 rule, Ivy does not require that all premises of the rule be
@@ -585,9 +603,9 @@ of Socrates:
 
 
 ```
-When we apply `mortality_of_man` to prove `man(socrates)` we lack the
+When we apply `mortality_of_man` to prove `mortal(socrates)` we lack the
 necessary premise `man(socrates)`. Ivy is undeterred by this. It simply
-matches the conclusion `mortal(X)` to `mortal(socrates)`, instatiates
+matches the conclusion `mortal(X)` to `mortal(socrates)`, instantiates
 the axiom `mortality_of_man` and pushes the needed premise `man(socrates)`
 on the goal stack. We then discharge this goal using `soc_man`, leaving the
 goal stack empty. Each proof step is applied to the top goal on the stack. 
@@ -640,7 +658,7 @@ Here is one possible proof in the backward style:
 
 ```
 In fact, it is the same proof that we wrote in the forward style, but
-it is now both more succint and more difficult to understand. 
+it is now both more succinct and more difficult to understand. 
 
 As another example, here is our proof of theorem `mp` written in the
 backward style:
@@ -656,7 +674,7 @@ backward style:
     }
 
 ```
-Again, it is much more succint, but offers no intuition as to *why* the
+Again, it is much more succinct, but offers no intuition as to *why* the
 theorem is true. 
 
 When is a backward proof appropriate? One use case is when we wish to
@@ -665,21 +683,206 @@ the problem to Z3. In this situation, writing out the resulting formula
 as an explicit lemma is probably a waste of effort, since the formula is
 intended to be consumed by an automated tool rather than a human user. 
 
+Skolemization and instantiation
+===============================
+
+Quantifiers are the usual reason that a proof goal lies outside
+Ivy's decidable fragment. Usually, the fastest way to prove
+something that is not in the decidable fragment is to eliminate the
+quantifier that is causing the problem. This is possible with
+natural deduction, but sometimes very inconvenient. A better alternative is to
+use Skolemization and instantiation.
+
+Here is the idempotence lemma done in this style:
+
+```
+    theorem [idem4] {
+        type t
+        function f(W:t) : t
+        property [idem] forall Y. f(f(Y)) = f(Y)
+        #--------------------------------
+        property f(f(f(X))) = f(X)
+    }
+    proof {
+        instantiate idem with Y = X
+    }
+
+```
+Remember that when we tried to prove this before, Ivy complained the
+the term `f((Y))` put us outside the decidable fragment. This is
+because `Y` was universally quantified in the premise `idem`. In
+this proof, however, we use the `instantiate` tactic to plug in the
+value `X` for the universally quantified `Y` in `idem`. This is
+called *quantifier instantiation* and gives us the following proof
+goal:
+
+```
+    #- theorem [idem4] {
+    #-     type t
+    #-     function f(W:t) : t
+    #-     property [idem] f(f(X)) = f(X)
+    #-     #--------------------------------
+    #-     property f(f(f(X))) = f(X)
+    #- }
+
+```
+Without the quantifier, Z3 has no problem handling this proof goal.
+
+It turns out we can always handle purely first-order proof goals in
+this way, provided we apply a further tactic called
+`skolemize`. This tactic allows us to deal with alternations of quantifiers.
+
+Here is an example:
+
+
+```
+    theorem [sk1] {
+        type t
+        individual a : t
+        relation r(X:t,Y:t)
+        property [prem] forall X. exists Y. r(X,Y)
+        #---
+        property exists Z. r(a,Z)
+    }
+    proof {
+        tactic skolemize
+        instantiate prem with X=a
+        instantiate with Z = _Y(a)
+    }
+
+```
+The `skolemize` tactic replaces the existentially quantified `Y` in `prem`
+by a fresh function `_Y(X)`. Here is the resulting proof goal:
+
+```
+    #- theorem [sk1] {
+    #-     function _Y(V0:t) : t
+    #-     type t
+    #-     individual a : t
+    #-     relation r(V0:t,V1:t)
+    #-     property [prem] forall X. r(X,_Y(X))
+    #-     property exists Z. r(a,Z)
+    #- }
+
+```
+When `skolemize` is done, the premises have only universal
+quantifiers, and the conclusion has only existential quantifiers.
+Now, we can finish the proof by instantiating the universal in
+`prem` with `a`, giving `r(a,_Y(a))`, and then instantiating the
+existentially quantified `Z` in the conclusion with `_Y(a)` , which
+also gives `r(a,_Y(a))`. One way to describe the instantiation of
+the conclusion is that we have provided the term `_Y(a)` as a
+*witness* for the existential quantifier. Our final proof goal is
+trivial:
+
+```
+    #- theorem [sk1] {
+    #-     function _Y(V0:t) : t
+    #-     type t
+    #-     individual a : t
+    #-     relation r(V0:t,V1:t)
+    #-     property [prem] r(a,_Y(a))
+    #-     property r(a,_Y(a))
+    #- }
+
+```
+All of this wasn't really necessary, since the original theorem is
+in the decidable fragment.  However, the approach of Skolemization
+followed by selective instantiation of quantifiers can be a quick
+way to reduce a proof problem to a decidable one. First, we try to
+get Z3 to discharge the proof goal automatically. If Ivy complains
+about a quantified variable, we eliminate that variable by
+Skolemization and instantiation. If we guess the wrong instantiation,
+Ivy will give us a counterexample.
+
+Avoiding name clashes
+---------------------
+
+How does Skolemization work if there is more than one variable with
+the same name? As an example, suppose we have this axiom:
+
+```
+    relation s(X:t,Y:t)
+    axiom [prem] forall X. exists Y. s(X,Y)
+
+```
+We would like to prove this property:
+
+```
+    individual a : t
+    individual b : t
+    property [sk2] exists Z,W. s(a,Z) & s(b,W)
+
+```
+To prove this, we would like to use the axiom twice, once for `X=a`
+and once for `X=b`. So let's create two instances of it:
+
+```
+    proof {
+        instantiate [p1] prem with X=a
+        instantiate [p2] prem with X=b
+        tactic skolemize
+        showgoals
+    }
+
+```
+Notice we gave the two instances distinct names, `p1` and
+`p2`. After Skolemization, this is the proof goal we got:
+
+```
+    #- theorem [prop1] {
+    #-     individual _Y : t
+    #-     individual _Y_a : t
+    #-     property [p1] s(a,_Y)
+    #-     property [p2] s(b,_Y_a)
+    #-     property exists W,Z. s(a,Z) & s(b,W)
+    #- }
+
+```
+The Skolem symbol in `p2` was automatically given a fresh name
+`_Y_a` so as not to clash with the symbol `_Y` used in `p1`. Now we
+could witness the conclusion with `W=_Y` and `Z=_Y_a`. This is
+fragile, though, because changes to the proof might result in a name
+different from `_Y_a`. A better approach is to use *alpha renaming* to
+the two quantifiers different variable names. For example:
+
+```
+    property exists Z,W. s(a,Z) & s(b,W)
+    proof {
+        instantiate [p1] prem<Y1/Y> with X=a
+        instantiate [p2] prem<Y2/Y> with X=b
+        tactic skolemize
+        instantiate with Z=_Y1, W=_Y2
+    }
+
+```
+By renaming the bound variables in our two copies of the axiom to
+be `Y1` and `Y2`, we can make sure that the Skolem symbols have
+predictable names. Again, there was no need to use manual
+instantiation for this simple problem, but in more complex cases
+with nested quantifiers, this approach can make it possible to let Z3
+do most of the quantifier instantiation work by only instantiating
+the quantifiers that the fragment checker complains about.
+
+
+
 Recursion
 =========
 
 Recursive definitions are permitted in IVy by instantiating a
 *definitional schema*. As an example, consider the following axiom schema:
 
-axiom [rec[u]] {
-    type q
-    function base(X:u) : q
-    function step(X:q,Y:u) : q
-    fresh function fun(X:u) : q
-    #---------------------------------------------------------
-    definition fun(X:u) = base(X) if X <= 0 else step(fun(X-1),X)
-}
+```
+    #- axiom [rec[u]] {
+    #-     type q
+    #-     function base(X:u) : q
+    #-     function step(X:q,Y:u) : q
+    #-     fresh function fun(X:u) : q
+    #-     #---------------------------------------------------------
+    #-     definition fun(X:u) = base(X) if X <= 0 else step(fun(X-1),X)
+    #- }
 
+```
 This axiom was provided as part of the integer theory when we
 interpreted type *u* as `int`.  It gives a way to construct a fresh
 function `fun` from two functions:
@@ -712,10 +915,12 @@ we'll have to apply it explicitly,
 In order to admit this definition, we applied the definition
 schema `rec[u]`. Ivy infers the following substitution:
 
- q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
+```
+    #-  q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
+```
 This allows the recursive definition to be admitted, providing that
-`sum` is fresh in the current context (i.e., we have not previously refered to
+`sum` is fresh in the current context (i.e., we have not previously referred to
 `sum` except to declare its type).
 
 
@@ -738,19 +943,23 @@ In matching the recursion schema `rec[u]`, IVy will extend the
 function symbols in the premises of `rec[u]` with an extra parameter *N* so that
 schema becomes:
 
-axiom [rec[u]] = {
-    type q
-    function base(N:u,X:u) : q
-    function step(N:u,X:q,Y:u) : q
-    fresh function fun(N:u,X:u) : q
-    #---------------------------------------------------------
-    definition fun(N:u,X:u) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
-}
+```
+    #- axiom [rec[u]] = {
+    #-     type q
+    #-     function base(N:u,X:u) : q
+    #-     function step(N:u,X:q,Y:u) : q
+    #-     fresh function fun(N:u,X:u) : q
+    #-     #---------------------------------------------------------
+    #-     definition fun(N:u,X:u) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
+    #- }
 
+```
 The extended schema matches the definition, with the following assignment:
 
-q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
+```
+    #- q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
 
+```
 This is somewhat as if the functions were "curried", in which case the
 free symbol `fun` would match the partially applied term `sumdiv N`.
 Since Ivy's logic doesn't allow for partial application of functions,
@@ -809,16 +1018,18 @@ We can prove this by applying our induction schema. Here is a backward version o
 ```
 Applying `ind[u]` produces two sub-goals, a base case and an induction step:
 
-theorem [base] {
-   individual x:u
-   property x <= 0 -> sum(x) >= x
-}
+```
+    #- theorem [base] {
+    #-    individual x:u
+    #-    property x <= 0 -> sum(x) >= x
+    #- }
 
-theorem [step] {
-    individual x:u
-    property [step] sum(x) >= x -> sum(x+1) >= x + 1
-}
+    #- theorem [step] {
+    #-     individual x:u
+    #-     property [step] sum(x) >= x -> sum(x+1) >= x + 1
+    #- }
 
+```
 The default tactic can't prove these goals because the definition of
 `sum` is a schema that must explicitly instantiated. Fortunately, it
 suffices to instantiate this schema just for the specific arguments
@@ -826,24 +1037,26 @@ of `sum` in our subgoals. For the base case, we need to instantiate
 the definition for `X`, while for the induction step, we need
 `X+1`. The effect of the `instantiate` tactic is to add an instance of the definition of
 `sum` to the proof context, so in particular, it will be used by the default tactic.
-Notice that we referred to the definiton of `sum` by the name
+Notice that we referred to the definition of `sum` by the name
 `sum`.  Alternatively, we can name the definition itself and refer
 to it by this name.
 
 After instantiating the definition of `sum`, our two subgoals look like this:
 
-theorem [prop5] {
-    property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
-    property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
-}
+```
+    #- theorem [prop5] {
+    #-     property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
+    #-     property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
+    #- }
 
 
-theorem [prop4] {
-    property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
-    property Y:u <= 0 -> sum(Y) >= Y
-}
+    #- theorem [prop4] {
+    #-     property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
+    #-     property Y:u <= 0 -> sum(Y) >= Y
+    #- }
 
 
+```
 Because these goals are quantifier-free the default tactic can easily
 handle them, so our proof is complete.
 
@@ -897,8 +1110,8 @@ inside a proof, like this:
     }
 
 
-
 ```
+
 Naming
 ======
 
@@ -926,7 +1139,7 @@ Hierarchical proof development
 ------------------------------
 
 As the proof context gets larger, it becomes increasingly difficult
-for the automated prover to handle all of the judgements we have
+for the automated prover to handle all of the judgments we have
 admitted. This is especially true as combining facts or theories may
 take us outside the automated prover's decidable fragment. For this
 reason, we need some way to break the proof into manageable parts.
@@ -993,13 +1206,13 @@ Now suppose we want to prove an extra property using `t_theory`:
 
 ```
 The 'with' clause says that the properties in `t_theory` should be
-used by the default tactic within the isolate. In this case, the `transitivy` 
+used by the default tactic within the isolate. In this case, the `transitivity` 
 property will be used by default. This pattern is particularly useful when
 we have a collection of properties of an abstract datatype that we wish to
 use widely without explicitly instantiating them. 
 
 Notice that the default tactic will not use the interpretation of *t* as the
-integers and the definiton of *f* as the successor function, since
+integers and the definition of *f* as the successor function, since
 these are in the implementation section of isolate `t_theory` and are therefore
 hidden from other isolates. Similarly, theorem `expanding` is not used by default
 because it is a schema. This is as intended, since including any of these facts would
@@ -1055,7 +1268,7 @@ Proof ordering and refinement
 =============================
 
 Thus far, proof developments have been presented in order. That is,
-judgements occur in the file in the order in which they are admitted
+judgments occur in the file in the order in which they are admitted
 to the proof context.
 
 In practice, this strict ordering can be inconvenient. For example,

@@ -92,7 +92,7 @@
 # property is true in the current context. In this case, the
 # verification condition is:
 
-    #   (forall X,Y. r(X,Y) -> r(Y,X)) -> (r(n,X) -> r(X,n))
+    #-   (forall X,Y. r(X,Y) -> r(Y,X)) -> (r(n,X) -> r(X,n))
 
 # That is, it states that axiom `symmetry_r` implies property `myprop`. 
 # IVy checks that this formula is within a logical fragment that Z3 can
@@ -187,11 +187,11 @@
 # the free variables *X*,*Y* occurring in the schema. In this case, it
 # discovers the following assignment:
 
-    # d = t
-    # r = t
-    # X = Z
-    # Y = n
-    # f(N) = N + 1
+    #- d = t
+    #- r = t
+    #- X = Z
+    #- Y = n
+    #- f(N) = N + 1
 
 # After plugging in this assignment, the conclusion of the rule exactly matches
 # the property to be proved, so the property is admitted.
@@ -290,7 +290,7 @@
 # We don't need to provide a proof for this Ivy's default tactic using Z3 can handle it. 
 # The verification condition that Ivy generates is:
 
-    #   X = Y & Y = Z -> X = Z
+    #-   X = Y & Y = Z -> X = Z
 
 # Here is a theorem that lets us eliminate universal quantifiers:
 
@@ -322,10 +322,10 @@
 # function cycle with a universally quantified variable. Here's the
 # error message it gives:
 
-    # error: The verification condition is not in the fragment FAU.
-    #
-    # The following terms may generate an infinite sequence of instantiations:
-    #   proving.ivy: line 331: f(f(X_h))
+    #- error: The verification condition is not in the fragment FAU.
+    #-
+    #- The following terms may generate an infinite sequence of instantiations:
+    #-   proving.ivy: line 331: f(f(X_h))
 
 # This means we'll need to apply some other tactic. Here is one possible proof:
 
@@ -345,35 +345,35 @@
 # will match this formulas `idem`, the premise that we want to use, which is `forall X. f(f(X)) = f(X)`.
 # It discovers the following substitution:
 
-    # t = t
-    # p(Y) = f(f(Y)) = f(Y)
+    #- t = t
+    #- p(Y) = f(f(Y)) = f(Y)
     
 # Now Ivy tries to match the conclusion `p(X)` against the property `lem1` we are proving, which
 # is `f(f(f(X))) = f(f(X))`. It first plugs in the above substitution, so `p(X)` becomes:
 
-    # f(f(X)) = f(X)
+    #- f(f(X)) = f(X)
     
 # Matching this with our goal `lem1`, it then gets this substitution:
 
-    # X = f(X)
+    #- X = f(X)
     
 # Plugging these substitutions into `elimA` as defined above, we obtain:
 
-    # theorem [elimA] {
-    #     property [prem] forall Y. f(f(Y)) = f(Y)
-    #     #--------------------------------
-    #     property f(f(f(X))) = f(f(X))
-    # }
+    #- theorem [elimA] {
+    #-     property [prem] forall Y. f(f(Y)) = f(Y)
+    #-     #--------------------------------
+    #-     property f(f(f(X))) = f(f(X))
+    #- }
 
 # which is just the inference we want to make. This might give the impression that Ivy can
 # magically arrive at the instantiation of a lemma needed to produce a desired inference.
 # In general, however, this is a hard problem. If Ivy fails, we can still write out the
 # full substitution manually, like this:
 
-    # property [lem1] f(f(f(X))) = f(f(X))
-    # proof {
-    #     apply elimA with t=t, p(Y) = f(f(Y)) = f(Y), X=f(X)
-    # }
+    #- property [lem1] f(f(f(X))) = f(f(X))
+    #- proof {
+    #-     apply elimA with t=t, p(Y) = f(f(Y)) = f(Y), X=f(X)
+    #- }
 
 # The second step of our proof, deriving the fact `f(f(X) = f(X)` is a
 # similar application of `idem`.  The final step uses transitivity,
@@ -639,13 +639,13 @@
 # called *quantifier instantiation* and gives us the following proof
 # goal:
 
-    # theorem [idem4] {
-    #     type t
-    #     function f(W:t) : t
-    #     property [idem] f(f(X)) = f(X)
-    #     #--------------------------------
-    #     property f(f(f(X))) = f(X)
-    # }
+    #- theorem [idem4] {
+    #-     type t
+    #-     function f(W:t) : t
+    #-     property [idem] f(f(X)) = f(X)
+    #-     #--------------------------------
+    #-     property f(f(f(X))) = f(X)
+    #- }
 
 # Without the quantifier, Z3 has no problem handling this proof goal.
 
@@ -673,14 +673,14 @@
 # The `skolemize` tactic replaces the existentially quantified `Y` in `prem`
 # by a fresh function `_Y(X)`. Here is the resulting proof goal:
 
-    # theorem [sk1] {
-    #     function _Y(V0:t) : t
-    #     type t
-    #     individual a : t
-    #     relation r(V0:t,V1:t)
-    #     property [prem] forall X. r(X,_Y(X))
-    #     property exists Z. r(a,Z)
-    # }
+    #- theorem [sk1] {
+    #-     function _Y(V0:t) : t
+    #-     type t
+    #-     individual a : t
+    #-     relation r(V0:t,V1:t)
+    #-     property [prem] forall X. r(X,_Y(X))
+    #-     property exists Z. r(a,Z)
+    #- }
 
 # When `skolemize` is done, the premises have only universal
 # quantifiers, and the conclusion has only existential quantifiers.
@@ -689,17 +689,17 @@
 # existentially quantified `Z` in the conclusion with `_Y(a)` , which
 # also gives `r(a,_Y(a))`. One way to describe the instantiation of
 # the conclusion is that we have provided the term `_Y(a)` as a
-# *witness` for the existential quantifier. Our final proof goal is
+# *witness* for the existential quantifier. Our final proof goal is
 # trivial:
 
-    # theorem [sk1] {
-    #     function _Y(V0:t) : t
-    #     type t
-    #     individual a : t
-    #     relation r(V0:t,V1:t)
-    #     property [prem] r(a,_Y(a))
-    #     property r(a,_Y(a))
-    # }
+    #- theorem [sk1] {
+    #-     function _Y(V0:t) : t
+    #-     type t
+    #-     individual a : t
+    #-     relation r(V0:t,V1:t)
+    #-     property [prem] r(a,_Y(a))
+    #-     property r(a,_Y(a))
+    #- }
 
 # All of this wasn't really necessary, since the original theorem is
 # in the decidable fragment.  However, the approach of Skolemization
@@ -738,13 +738,13 @@
 # Notice we gave the two instances distinct names, `p1` and
 # `p2`. After Skolemization, this is the proof goal we got:
 
-    # theorem [prop1] {
-    #     individual _Y : t
-    #     individual _Y_a : t
-    #     property [p1] s(a,_Y)
-    #     property [p2] s(b,_Y_a)
-    #     property exists W,Z. s(a,Z) & s(b,W)
-    # }
+    #- theorem [prop1] {
+    #-     individual _Y : t
+    #-     individual _Y_a : t
+    #-     property [p1] s(a,_Y)
+    #-     property [p2] s(b,_Y_a)
+    #-     property exists W,Z. s(a,Z) & s(b,W)
+    #- }
 
 # The Skolem symbol in `p2` was automatically given a fresh name
 # `_Y_a` so as not to clash with the symbol `_Y` used in `p1`. Now we
@@ -777,14 +777,14 @@
 # Recursive definitions are permitted in IVy by instantiating a
 # *definitional schema*. As an example, consider the following axiom schema:
 
-    # axiom [rec[u]] {
-    #     type q
-    #     function base(X:u) : q
-    #     function step(X:q,Y:u) : q
-    #     fresh function fun(X:u) : q
-    #     #---------------------------------------------------------
-    #     definition fun(X:u) = base(X) if X <= 0 else step(fun(X-1),X)
-    # }
+    #- axiom [rec[u]] {
+    #-     type q
+    #-     function base(X:u) : q
+    #-     function step(X:q,Y:u) : q
+    #-     fresh function fun(X:u) : q
+    #-     #---------------------------------------------------------
+    #-     definition fun(X:u) = base(X) if X <= 0 else step(fun(X-1),X)
+    #- }
 
 # This axiom was provided as part of the integer theory when we
 # interpreted type *u* as `int`.  It gives a way to construct a fresh
@@ -816,7 +816,7 @@
 # In order to admit this definition, we applied the definition
 # schema `rec[u]`. Ivy infers the following substitution:
 
-    #  q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
+    #-  q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
 # This allows the recursive definition to be admitted, providing that
 # `sum` is fresh in the current context (i.e., we have not previously referred to
@@ -840,18 +840,18 @@
 # function symbols in the premises of `rec[u]` with an extra parameter *N* so that
 # schema becomes:
 
-    # axiom [rec[u]] = {
-    #     type q
-    #     function base(N:u,X:u) : q
-    #     function step(N:u,X:q,Y:u) : q
-    #     fresh function fun(N:u,X:u) : q
-    #     #---------------------------------------------------------
-    #     definition fun(N:u,X:u) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
-    # }
+    #- axiom [rec[u]] = {
+    #-     type q
+    #-     function base(N:u,X:u) : q
+    #-     function step(N:u,X:q,Y:u) : q
+    #-     fresh function fun(N:u,X:u) : q
+    #-     #---------------------------------------------------------
+    #-     definition fun(N:u,X:u) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
+    #- }
 
 # The extended schema matches the definition, with the following assignment:
 
-    # q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
+    #- q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
     
 # This is somewhat as if the functions were "curried", in which case the
 # free symbol `fun` would match the partially applied term `sumdiv N`.
@@ -905,15 +905,15 @@
 
 # Applying `ind[u]` produces two sub-goals, a base case and an induction step:
 
-    # theorem [base] {
-    #    individual x:u
-    #    property x <= 0 -> sum(x) >= x
-    # }
+    #- theorem [base] {
+    #-    individual x:u
+    #-    property x <= 0 -> sum(x) >= x
+    #- }
 
-    # theorem [step] {
-    #     individual x:u
-    #     property [step] sum(x) >= x -> sum(x+1) >= x + 1
-    # }
+    #- theorem [step] {
+    #-     individual x:u
+    #-     property [step] sum(x) >= x -> sum(x+1) >= x + 1
+    #- }
 
 # The default tactic can't prove these goals because the definition of
 # `sum` is a schema that must explicitly instantiated. Fortunately, it
@@ -928,16 +928,16 @@
 
 # After instantiating the definition of `sum`, our two subgoals look like this:
 
-    # theorem [prop5] {
-    #     property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
-    #     property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
-    # }
+    #- theorem [prop5] {
+    #-     property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
+    #-     property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
+    #- }
 
 
-    # theorem [prop4] {
-    #     property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
-    #     property Y:u <= 0 -> sum(Y) >= Y
-    # }
+    #- theorem [prop4] {
+    #-     property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
+    #-     property Y:u <= 0 -> sum(Y) >= Y
+    #- }
 
 
 # Because these goals are quantifier-free the default tactic can easily
@@ -990,7 +990,7 @@
     }
 
 
-
+#
 # Naming
 # ======
 
