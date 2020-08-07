@@ -3285,6 +3285,8 @@ def emit_constant(self,header,code):
         if is_native_sym(self):
             code.append('__lit<'+varname(self.sort)+'>(' + self.name + ')')
             return
+        if has_string_interp(self.sort) and self.name[0] != '"' :
+            raise iu.IvyError(None,'Cannot compile numeral {} of string sort {}'.format(self,self.sort))
         if self.sort.name in im.module.sort_destructors:
             raise iu.IvyError(None,"cannot compile symbol {} of sort {}".format(self.name,self.sort))
         if self.sort.name in il.sig.interp and il.sig.interp[self.sort.name].startswith('bv['):

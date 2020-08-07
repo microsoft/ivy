@@ -40,7 +40,7 @@ module verb_base = {
     object verb = {
         type this =
         {
-            none, arrow, plus, times, colon, app, empty, dot, new, numeral, castv,
+            none, arrow, plus, times, colon, app, empty, dot, new, numeral, fltnum, castv,
 	    boolv, truev, falsev, and, or, not, iff, equals, notequals,
             lt, leq, gt, geq, minus, div, string, ite, comma, varv, logvar, isav
         }
@@ -54,6 +54,7 @@ module verb_base = {
     after init {
 #        str_to_verb(X) := verb.none;
         verb_to_arity(verb.numeral) := 0;
+        verb_to_arity(verb.fltnum) := 0;
         verb_to_arity(verb.string) := 0;
         verb_to_arity(verb.logvar) := 0;
     }
@@ -78,7 +79,14 @@ module verb_base = {
     
     action verb_from_name(name:str) returns(vrb:verb) = {
         if name.value(0).is_digit {
-            vrb := verb.numeral
+            vrb := verb.numeral;
+            var idx := name.begin;
+            while idx < name.end {
+                if name.value(idx) = 46 {
+                    vrb := verb.fltnum;
+                };
+                idx := idx.next;
+            }
         } else if name.value(0) = 34 {  # double quote character
             vrb := verb.string
         } else if is_logvar_name(name) {

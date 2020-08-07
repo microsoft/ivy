@@ -276,6 +276,22 @@ if __name__ == '__main__':
     assert free_variables(f.body) == {X2}
     assert free_variables(f.body, by_name=True) == {'X'}
 
+class pushable_map(object):
+    def __init__(self):
+        self.stack = []
+        self.map = dict()
+    def push(self,key,val):
+        self.stack.append((key,self.map.get(key,None)))
+        self.map[key] = val
+    def pop(self):
+        key,val = self.stack.pop()
+        if val is None:
+            del self.map[key]
+        else:
+            self.map[key] = val
+    def get(self,key,default=None):
+        return self.map.get(key,default)
+
 def equal_mod_alpha(t,u):
     """ Returns True if t is syntactially equal to u modulo alpha
     conversion """
@@ -285,13 +301,13 @@ def equal_mod_alpha(t,u):
         if type(t) in (ForAll, Exists, Lambda, NamedBinder) and type(t) is type(u):
             if len(t.variables) == len(u.variables):
                 for v1,v2 in zip(t.variables,u.variables):
-                    m1[v1] = n
-                    m2[v2] = n
+                    m1.push(v1,n)
+                    m2.push(v2,n)
                     n += 1
                 res = rec(t.body,u.body,m1,m2,n)
                 for v1,v2 in zip(t.variables,u.variables):
-                    del m1[v1]
-                    del m2[v2]
+                    m1.pop()
+                    m2.pop()
                 return res
         if type(t) is Apply and type(u) is Apply and t.func == u.func and len(t.terms) == len(u.terms):
             return all(rec(v,w,m1,m2,n) for v,w in zip(t.terms,u.terms))
@@ -300,7 +316,7 @@ def equal_mod_alpha(t,u):
         if type(t) in (Apply, Eq, Ite, Not, And, Or, Implies, Iff) and type(u) is type(t):
             return len(t) == len(u) and all(rec(v,w,m1,m2,n) for v,w in zip(tuple(t),tuple(u)))
         return False
-    return rec(t,u,dict(),dict(),0)
+    return rec(t,u,pushable_map(),pushable_map(),0)
 
                     
             

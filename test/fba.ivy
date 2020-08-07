@@ -1,0 +1,206 @@
+#lang ivy1.7
+
+include deduction
+
+# Theory of powersets of a type `t`.
+
+module set(t) = {
+    type this
+    relation mem(E:t,S:this)
+
+    # Axiom of comprehension
+
+    axiom [comp] {
+        relation p(X:t)
+        property exists S. forall E. mem(E,S) <-> p(E)
+    }
+
+    # Axiom of extensionality (not used here)
+
+    axiom [exten] {
+        property forall E. mem(E,S) <-> mem(E,T)
+        property S:this = T
+    }
+
+    # The following axioms of empty set and full set are actually
+    # provable from the above.
+
+    individual empty : this
+    axiom forall E. ~mem(E,empty)
+
+    individual full : this
+    axiom forall E. mem(E,full)
+
+}
+
+type node
+
+instance nset : set(node)
+instance nsetset : set(nset)
+
+function slices(N:node) : nsetset
+relation well(N:node)
+
+# We change the definition of `quorum` a bit here. That is, `quorum(Q,I)`
+# means that `Q` is a quorum of the projection onto `I`.
+
+#
+# Also, here and in the sequel, we expand `mem(x,union(s,t))` into
+# `mem(x,s) | mem(x,t)`  and so forth. This way we don't have to deal with the
+# `union` and `intersection` function, which create funciton cycles. The necessary
+# rewriting to eliminate these would be painful in Ivy.
+
+function quorum(Q:nset,I:nset) : bool
+
+definition {
+    quorum(Q:nset,I:nset) = 
+    forall P. nset.mem(P,Q) & well(P) ->
+          exists Sl. nsetset.mem(Sl,slices(P))
+              & forall X. nset.mem(X,Sl) & nset.mem(X,I) -> nset.mem(X,Q)
+}
+
+# Another inconvenience: We need to break the 'if and only if' in the above
+# definition into an 'if ' and an 'only if'. This is because Ivy can't Skolemize
+# inside an 'iff'.
+
+explicit property [quorum_fwd] 
+    quorum(Q,I) -> forall N. (
+    nset.mem(N,Q) & well(N) ->
+        exists Sl. nsetset.mem(Sl,slices(N))
+          & forall X. nset.mem(X,Sl) & nset.mem(X,I) -> nset.mem(X,Q))
+proof {
+    apply introImp
+    apply elimIffFwd with prem1 = prem
+    apply quorum
+}
+    
+explicit property [quorum_rev] 
+    (forall N. 
+         nset.mem(N,Q) & well(N) ->
+            exists Sl. nsetset.mem(Sl,slices(N))
+                & forall X. nset.mem(X,Sl) & nset.mem(X,I) -> nset.mem(X,Q))
+        -> quorum(Q,I)
+proof {
+    apply introImp
+    apply elimIffRev with prem1 = prem
+    apply quorum
+}
+    
+# Now here are our theorems. In the proof of each theorem, we have to
+# instantiate the definition of 'quorum' manually, since it has a
+# quantifier alternation from `node` to `nset`, which creates a
+# function cycle. Notice these proofs are quite compact, but all
+# of the intuition is gone.
+#
+# Also, notice the the comprehension axiom schema used only once. This
+# is the only instance of use of a higher-order formula. The use of
+# the `nset.comp` axiom below is equivalent to saying 'let `S = inta - s`'.
+#
+
+theorem [blocking_safe] {
+    individual inta : nset
+    property [intact_wb] forall X. nset.mem(X,inta) -> well(X)
+    property [q_avail] quorum(inta,nset.full)
+    individual s : nset
+    individual n : node
+    property nset.mem(n,inta)
+    property forall Sl. nsetset.mem(Sl,slices(n)) -> exists X. nset.mem(X,Sl) & nset.mem(X,s)
+    property exists X. nset.mem(X,s) & nset.mem(X,inta)
+}
+proof {
+    instantiate quorum_fwd with Q=inta, I=nset.full, N=n
+}
+
+theorem [cascade] {
+    individual inta : nset
+    property [q_inter] forall Q1,Q2. quorum(Q1,inta) & quorum(Q2,inta)
+           & (exists X. nset.mem(X,Q1) & nset.mem(X,inta))
+           & (exists X. nset.mem(X,Q2) & nset.mem(X,inta))
+           -> (exists X. nset.mem(X,Q1) & nset.mem(X,Q2) & nset.mem(X,inta))
+    individual u : nset
+    individual s : nset
+    property quorum(u,nset.full)
+    property exists X. nset.mem(X,u) & nset.mem(X,inta)
+    property forall X. nset.mem(X,u) -> nset.mem(X,s)
+    property
+    (forall X. nset.mem(X,inta) -> nset.mem(X,s))
+    | exists N. nset.mem(N,inta) & ~nset.mem(N,s) &
+        forall Sl. nsetset.mem(Sl,slices(N)) ->
+          exists X. nset.mem(X,Sl) & nset.mem(X,s) & nset.mem(X,inta) 
+}
+proof {
+    instantiate nset.comp with p(E) = (nset.mem(E,inta) & ~nset.mem(E,s))
+    tactic skolemize
+    instance [qr1] quorum_rev with Q=u,I=inta
+    instance [qr2] quorum_rev<N2/N> with Q=_S,I=inta
+    tactic skolemize
+    instantiate with N=_N2
+    instantiate quorum_fwd with Q=u,I=nset.full,N=_N
+}
+
+
+theorem [union_quorum] {
+    individual i1 : nset
+    individual i2 : nset
+    property [intact_wb1] forall X. nset.mem(X,i1) -> well(X)
+    property [q_avail1] quorum(i1,nset.full)
+    property [q_inter1] forall Q1,Q2. quorum(Q1,i1) & quorum(Q2,i1)
+           & (exists X. nset.mem(X,Q1) & nset.mem(X,i1))
+           & (exists X. nset.mem(X,Q2) & nset.mem(X,i1))
+           -> (exists X. nset.mem(X,Q1) & nset.mem(X,Q2) & nset.mem(X,i1))
+    property [intact_wb2] forall X. nset.mem(X,i2) -> well(X)
+    property [q_avail2] quorum(i2,nset.full)
+    property [q_inter2] forall Q1,Q2. quorum(Q1,i2) & quorum(Q2,i2)
+           & (exists X. nset.mem(X,Q1) & nset.mem(X,i2))
+           & (exists X. nset.mem(X,Q2) & nset.mem(X,i2))
+           -> (exists X. nset.mem(X,Q1) & nset.mem(X,Q2) & nset.mem(X,i2))
+    individual u : nset
+    property forall X. nset.mem(X,u) <-> (nset.mem(X,i1) | nset.mem(X,i2))
+    property quorum(u,nset.full)
+}
+proof {
+    instantiate quorum_rev with Q=u, I=nset.full
+    tactic skolemize
+    instantiate [qf1] quorum_fwd with Q=i1,I=nset.full,N=_N
+    instantiate [qf2] quorum_fwd with Q=i2,I=nset.full,N=_N
+}
+
+theorem [union_quorum_intersection] {
+    individual i1 : nset
+    individual i2 : nset
+    property exists M4. nset.mem(M4,i1) & nset.mem(M4,i2)
+    property [intact_wb1] forall X. nset.mem(X,i1) -> well(X)
+    property [q_avail1] quorum(i1,nset.full)
+    property [q_inter1] forall Q1,Q2. quorum(Q1,i1) & quorum(Q2,i1)
+           & (exists X. nset.mem(X,Q1) & nset.mem(X,i1))
+           & (exists X. nset.mem(X,Q2) & nset.mem(X,i1))
+           -> (exists X. nset.mem(X,Q1) & nset.mem(X,Q2) & nset.mem(X,i1))
+    property [intact_wb2] forall X. nset.mem(X,i2) -> well(X)
+    property [q_avail2] quorum(i2,nset.full)
+    property [q_inter2] forall Q1,Q2. quorum(Q1,i2) & quorum(Q2,i2)
+           & (exists X. nset.mem(X,Q1) & nset.mem(X,i2))
+           & (exists X. nset.mem(X,Q2) & nset.mem(X,i2))
+           -> (exists X. nset.mem(X,Q1) & nset.mem(X,Q2) & nset.mem(X,i2))
+    individual u : nset
+    property forall X. nset.mem(X,u) <-> (nset.mem(X,i1) | nset.mem(X,i2))
+    individual q1 : nset
+    individual q2 : nset
+    property quorum(q1,u)
+    property quorum(q2,u)
+    property exists X. nset.mem(X,q1) & nset.mem(X,u)
+    property exists X. nset.mem(X,q2) & nset.mem(X,u)
+    property exists X. nset.mem(X,q1) & nset.mem(X,q2) & nset.mem(X,u)
+}
+proof {
+    instantiate [qr1] quorum_rev<N1/N> with Q=q1, I=i1
+    instantiate [qr2] quorum_rev<N2/N> with Q=q1, I=i2
+    instantiate [qr3] quorum_rev<N3/N> with Q=q2, I=i1
+    instantiate [qr4] quorum_rev<N4/N> with Q=q2, I=i2
+    instantiate quorum_rev with Q=i2, I=i1
+    tactic skolemize
+    instantiate [qf1] quorum_fwd with Q=q1,I=u,N=_N1
+    instantiate [qf2] quorum_fwd with Q=q1,I=u,N=_N2
+    instantiate [qf3] quorum_fwd with Q=q2,I=u,N=_N3
+    instantiate [qf4] quorum_fwd with Q=q2,I=u,N=_N4
+    instantiate quorum_fwd with Q=i2,I=nset.full,N=_N
+}

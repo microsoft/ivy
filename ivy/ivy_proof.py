@@ -460,10 +460,7 @@ def goal_add_prem(goal,prem,lineno):
     
 
 def goal_remove_prem(goal,prem_name):
-    print 'goal = {}'.format(goal)
-    print 'prem_name = {}'.format(prem_name)
     goal = clone_goal(goal,[x for x in goal_prems(goal) if x.name != prem_name],goal_conc(goal))
-    print 'goal = {}'.format(goal)
     return goal
 
 # Add a premise to a goal
@@ -828,6 +825,8 @@ def compile_one_match(lhs,rhs,freesyms,constants):
         lhs = apply_match_alt(vmatch,lhs)
         newfreesyms = apply_match_freesyms(vmatch,freesyms)
         somatch = match(lhs,rhs,newfreesyms,constants)
+        if somatch is None:
+            return None
         somatch = compose_matches(freesyms,vmatch,somatch,vmatch)
         fmatch = merge_matches(vmatch,somatch)
         return fmatch

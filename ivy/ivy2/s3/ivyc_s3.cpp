@@ -406,6 +406,15 @@ namespace ivy
     }
     
 }
+namespace ivy
+{
+    namespace pragmast
+    {
+        struct __t;
+        
+    }
+    
+}
 namespace vector__ivy__decl
 {
     namespace domain
@@ -1781,7 +1790,11 @@ namespace __char
         
         __bool is_digit () const;
         
+        __bool is_hex () const;
+        
         __bool is_capital () const;
+        
+        __char::__t downcase () const;
         
          __t () {}
          __t  (long long value) : ivy::native_int< char > (value) {}
@@ -2607,6 +2620,7 @@ namespace pstate
 // - A singleton characeter in the bracket set
 // - A maximal sequence of characters in the alphanumeric set
 // - A maximal sequence of characters in the punctuation set
+// - A numeric literal
 // - A string literal
 //
 // Tokens may be separated by whitespace, which consists of space,
@@ -2629,6 +2643,25 @@ void skip_space  (pstate::__t &st);
 void get_line  (pstate::__t &st,str::__t &line);
 void get_annot  (pstate::__t &st);
 void read_string_literal  (pstate::__t &st);
+namespace decimals
+{
+    void read  (pstate::__t &st);
+    
+}
+namespace hexes
+{
+    void read  (pstate::__t &st);
+    
+}
+// Parsing numeric literals. A numeric literal has one of these
+// forms:
+//
+// - [0..9]+{\.[0..9]+{[eE]{[+-]}[0..9]+}}
+// - 0[xX][0-9A-Fa-f]+ 
+//
+// That is, we allow the usual formats for non-negative integers,
+// and floating point numbers, including hex integers. 
+void read_numeric_literal  (pstate::__t &st);
 void lex  (pstate::__t &st);
 namespace pos
 {
@@ -2679,7 +2712,7 @@ namespace ivy
     namespace verb
     {
         
-        enum __enum___t  {none,arrow,plus,times,colon,app,empty,dot,__new,numeral,castv,boolv,truev,falsev,__and,__or,__not,iff,equals,notequals,lt,leq,gt,geq,minus,div,string,ite,comma,varv,logvar,isav};
+        enum __enum___t  {none,arrow,plus,times,colon,app,empty,dot,__new,numeral,fltnum,castv,boolv,truev,falsev,__and,__or,__not,iff,equals,notequals,lt,leq,gt,geq,minus,div,string,ite,comma,varv,logvar,isav};
         
         struct __t : ivy::native_enum< __enum___t >
         {
@@ -5574,6 +5607,77 @@ namespace ivy
     }
     
 }
+namespace ivy
+{
+    namespace pragmast
+    {
+        struct __t : ivy::stmt::__t
+        {
+            ivy::ptr< ivy::expr::__t > prg;
+            
+            ivy::ptr< annot::__t > ann;
+            
+            void encode  (pretty::__t &b,const priority::__t &prio) const;
+            
+            void encode_int  (pretty::__t &b,const priority::__t &prio) const;
+            
+            ivy::ptr< ivy::expr::__t > get_expr () const;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return prg == other . prg & ann == other . ann;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return prg . __is_zero() & ann . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::ptr< ivy::expr::__t >::__hash() (x . prg) +
+                        ivy::ptr< annot::__t >::__hash() (x . ann);
+                }
+            };
+            
+            virtual ivy::ptr< ivy::stmt::__t > __upcast () const {
+                return (*this);
+            }
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace pragmast
+    {
+        ivy::ptr< ivy::stmt::__t > make  (const ivy::ptr< ivy::expr::__t > &prg,const ivy::ptr< annot::__t >
+            &ann);
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace stmt
+    {
+        void parse_stmt_term  (pstate::__t &st);
+        
+    }
+    
+}
+// allow to omit final semicolon
 namespace ivy
 {
     namespace stmt
@@ -10073,7 +10177,7 @@ namespace cpp
     namespace verb
     {
         
-        enum __enum___t  {none,arrow,plus,times,colon,app,empty,dot,__new,numeral,castv,boolv,truev,falsev,__and,__or,__not,iff,equals,notequals,lt,leq,gt,geq,minus,div,string,ite,comma,varv,logvar,isav};
+        enum __enum___t  {none,arrow,plus,times,colon,app,empty,dot,__new,numeral,fltnum,castv,boolv,truev,falsev,__and,__or,__not,iff,equals,notequals,lt,leq,gt,geq,minus,div,string,ite,comma,varv,logvar,isav};
         
         struct __t : ivy::native_enum< __enum___t >
         {
@@ -14904,6 +15008,11 @@ namespace ivy
             
             ivy::ptr< annot::__t > asgn_ann;
             
+            
+            // Depth of nesting of "inbounds" pragma
+            
+            pos::__t inbounds_nesting;
+            
             void add_member  (const ivy::ptr< ivy::ident::__t > &namesp,const ivy::ptr< ivy::decl::__t >
                 &member);
             
@@ -14941,7 +15050,8 @@ namespace ivy
                     == other . dot_rhs & conflicts == other . conflicts & borrowings == other .
                     borrowings & num_borrowings == other . num_borrowings & fix_borrow_map == other
                     . fix_borrow_map & cond_nesting == other . cond_nesting & loop_nesting == other
-                    . loop_nesting & asgn_ann == other . asgn_ann;
+                    . loop_nesting & asgn_ann == other . asgn_ann & inbounds_nesting == other .
+                    inbounds_nesting;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
@@ -14956,7 +15066,8 @@ namespace ivy
                     dead . __is_zero() & locals . __is_zero() & constructors . __is_zero() &
                     dot_rhs . __is_zero() & conflicts . __is_zero() & borrowings . __is_zero() &
                     num_borrowings . __is_zero() & fix_borrow_map . __is_zero() &
-                    cond_nesting . __is_zero() & loop_nesting . __is_zero() & asgn_ann . __is_zero();
+                    cond_nesting . __is_zero() & loop_nesting . __is_zero() & asgn_ann . __is_zero()
+                    & inbounds_nesting . __is_zero();
             }
             struct __hash
             {
@@ -14985,7 +15096,8 @@ namespace ivy
                         ivy::cppident_to_cppexpr::__t::__hash() (x . fix_borrow_map) +
                         pos::__t::__hash() (x . cond_nesting) +
                         pos::__t::__hash() (x . loop_nesting) +
-                        ivy::ptr< annot::__t >::__hash() (x . asgn_ann);
+                        ivy::ptr< annot::__t >::__hash() (x . asgn_ann) +
+                        pos::__t::__hash() (x . inbounds_nesting);
                 }
             };
             
@@ -15108,6 +15220,13 @@ namespace ivy
 namespace ivy
 {
     ivy::ptr< cpp::expr::__t > make_from_string  (const ivy::ptr< cpp::expr::__t > &ty,const ivy::ptr< cpp::expr::__t >
+        &arg,const ivy::ptr< annot::__t > &ann);
+    
+}
+// Make a C++ expression of the form `ivy::from_flt<ty>(arg)`
+namespace ivy
+{
+    ivy::ptr< cpp::expr::__t > make_from_float  (const ivy::ptr< cpp::expr::__t > &ty,const ivy::ptr< cpp::expr::__t >
         &arg,const ivy::ptr< annot::__t > &ann);
     
 }
@@ -15332,6 +15451,15 @@ namespace ivy
 {
     void make_local_ref  (const ivy::ptr< ivy::expr::__t > &typing,const ivy::ptr< cpp::stmt::__t >
         &lhs,const __bool &is_const,ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res);
+    
+}
+// Open or close scope of a pragma. Pragmas:
+//
+// - inbounds: promises array references in the following code are within
+//      the allocated bounds, turns of bounds checking
+namespace ivy
+{
+    void pragma_stmt  (const ivy::ptr< ivy::stmt::__t > &s,const __bool &start,ivy::tocppst::__t &st);
     
 }
 // The full name of a C++ function depends on whether it is a member function.
@@ -15721,10 +15849,23 @@ __bool __char::__t::is_digit () const
     __out = __char::__t (48) <= (*this) & (*this) < __char::__t (58);
     return __out;
 }
+__bool __char::__t::is_hex () const
+{
+    __bool __out;
+    __out = (*this) . is_digit() | __char::__t (65) <= (*this) & (*this) < __char::__t (71) |
+        __char::__t (97) <= (*this) & (*this) < __char::__t (103);
+    return __out;
+}
 __bool __char::__t::is_capital () const
 {
     __bool __out;
     __out = __char::__t (65) <= (*this) & (*this) < __char::__t (91);
+    return __out;
+}
+__char::__t __char::__t::downcase () const
+{
+    __char::__t __out;
+    __out = (*this) . is_capital() ? (*this) + __char::__t (32) : (*this);
     return __out;
 }
 pos::__t pos::__t::next () const {
@@ -16494,6 +16635,67 @@ void read_string_literal  (pstate::__t &st)
         st . ok = ivy::native_bool (false);
     }
 }
+void decimals::read  (pstate::__t &st)
+{
+    if (st . ok & st . p < st . b . end & st . b . value (st . p) . is_digit())
+    {
+        while (st . ok & st . p < st . b . end & st . b . value (st . p) . is_digit())
+        {
+            st . tok . append (st . b . value (st . p));
+            st . p = st . p . next();
+        }
+    } else {
+        st . ok = ivy::native_bool (false);
+    }
+}
+void hexes::read  (pstate::__t &st)
+{
+    if (st . ok & st . p < st . b . end & st . b . value (st . p) . is_hex())
+    {
+        while (st . ok & st . p < st . b . end & st . b . value (st . p) . is_hex())
+        {
+            st . tok . append (st . b . value (st . p));
+            st . p = st . p . next();
+        }
+    } else {
+        st . ok = ivy::native_bool (false);
+    }
+}
+void read_numeric_literal  (pstate::__t &st)
+{
+    st . tok = ivy::from_str< str::__t > ("");
+    if (st . p . next() < st . b . end & st . b . value (st . p) == __char::__t (48) &
+    st . b . value (st . p . next()) . downcase() == __char::__t (120))
+    {
+        st . tok . append (__char::__t (48));
+        st . tok . append (__char::__t (120));
+        st . p = st . p . next() . next();
+        hexes::read (st);
+    } else
+    {
+        decimals::read (st);
+        if (st . ok & st . p < st . b . end & st . b . value (st . p) == __char::__t (46))
+        {
+            st . tok . append (__char::__t (46));
+            st . p = st . p . next();
+            decimals::read (st);
+            if (st . ok & st . p < st . b . end & st . b . value (st . p) . downcase() ==
+            __char::__t (101))
+            {
+                st . tok . append (__char::__t (101));
+                st . p = st . p . next();
+                if (st . p < st . b . end &
+                (st . b . value (st . p) == __char::__t (45) | st . b . value (st . p) ==
+                    __char::__t (43)))
+                {
+                    st . tok . append (st . b . value (st . p));
+                    st . p = st . p . next();
+                }
+                decimals::read (st);
+            }
+        }
+    }
+}
 void lex  (pstate::__t &st)
 {
     get_annot (st);
@@ -16504,19 +16706,24 @@ void lex  (pstate::__t &st)
         read_string_literal (st);
     } else
     {
-        __char::__t last;
-        last = __char::__t (32);
-        while (st . p < st . b . end & ! st . b . value (st . p) . is_white() &
-        (last == __char::__t (32) | st . b . value (st . p) . kind() == last . kind()) &
-        last . kind() != __char::kinds (__char::bracket))
+        if (st . b . value (st . p) . is_digit()) {
+            read_numeric_literal (st);
+        } else
         {
-            last = st . b . value (st . p);
-            if (last . non_printing()) {
-                st . ok = ivy::native_bool (false);
+            __char::__t last;
+            last = __char::__t (32);
+            while (st . p < st . b . end & ! st . b . value (st . p) . is_white() &
+            (last == __char::__t (32) | st . b . value (st . p) . kind() == last . kind()) &
+            last . kind() != __char::kinds (__char::bracket))
+            {
+                last = st . b . value (st . p);
+                if (last . non_printing()) {
+                    st . ok = ivy::native_bool (false);
+                }
+                st . p = st . p . next();
             }
-            st . p = st . p . next();
+            st . tok = st . b . segment (start,st . p);
         }
-        st . tok = st . b . segment (start,st . p);
     }
 }
 str::__t pos::__t::to_str () const
@@ -16649,8 +16856,18 @@ __bool ivy::is_logvar_name  (const str::__t &name)
 ivy::verb::__t ivy::verb_from_name  (const str::__t &name)
 {
     ivy::verb::__t vrb;
-    if (name . value (pos::__t (0)) . is_digit()) {
+    if (name . value (pos::__t (0)) . is_digit())
+    {
         vrb = ivy::verb::__t (ivy::verb::numeral);
+        pos::__t idx;
+        idx = name . begin();
+        while (idx < name . end)
+        {
+            if (name . value (idx) == __char::__t (46)) {
+                vrb = ivy::verb::__t (ivy::verb::fltnum);
+            }
+            idx = idx . next();
+        }
     } else
     {
         if (name . value (pos::__t (0)) == __char::__t (34)) 
@@ -19491,36 +19708,85 @@ ivy::ptr< ivy::expr::__t > ivy::varst::__t::get_expr () const
     res = (*this) . name;
     return res;
 }
+ivy::ptr< ivy::stmt::__t > ivy::pragmast::make  (const ivy::ptr< ivy::expr::__t > &prg,const ivy::ptr< annot::__t >
+    &ann)
+{
+    ivy::ptr< ivy::stmt::__t > res;
+    {
+        ivy::pragmast::__t s;
+        s . prg = prg;
+        s . ann = ann;
+        res = s;
+    }
+    return res;
+}
+void ivy::pragmast::__t::encode  (pretty::__t &b,const priority::__t &prio) const
+{
+    (*this) . ann -> encode (b);
+    if (priority::__t (1) < prio)
+    {
+        b . nest();
+        b . extend (ivy::from_str< str::__t > ("{"));
+        b . newline();
+    }
+    (*this) . encode_int (b,prio);
+    if (priority::__t (1) < prio)
+    {
+        b . unnest();
+        b . newline();
+        b . extend (ivy::from_str< str::__t > ("}"));
+    }
+}
+void ivy::pragmast::__t::encode_int  (pretty::__t &b,const priority::__t &prio) const
+{
+    (*this) . ann -> encode (b);
+    b . nest();
+    b . extend (ivy::from_str< str::__t > ("@"));
+    (*this) . prg -> encode (b,priority::__t (0));
+    b . extend (ivy::from_str< str::__t > (";"));
+    b . unnest();
+}
+ivy::ptr< ivy::expr::__t > ivy::pragmast::__t::get_expr () const
+{
+    ivy::ptr< ivy::expr::__t > res;
+    res = (*this) . prg;
+    return res;
+}
+void ivy::stmt::parse_stmt_term  (pstate::__t &st)
+{
+    if (st . ok & st . tok == ivy::from_str< str::__t > (";")) {
+        st . consume();
+    } else {
+        st . ok = st . ok & st . tok == ivy::from_str< str::__t > ("}");
+    }
+}
 void ivy::stmt::parse_lang_stmt  (pstate::__t &st,const priority::__t &prio,ivy::ptr< ivy::stmt::__t >
     &res)
 {
-    ivy::asgn::__t s;
-    st . get_ann (s . ann);
-    if (st . tok == ivy::from_str< str::__t > ("call")) {
-        st . consume();
-    }
-    ivy::expr::parse (st,priority::__t (0),s . lhs);
-    if (st . ok & st . tok == ivy::from_str< str::__t > (":="))
+    if (st . ok & st . tok == ivy::from_str< str::__t > ("@"))
     {
         st . consume();
-        ivy::expr::parse (st,priority::__t (0),s . rhs);
-        if (st . ok & st . tok == ivy::from_str< str::__t > (";")) {
-            st . consume();
-        } else {
-            st . ok = st . tok == ivy::from_str< str::__t > ("}");
-        }
-        
-        // allow to omit final semicolon
-        
+        ivy::pragmast::__t s;
+        ivy::expr::parse (st,priority::__t (0),s . prg);
+        ivy::stmt::parse_stmt_term (st);
         res = s;
     } else
     {
-        if (st . ok &
-        (st . tok == ivy::from_str< str::__t > (";") | st . tok == ivy::from_str< str::__t > ("}")))
+        ivy::asgn::__t s;
+        st . get_ann (s . ann);
+        if (st . tok == ivy::from_str< str::__t > ("call")) {
+            st . consume();
+        }
+        ivy::expr::parse (st,priority::__t (0),s . lhs);
+        if (st . ok & st . tok == ivy::from_str< str::__t > (":="))
         {
-            if (st . tok == ivy::from_str< str::__t > (";")) {
-                st . consume();
-            }
+            st . consume();
+            ivy::expr::parse (st,priority::__t (0),s . rhs);
+            ivy::stmt::parse_stmt_term (st);
+            res = s;
+        } else
+        {
+            ivy::stmt::parse_stmt_term (st);
             if (s . lhs -> is (ivy::verb::__t (ivy::verb::varv)))
             {
                 ivy::varst::__t vst;
@@ -19536,11 +19802,8 @@ void ivy::stmt::parse_lang_stmt  (pstate::__t &st,const priority::__t &prio,ivy:
                 
                 res = s;
             }
-        } else {
-            st . ok = ivy::native_bool (false);
         }
     }
-    {}
 }
 vector__ivy__decl::domain::__t vector__ivy__decl::domain::__t::next () const
 {
@@ -23524,7 +23787,7 @@ void ivy::symbol::__t::type_decorate  (ivy::decost::__t &st,const ivy::symeval::
     if ((*this) . vrb != ivy::verb::__t (ivy::verb::none) & (*this) . vrb !=
     ivy::verb::__t (ivy::verb::numeral) & (*this) . vrb != ivy::verb::__t (ivy::verb::string) &
     (*this) . vrb != ivy::verb::__t (ivy::verb::logvar) & (*this) . vrb !=
-    ivy::verb::__t (ivy::verb::empty))
+    ivy::verb::__t (ivy::verb::empty) & (*this) . vrb != ivy::verb::__t (ivy::verb::fltnum))
     {
         ivy::symeval::__t mm;
         ivy::ptr< ivy::expr::__t > v;
@@ -24507,8 +24770,18 @@ __bool cpp::is_logvar_name  (const str::__t &name)
 cpp::verb::__t cpp::verb_from_name  (const str::__t &name)
 {
     cpp::verb::__t vrb;
-    if (name . value (pos::__t (0)) . is_digit()) {
+    if (name . value (pos::__t (0)) . is_digit())
+    {
         vrb = cpp::verb::__t (cpp::verb::numeral);
+        pos::__t idx;
+        idx = name . begin();
+        while (idx < name . end)
+        {
+            if (name . value (idx) == __char::__t (46)) {
+                vrb = cpp::verb::__t (cpp::verb::fltnum);
+            }
+            idx = idx . next();
+        }
     } else
     {
         if (name . value (pos::__t (0)) == __char::__t (34))
@@ -29165,6 +29438,20 @@ ivy::ptr< cpp::expr::__t > ivy::make_from_string  (const ivy::ptr< cpp::expr::__
     }
     return res;
 }
+ivy::ptr< cpp::expr::__t > ivy::make_from_float  (const ivy::ptr< cpp::expr::__t > &ty,const ivy::ptr< cpp::expr::__t >
+    &arg,const ivy::ptr< annot::__t > &ann)
+{
+    ivy::ptr< cpp::expr::__t > res;
+    {
+        cpp::strident::__t id;
+        id . val = ivy::from_str< str::__t > ("from_flt");
+        id . subscrs . append (ty -> get_name());
+        ivy::ptr< cpp::ident::__t > name;
+        name = cpp::dotident::make (cpp::strident::make (ivy::from_str< str::__t > ("ivy")),id);
+        res = cpp::app::make1 (cpp::symbol::make (name,ann),arg,ann);
+    }
+    return res;
+}
 __bool ivy::is_cpp_this  (const ivy::ptr< cpp::expr::__t > &s)
 {
     __bool res;
@@ -29395,14 +29682,22 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
                         res = ivy::make_from_string (ty,res,(*this) . get_ann());
                     } else
                     {
-                        if (st . globals . is_action . mem (arg -> get_name()))
+                        if (arg -> get_verb() == ivy::verb::__t (ivy::verb::fltnum))
                         {
-                            if (!
-                            (*this) . args . value (vector__ivy__expr::domain::__t (1)) -> is (ivy::verb::__t
-                                    (ivy::verb::arrow)))
+                            ivy::ptr< cpp::expr::__t > ty;
+                            (*this) . args . value (vector__ivy__expr::domain::__t (1)) -> to_cpp (st,ty);
+                            res = ivy::make_from_float (ty,res,(*this) . get_ann());
+                        } else
+                        {
+                            if (st . globals . is_action . mem (arg -> get_name()))
                             {
-                                vector__cpp__expr::__t args;
-                                res = cpp::app::make (res,args,res -> get_ann());
+                                if (!
+                                (*this) . args . value (vector__ivy__expr::domain::__t (1)) -> is (ivy::verb::__t
+                                        (ivy::verb::arrow)))
+                                {
+                                    vector__cpp__expr::__t args;
+                                    res = cpp::app::make (res,args,res -> get_ann());
+                                }
                             }
                         }
                     }
@@ -29508,6 +29803,33 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
                                 capp . args . set (vector__cpp__expr::domain::__t (0),capp . args .
                                             value (vector__cpp__expr::domain::__t (1)));
                                 capp . args . set (vector__cpp__expr::domain::__t (1),tmp);
+                            }
+                            
+                            // For inbounds array accesses, we use the
+                            // member function __inp rather than
+                            // operator(). This does an ordinary unchecked
+                            // vector access.
+                            
+                            if (st . inbounds_nesting > pos::__t (0))
+                            {
+                                __bool is_data;
+                                is_data = (*this) . func -> is (ivy::verb::__t (ivy::verb::dot));
+                                if ((*this) . func -> is (ivy::verb::__t (ivy::verb::colon)))
+                                {
+                                    ivy::ptr< ivy::expr::__t > arg;
+                                    arg =
+                                        (*this) . func -> get_arg (vector__ivy__expr::domain::__t (0));
+                                    is_data = arg . isa< ivy::symbol::__t >() & arg -> get_verb() ==
+                                        ivy::verb::__t (ivy::verb::none);
+                                }
+                                if (is_data)
+                                {
+                                    ivy::ptr< cpp::expr::__t > inb;
+                                    inb =
+                                        cpp::symbol::makestr (ivy::from_str< str::__t > ("__inb"),capp
+                                                . func -> get_ann());
+                                    capp . func = cpp::dot::make (capp . func,inb,(*this) . ann);
+                                }
                             }
                             
                             // If of the form (x:t).f, where t is a variant
@@ -29909,6 +30231,33 @@ void ivy::make_local_ref  (const ivy::ptr< ivy::expr::__t > &typing,const ivy::p
     vst . vtype . is_ref = ivy::native_bool (true);
     res = vst;
 }
+void ivy::pragma_stmt  (const ivy::ptr< ivy::stmt::__t > &s,const __bool &start,ivy::tocppst::__t &st)
+{
+    if (s . isa< ivy::pragmast::__t >())
+    {
+        __bool ok;
+        ok = ivy::native_bool (false);
+        ivy::ptr< ivy::expr::__t > e;
+        e = s -> get_expr();
+        if (e . isa< ivy::symbol::__t >())
+        {
+            str::__t name;
+            name = e -> get_name() -> to_str();
+            if (name == ivy::from_str< str::__t > ("inbounds"))
+            {
+                ok = ivy::native_bool (true);
+                if (start) {
+                    st . inbounds_nesting = st . inbounds_nesting . next();
+                } else {
+                    st . inbounds_nesting = st . inbounds_nesting . prev();
+                }
+            }
+        }
+        if (! ok) {
+            ivy::report_error (ivy::bad_syntax::make (e),e -> get_ann());
+        }
+    }
+}
 void ivy::sequence::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
     cpp::sequence::__t res;
@@ -29917,7 +30266,9 @@ void ivy::sequence::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t
     __bool ok;
     ivy::ptr< ivy::ident::__t > bid;
     ivy::setup_borrowing ((*this) . lhs,st,ok,bid);
+    ivy::pragma_stmt ((*this) . lhs,ivy::native_bool (true),st);
     (*this) . rhs -> to_cpp (st,res . rhs);
+    ivy::pragma_stmt ((*this) . lhs,ivy::native_bool (false),st);
     ivy::borrowing::__t br;
     if (ok) {
         br = st . borrowings . value (bid);
@@ -31227,6 +31578,7 @@ int main  (int argc,char ** argv)
         //        str_to_verb(X) := verb.none;
         
         ivy::verb_to_arity (ivy::verb::__t (ivy::verb::numeral)) = pos::__t (0);
+        ivy::verb_to_arity (ivy::verb::__t (ivy::verb::fltnum)) = pos::__t (0);
         ivy::verb_to_arity (ivy::verb::__t (ivy::verb::string)) = pos::__t (0);
         ivy::verb_to_arity (ivy::verb::__t (ivy::verb::logvar)) = pos::__t (0);
     }
@@ -31465,6 +31817,7 @@ int main  (int argc,char ** argv)
     }
     {
         cpp::verb_to_arity (cpp::verb::__t (cpp::verb::numeral)) = pos::__t (0);
+        cpp::verb_to_arity (cpp::verb::__t (cpp::verb::fltnum)) = pos::__t (0);
         cpp::verb_to_arity (cpp::verb::__t (cpp::verb::string)) = pos::__t (0);
         cpp::verb_to_arity (cpp::verb::__t (cpp::verb::logvar)) = pos::__t (0);
     }
@@ -31621,6 +31974,8 @@ int main  (int argc,char ** argv)
         ivy::cpp_reserved_word (ivy::from_str< str::__t > ("and")) = ivy::native_bool (true);
         ivy::cpp_reserved_word (ivy::from_str< str::__t > ("or")) = ivy::native_bool (true);
         ivy::cpp_reserved_word (ivy::from_str< str::__t > ("not")) = ivy::native_bool (true);
+        ivy::cpp_reserved_word (ivy::from_str< str::__t > ("float")) = ivy::native_bool (true);
+        ivy::cpp_reserved_word (ivy::from_str< str::__t > ("double")) = ivy::native_bool (true);
     }
     if (argv::end() > pos::__t (1))
     {

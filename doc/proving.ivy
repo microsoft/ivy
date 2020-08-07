@@ -120,7 +120,7 @@
 # Theory instantiations
 # =====================
 
-# IVy has built-in theories that can be instantated with a specific type
+# IVy has built-in theories that can be instantiated with a specific type
 # as their carrier. For example, the theory of integer arithmetic is
 # called `int`. It has the signature `{+,-,*,/,<}`, plus the integer
 # numerals, and provides the axioms of Peano arithmetic. To instantiate
@@ -518,7 +518,7 @@
 # ==============
 
 # An alternative way to construct a proof in Ivy is *backward chaining*.
-# While it is perhaos most natural to use proof rules to work forward
+# While it is perhaps most natural to use proof rules to work forward
 # from premises to conclusions, it is equally possible to use the same
 # rules to work backward from conclusions to premises.  When applying a
 # rule, Ivy does not require that all premises of the rule be
@@ -536,7 +536,7 @@
     }
 
 
-# When we apply `mortality_of_man` to prove `man(socrates)` we lack the
+# When we apply `mortality_of_man` to prove `mortal(socrates)` we lack the
 # necessary premise `man(socrates)`. Ivy is undeterred by this. It simply
 # matches the conclusion `mortal(X)` to `mortal(socrates)`, instatiates
 # the axiom `mortality_of_man` and pushes the needed premise `man(socrates)`
@@ -607,6 +607,169 @@
 # the problem to Z3. In this situation, writing out the resulting formula
 # as an explicit lemma is probably a waste of effort, since the formula is
 # intended to be consumed by an automated tool rather than a human user. 
+
+# Skolemization and instantiation
+# ===============================
+
+# Quantifiers are the usual reason that a proof goal lies outside
+# Ivy's decidable fragment. Usually, the fastest way to prove
+# something that is not in the decidable fragment is to eliminate the
+# quantifier that is causing the problem. This is possible with
+# natural deduction, but sometimes very inconvenient. A better alternative is to
+# use Skolemization and instantiation.
+
+# Here is the indempotence lemma done in this style:
+
+    theorem [idem4] {
+        type t
+        function f(W:t) : t
+        property [idem] forall Y. f(f(Y)) = f(Y)
+        #--------------------------------
+        property f(f(f(X))) = f(X)
+    }
+    proof {
+        instantiate idem with Y = X
+    }
+
+# Remember that when we tried to prove this before, Ivy complained the
+# the term `f((Y))` put us outside the decidable fragment. This is
+# because `Y` was universally quantified in the premise `idem`. In
+# this proof, however, we use the `instantiate` tactic to plug in the
+# value `X` for the universally quantified `Y` in `idem`. This is
+# called *quantifier instantiation* and gives us the following proof
+# goal:
+
+    # theorem [idem4] {
+    #     type t
+    #     function f(W:t) : t
+    #     property [idem] f(f(X)) = f(X)
+    #     #--------------------------------
+    #     property f(f(f(X))) = f(X)
+    # }
+
+# Without the quantifier, Z3 has no problem handling this proof goal.
+
+# It turns out we can always handle purely first-order proof goals in
+# this way, provided we apply a further tactic called
+# `skolemize`. This tactic allows us to deal with alternations of quantifiers.
+#
+# Here is an example:
+#
+
+    theorem [sk1] {
+        type t
+        individual a : t
+        relation r(X:t,Y:t)
+        property [prem] forall X. exists Y. r(X,Y)
+        #---
+        property exists Z. r(a,Z)
+    }
+    proof {
+        tactic skolemize
+        instantiate prem with X=a
+        instantiate with Z = _Y(a)
+    }
+
+# The `skolemize` tactic replaces the existentially quantified `Y` in `prem`
+# by a fresh function `_Y(X)`. Here is the resulting proof goal:
+
+    # theorem [sk1] {
+    #     function _Y(V0:t) : t
+    #     type t
+    #     individual a : t
+    #     relation r(V0:t,V1:t)
+    #     property [prem] forall X. r(X,_Y(X))
+    #     property exists Z. r(a,Z)
+    # }
+
+# When `skolemize` is done, the premises have only universal
+# quantifiers, and the conclusion has only existential quantifiers.
+# Now, we can finish the proof by instantiating the universal in
+# `prem` with `a`, giving `r(a,_Y(a))`, and then instantiating the
+# existentially quantified `Z` in the conclusion with `_Y(a)` , which
+# also gives `r(a,_Y(a))`. One way to describe the instantiation of
+# the conclusion is that we have provided the term `_Y(a)` as a
+# *witness` for the existential quantifier. Our final proof goal is
+# trivial:
+
+    # theorem [sk1] {
+    #     function _Y(V0:t) : t
+    #     type t
+    #     individual a : t
+    #     relation r(V0:t,V1:t)
+    #     property [prem] r(a,_Y(a))
+    #     property r(a,_Y(a))
+    # }
+
+# All of this wasn't really necessary, since the original theorem is
+# in the decidable fragment.  However, the approach of Skolemization
+# followed by selective instantiation of quantifiers can be a quick
+# way to reduce a proof prolem to a decidable one. First, we try to
+# get Z3 to discharge the proof goal automatically. If Ivy complains
+# about a quantified variable, we eliminate that variable by
+# Skolemization and instantiation. If we guess the wrong instantiation,
+# Ivy will give us a counterexample.
+
+# Avoiding name clashes
+# ---------------------
+
+# How does Skolemization work if there is more than one variable with
+# the same name? As an example, suppose we have this axiom:
+
+    relation s(X:t,Y:t)
+    axiom [prem] forall X. exists Y. s(X,Y)
+
+# We would like to prove this property:
+
+    individual a : t
+    individual b : t
+    property [sk2] exists Z,W. s(a,Z) & s(b,W)
+
+# To prove this, we would like to use the axiom twice, once for `X=a`
+# and once for `X=b`. So let's create two instances of it:
+
+    proof {
+        instantiate [p1] prem with X=a
+        instantiate [p2] prem with X=b
+        tactic skolemize
+        showgoals
+    }
+
+# Notice we gave the two instances distinct names, `p1` and
+# `p2`. After Skolemization, this is the proof goal we got:
+
+    # theorem [prop1] {
+    #     individual _Y : t
+    #     individual _Y_a : t
+    #     property [p1] s(a,_Y)
+    #     property [p2] s(b,_Y_a)
+    #     property exists W,Z. s(a,Z) & s(b,W)
+    # }
+
+# The skolem symbol in `p2` was automatically given a fresh name
+# `_Y_a` so as not to clash with the symbol `_Y` used in `p1`. Now we
+# could witness the conclusion with `W=_Y` and `Z=_Y_a`. This is
+# fragile, though, because changes to the proof might result in a name
+# different from `_Y_a`. A better approach is to use *alpha renaming* to
+# the two quantifiers different variable names. For example:
+
+    property exists Z,W. s(a,Z) & s(b,W)
+    proof {
+        instantiate [p1] prem<Y1/Y> with X=a
+        instantiate [p2] prem<Y2/Y> with X=b
+        tactic skolemize
+        instantiate with Z=_Y1, W=_Y2
+    }
+
+# By renaming the bound variables in our two copies of the axiomn to
+# be `Y1` and `Y2`, we can make sure that the Skolem symbols have
+# predictable names. Again, there was no need to use manual
+# instantiation for this simple problem, but in more complex cases
+# with nested quantifiers, this apprech can make it possible to let Z3
+# do most of the quantifier instatiation work by only instantiating
+# the quantifiers that the fragment checker complaines about.
+
+
 
 # Recursion
 # =========

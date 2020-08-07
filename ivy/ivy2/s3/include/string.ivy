@@ -47,4 +47,12 @@ object string = {
 
     }
 
+    # A string conversion trait for numeric types. Here, `str` is the
+    # string type and `ty` is the numeric type.
+
+    module conv (str,ty)  = {
+        action to_str(x:ty) returns (s:str) = {
+            s := cast(ivy.num_to_str(cast(x),cast(s)));
+        }
+    }
 }

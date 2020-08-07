@@ -508,6 +508,12 @@ def compile_local(self):
 
 LocalAction.cmpl = compile_local
 
+def compile_assign_lhs(a):
+    res = sortify_with_inference(a)
+    if not ivy_logic.is_app(res):
+        raise IvyError(a,'Invalid expression on left-hand side of assignment')
+    return res
+
 def compile_assign(self):
     # rhs = self.args[1]
     # if (isinstance(rhs,ivy_ast.App) or isinstance(rhs,ivy_ast.Atom)):
@@ -519,7 +525,7 @@ def compile_assign(self):
     local_syms = []
     with ExprContext(code,local_syms):
         if isinstance(self.args[0],ivy_ast.Tuple):
-            args = [sortify_with_inference(a) for a in self.args]
+            args = [compile_assign_lhs(a) for a in self.args]
             if not isinstance(args[1],ivy_ast.Tuple) or len(args[0].args) != len(args[1].args):
                 raise IvyError(self,"wrong number of values in assignment");
             for lhs,rhs in zip(args[0].args,args[1].args):
@@ -528,6 +534,9 @@ def compile_assign(self):
             with top_sort_as_default():
 #                args = [a.compile() for a in self.args]
                 args = [self.args[0].compile()]
+                if not ivy_logic.is_app(args[0]):
+                    raise IvyError(self.args[0],
+                                   'Invalid expression on left-hand side of assignment')
                 with ReturnContext([args[0]]):
                     args.append(self.args[1].compile())
             if isinstance(args[1],ivy_ast.Tuple):
@@ -1688,7 +1697,7 @@ def theorem_to_property(prop):
                 ivy_logic.add_sort(newsort)
                 match[sort] = newsort
             else:
-                ivy_logic.add_sort(sort.name,sort)
+                ivy_logic.add_sort(sort)
         for sym in vocab.symbols:
             if sym.name in ivy_logic.sig.symbols:
                 newname = unused_name_with_base(sym.name,ivy_logic.sig.symbols)
@@ -1872,6 +1881,8 @@ def check_properties(mod):
                         mod.definitions.append(prop)
                     else: 
                         mod.labeled_axioms.append(prop)
+                else:
+                    mod.schemata[prop.label.relname] = prop
             else:
                 subgoals = map(theorem_to_property,subgoals)
                 lb = ivy_ast.Labeler()
@@ -1885,6 +1896,8 @@ def check_properties(mod):
                         mod.definitions.append(prop)
                     else:
                         mod.labeled_props.append(prop)
+                else:
+                    mod.schemata[prop.label.relname] = prop
             mod.subgoals.append((prop,subgoals))
         #     from ivy_l2s import l2s
         #     print "=================" + "\n" * 10

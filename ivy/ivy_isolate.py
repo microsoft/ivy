@@ -57,6 +57,8 @@ def summarize_action(action):
     res.lineno = action.lineno
     res.formal_params = action.formal_params
     res.formal_returns = action.formal_returns
+    if hasattr(action,'labels'):
+        res.labels = action.labels
     # have to havoc the in/out parameters, other outs are non-deterministic anyway
     if isolate_mode.get() != 'test':
         for x in res.formal_returns:
@@ -1188,8 +1190,16 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         asts.extend(a.formal_returns)
     for tmp in mod.natives:
         asts.extend(tmp.args[2:])
+    # in case a symbol is used only in a proof
+    asts.extend(x[1] for x in mod.proofs)
 
-
+    # Tricky: some symbols in proofs are not compiled. Keep
+    # the symbols whose names are referred to.
+    
+    all_names = set()
+    for x in mod.proofs:
+        x[1].vocab(all_names)
+    
     all_syms = set(lu.used_symbols_asts(asts))
 
     if opt_keep_destructors.get():
@@ -1199,9 +1209,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     if filter_symbols.get() or cone_of_influence.get():
         old_syms = list(mod.sig.all_symbols())
         for sym in old_syms:
-            if sym not in all_syms:
+            if sym not in all_syms and sym.name not in all_names:
                 mod.sig.remove_symbol(sym)
-
 
     # check that any properties have dependencies present
 
@@ -1222,7 +1231,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     #check non-interference (temporarily put back in old_actions)
 
     if do_check_interference.get():
-        interf_syms = set(ivy_logic.all_symbols())
+        interf_syms = set(x for x in ivy_logic.all_symbols() if x in all_syms)
         follow_definitions(orig_defs,interf_syms)
         save_new_actions = mod.actions
         mod.actions = old_actions

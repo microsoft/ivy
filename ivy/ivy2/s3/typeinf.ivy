@@ -264,7 +264,7 @@ object ivy = { ...
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
             if
                 e.vrb ~= verb.none & e.vrb ~= verb.numeral & e.vrb ~= verb.string & e.vrb ~= verb.logvar
-                & e.vrb ~= verb.empty
+                & e.vrb ~= verb.empty & e.vrb ~= verb.fltnum
             {
                 var mm : symeval;
                 var v : expr;
