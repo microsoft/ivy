@@ -410,14 +410,25 @@ On entry to an action the values of return parameters are non-deterministically 
 
 ## Expressions
 
-Expressions in Ivy are terms or formulas in [first-order logic][fol] with
-equality. Ivy provides the following built-in operators: `~` (not),
-`&` (and), `|` (or), `->` (implies), `<->` (iff) `=`
-(equality). There is also a built-in conditional operator `X if C else Y` that returns
-`X` if the Boolean condition `C` is true and `Y` otherwise. The if/else operator binds most strongly, followed by
-equality, not, and, iff, implies.
+Expressions in Ivy are terms or formulas in [first-order logic][fol]
+with equality. Ivy provides the following built-in operators: `~`
+(not), `&` (and), `|` (or), `->` (implies), `<->` (iff) `=`
+(equality). There is also a built-in conditional operator `X if C else
+Y` that returns `X` if the Boolean condition `C` is true and `Y`
+otherwise. The if/else operator binds most strongly, followed by
+equality, not, and, or. The weakest binding operators are `<->` and
+`->`, which have equal precedence.
 
 [fol]: https://en.wikipedia.org/wiki/First-order_logic
+
+The binary and ternary operators are left-associating (i.e., they bind
+more strongly on the left). For example, `x if p else y if q else z`
+is equivalent to `(x if p else y) if q else z` and `p -> q -> r` is
+equivalent to `(p -> q) -> r`. *Warning*: in the case of if/else and
+`->`, this is non-standard and is due to an error in the parser. This
+will change in a future version of the language. In the interim it is
+best to always parenthesize expressions with multiple uses if if/else
+and `->`.
 
 Expressions may also use logical quantifiers. For example, this formula says that
 there exists a node *X* such that for every node *Y*, *X* is linked to *Y*:
@@ -1650,6 +1661,7 @@ for actions in the isolate.
 - Keywords: decreases, specification, implementation, require, ensure, around, parameter
 - The `iterable` module is added the standard library file `order`. This makes it possible
 to declare a type that is finite and iterable, and whose size is a parameter.
+- Due to an error, the `->` and `<->` operators changed from right-associating to left-associating.
 
 ### Deprecated in version 1.7
 
