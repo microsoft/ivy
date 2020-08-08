@@ -26,7 +26,7 @@ setup(name='ms_ivy',
       author_email='nomail@example.com',
       license='MIT',
       packages=find_packages(),
-      package_data={'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.{}','lib/*.a','z3/*.{}'.format(so_ext,so_ext)]},
+      package_data={'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.{}'.format(so_ext),'lib/*.a','z3/*.{}'.format(so_ext)]},
       install_requires=[
           'ply',
           'tarjan'
