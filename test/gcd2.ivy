@@ -388,9 +388,12 @@ isolate bif3 = {
     }
     proof {
         instantiate bezout_lemma with S=N, T=P
+        showgoals
         tactic skolemize
-        unfold prem with dvds
-        unfold with dvds
+        unfold prem with da.dvds_alt
+        unfold with da.dvds_alt
+        tactic skolemize
+        instantiate with Z = _A * _Z - _B * M
     }
 } with nat
 
