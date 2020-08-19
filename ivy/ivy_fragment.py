@@ -539,10 +539,15 @@ def get_assumes_and_asserts(preconds_only):
             # print 'axiom : {}'.format(ldf.formula)
             assumes.append((ldf.formula,ldf))
 
+    pfs = set(lf.id for lf,p in im.module.proofs)
+    sgs = set(x.id for x,y in im.module.subgoals)
     for ldf in im.module.labeled_props:
         if not ldf.temporal:
             # print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
-            asserts.append((ldf.formula,ldf))
+            if ldf.id not in pfs:
+                asserts.append((ldf.formula,ldf))
+            elif ldf.id in sgs and not ldf.explicit:
+                assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:
         asserts.append((ldf.formula,ldf))

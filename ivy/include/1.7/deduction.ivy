@@ -126,8 +126,8 @@ axiom [elimOr] {
 axiom [introIff] {
     function p : bool
     function q : bool
-    theorem [fwd] {property p property q}
-    theorem [rev] {property q property p}
+    theorem [fwd] {property [prem] p property q}
+    theorem [rev] {property [prem] q property p}
     #----------------------
     property p <-> q
 }
@@ -289,8 +289,8 @@ axiom [elimEq] {
 axiom [exmid] {
     function p : bool
     function q : bool
-    { property q property p }
-    { property ~q property p }
+    theorem [pos] { property q property p }
+    theorem [neg] { property ~q property p }
     property p
 }
 

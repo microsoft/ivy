@@ -443,6 +443,7 @@ def check_isolate():
                 clauses1 = lut.true_clauses(annot=act.EmptyAnnotation())
                 pre = itp.State(value = clauses1)
                 props = [x for x in im.module.labeled_props if not x.temporal]
+                props = [p for p in props if not(p.id in subgoalmap and p.explicit)]
                 fcs = ([(ConjAssumer if prop.id in subgoalmap else ConjChecker)(prop) for prop in props])
                 check_fcs_in_state(mod,ag,pre,fcs)
             else:

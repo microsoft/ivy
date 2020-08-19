@@ -28,10 +28,8 @@ if not (iu.get_numeric_version() <= [1,2]):
             ('left', 'IF'),
             ('left', 'ELSE'),
             ('left', 'COLON'),
-            ('left', 'PLUS'),
-            ('left', 'MINUS'),
-            ('left', 'TIMES'),
-            ('left', 'DIV'),
+            ('left', 'PLUS','MINUS'),
+            ('left', 'TIMES','DIV'),
             ('left', 'DOLLAR'),
             ('left', 'OLD'),
             ('left', 'DOT')
@@ -1058,6 +1056,25 @@ else:
         label.lineno = get_lineno(p,2)
         p[0] = AssumeTactic(*([a,p[4]]+p[6]))
         p[0].label = label
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_unfold_atype_with_defns(p):
+        'proofstep : UNFOLD atype WITH callatoms'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = UnfoldTactic(*([a]+p[4]))
+        p[0].label = NoneAST()
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_unfold_with_defns(p):
+        'proofstep : UNFOLD WITH callatoms'
+        p[0] = UnfoldTactic(*([NoneAST()]+p[3]))
+        p[0].label = NoneAST()
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_forget_callatoms(p):
+        'proofstep : FORGET callatoms'
+        p[0] = ForgetTactic(*(p[2]))
         p[0].lineno = get_lineno(p,1)
 
     def p_pflet_var_eq_fmla(p):

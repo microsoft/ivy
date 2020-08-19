@@ -94,7 +94,7 @@ theories_1_7 = {
 }
 
 def theories():
-    return theories_1_6 if iu.version_le("1.6",iu.get_string_version()) else theories_1_7
+    return theories_1_7 if iu.version_le("1.7",iu.get_string_version()) else theories_1_6
 
 
 class Theory(object):
