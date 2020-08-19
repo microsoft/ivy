@@ -72,6 +72,26 @@ proof {
     }
 }
 
+isolate gp = {
+    explicit property [gcd_self] X > 0 -> gcd(X,X) = X
+    proof {
+        instantiate [g] gcd_prop with X=X, Y=X
+        unfold g with is_gcd,commdiv,dvds
+        instantiate g with W=X
+    }
+
+    explicit property [gcd_symm]
+    forall X,Y. X>0 & Y>0 -> gcd(X,Y) = gcd(Y,X)
+    proof {
+        tactic skolemize
+        instantiate [g1] gcd_prop with X=_X, Y=_Y
+        instantiate [g2] gcd_prop with X=_Y, Y=_X
+        unfold g1 with is_gcd,commdiv
+        unfold g2 with is_gcd,commdiv
+        showgoals
+    }
+} with nat
+
 # Definition (prime number).
 #
 # A natural number `X > 1`  is *prime* if its divisors are only one and
@@ -263,8 +283,7 @@ isolate da = {
         proof [rev] {
             tactic skolemize
             unfold with dvds
-            property _Y/_X = _Z 
-            showgoals
+            property _Z * (_X/_X) = _Y/_X proof {}
         }
     }
 } with nat
@@ -302,38 +321,7 @@ isolate bl = {
 
     # Theorem (Bezout's lemma).
 
-    # explicit property [bezout_lemma]
-    # forall S:nat. S > 0 & T >= S -> exists A,B. A*S - B*T = gcd(S,T)
-    
-    # proof {
-    #     apply nat.gen_ind with X=T
-    #     apply introA<_S/x>
-    #     apply exmid with q = (x-_S >= _S)
-    #     proof [pos] {
-    #         apply exmid with q = x > _S
-    #         proof [pos] {
-    #             instantiate ind_hyp with S=_S, Y = x-_S
-    #             instantiate ge.gcd_euclid with M=_S, N=x
-    #             tactic skolemize
-    #             instantiate with A = _A + _B, B = _B
-    #         }
-    #         proof [neg] {
-    #             property gcd(_S,_S) = _S proof {apply admit}
-    #             instantiate with A = 1:nat , B = 0:nat
-    #             forget ind_hyp
-    #         }
-    #     }
-    #     proof [neg] {
-    #         instantiate ind_hyp with S=x-_S, Y = _S
-    #         instantiate ge.gcd_euclid with M=_S, N=x
-    #         tactic skolemize
-    #         showgoals
-    #         instantiate with A = _A + _B, B = _B
-    #         apply admit
-    #     }
-    # }
-
-    explicit property [bezout_lemma]
+    explicit property [bezout_lemma_pre]
     forall S:nat,T. S > 0 & T > 0 & M = (S if S > T else T)
        -> exists A,B. A*S - B*T = gcd(S,T)
     
@@ -342,7 +330,7 @@ isolate bl = {
         apply introA<_S/x>
         apply introA<_T/x>
         apply exmid with q = (_S >= _T)
-        property forall X,Y. gcd(X,Y) = gcd(Y,X) proof {apply admit}
+        assume gp.gcd_symm
         proof [pos] {
             apply exmid with q = _S > _T
             proof [pos] {
@@ -353,7 +341,7 @@ isolate bl = {
                 showgoals
             }
             proof [neg] {
-                property gcd(_S,_S) = _S proof {apply admit}
+                instantiate gp.gcd_self with X=_S
                 instantiate with A = 1:nat , B = 0:nat
                 forget ind_hyp
                 showgoals
@@ -368,10 +356,16 @@ isolate bl = {
         }
     }
 
-} with nat
-
-explicit axiom [bezout_lemma]
+    explicit property [bezout_lemma]
     S:nat > 0 & T:nat > 0 -> exists A,B. A*S - B*T = gcd(S,T)
+    proof {
+        instantiate bezout_lemma_pre with S=S,T=T,M = (S if S > T else T)
+        tactic skolemize
+        instantiate with A=_A,B=_B
+        showgoals
+    }
+
+} with nat
 
 # Lemma.
 #
@@ -387,7 +381,7 @@ isolate bif3 = {
         property dvds(P,M)
     }
     proof {
-        instantiate bezout_lemma with S=N, T=P
+        instantiate bl.bezout_lemma with S=N, T=P
         showgoals
         tactic skolemize
         unfold prem with da.dvds_alt

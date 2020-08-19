@@ -14,18 +14,18 @@ module arith_nat = {
     type this
     interpret this -> nat
 
-    theorem [lep] {
-        function p(X:this) : bool
-        property [prem1] exists Z. p(Z)
-        property exists L. p(L) & forall B. (p(B) -> L <= B)
-    }
+    # theorem [lep] {
+    #     function p(X:this) : bool
+    #     property [prem1] exists Z. p(Z)
+    #     property exists L. p(L) & forall B. (p(B) -> L <= B)
+    # }
 
-    proof {
-        instantiate [p] lep[this] with n=0:this,p(X) = p(X)
-        tactic skolemize
-        instantiate with L = _L
-        instantiate p with B = _B(_L)
-    }
+    # proof {
+    #     instantiate [p] lep[this] with n=0:this,p(X) = p(X)
+    #     tactic skolemize
+    #     instantiate with L = _L
+    #     instantiate p with B = _B(_L)
+    # }
 
     axiom [gen_ind] {
         relation p(X:this)
