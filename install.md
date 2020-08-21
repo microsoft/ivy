@@ -177,7 +177,7 @@ in `c:/Git`, then put `c:\Git\cmd` in your `PATH`.
     > cd ivy
     > git submodule init
     > git submodule update
-    > python build_submodules
+    > python build_submodules.py
     > python setup.py develop
 
 Using the `develop` command instead of `install` is helpful, since you
