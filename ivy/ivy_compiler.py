@@ -1730,8 +1730,8 @@ def theorem_to_property(prop):
         if isinstance(conc,ivy_logic.Definition):
             raise iu.IvyError(prop,"definitional subgoal must be discharged")
         fmla = ivy_logic.Implies(ivy_logic.And(*prems),conc) if prems else conc
-        if vocab.variables:
-            fmla = ivy_logic.ForAll(vocab.variables,fmla)
+#        if vocab.variables:
+#            fmla = ivy_logic.ForAll(vocab.variables,fmla)
         res = ivy_ast.LabeledFormula(prop.label,fmla)
         res.lineno = prop.lineno
         return res

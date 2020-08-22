@@ -220,7 +220,7 @@ class ConjAssumer(Checker):
         self.lf = lf
         Checker.__init__(self,lf.formula,invert=False)
     def start(self):
-        print pretty_lf(self.lf) + "  [proved by tactic]"
+        print pretty_lf(self.lf) + "  [assumed]"
     def assume(self):
         return True
 
@@ -444,7 +444,7 @@ def check_isolate():
                 pre = itp.State(value = clauses1)
                 props = [x for x in im.module.labeled_props if not x.temporal]
                 props = [p for p in props if not(p.id in subgoalmap and p.explicit)]
-                fcs = ([(ConjAssumer if prop.id in subgoalmap else ConjChecker)(prop) for prop in props])
+                fcs = ([(ConjAssumer if prop.assumed or prop.id in subgoalmap else ConjChecker)(prop) for prop in props])
                 check_fcs_in_state(mod,ag,pre,fcs)
             else:
                 for lf in schema_instances + mod.labeled_props:

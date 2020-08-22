@@ -1070,10 +1070,23 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     # convert the properties not being verified to axioms
     
+    exact_present = set(a.relname for a in isolate.present())
     proved,not_proved = get_props_proved_in_isolate(mod,isolate)
-    mod.labeled_axioms.extend(not_proved)
-    mod.labeled_axioms = [m for m in mod.labeled_axioms if not m.explicit]
-    mod.labeled_props = proved
+    # mod.labeled_axioms.extend(not_proved)
+    mod.labeled_axioms = [m for m in mod.labeled_axioms if not m.explicit or m.name in exact_present]
+    new_props = []
+    proved_ids = set(p.id for p in proved)
+    not_proved_ids = set(p.id for p in not_proved)
+    for p in mod.labeled_props:
+        p = p.clone(p.args)
+        if p.id in not_proved_ids:
+            p.assumed = True
+            p.explicit = p.explicit and p.name not in exact_present
+            new_props.append(p)
+        elif p.id in proved_ids:
+            new_props.append(p)
+            
+    mod.labeled_props = new_props
 
     # filter natives
 
@@ -1163,8 +1176,19 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     orig_defs = mod.definitions
 
-    mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
+    mod.definitions = [c for c in mod.definitions if (keep_ax(c.label) or c.formula.defines().name in exact_present)  and c.formula.args[0].rep in all_syms]
     mod.native_definitions = [c for c in mod.native_definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
+
+    # pull in definition schemata explicitly named in 'with'
+
+    new_defs = []
+    for y in mod.definitions:
+        sch = y.formula
+        if isinstance(sch,ivy_logic.DefinitionSchema) and (
+                sch.defines().name in exact_present or y.name in exact_present):
+            y = y.clone([y.label,ivy_logic.Definition(*sch.args)])
+        new_defs.append(y)
+    mod.definitions = new_defs
 
     # After checking, we can put in place the new action definitions
 

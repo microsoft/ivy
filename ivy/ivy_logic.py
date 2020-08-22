@@ -1697,3 +1697,13 @@ def label_temporal(fmla,label):
     return fmla.clone(args)
 
             
+def is_definitional(defn):
+    while isinstance(defn,il.ForAll):
+        vs.update(defn.variables)
+        defn = defn.body
+    if il.is_eq(defn) or isinstance(defn,il.Iff):
+        lhs,rhs = defn.args
+        if il.is_app(lhs) & (all(x in vs for x in lhs.args) or True):
+            if iu.distinct(lhs.args):
+                return True
+    return false

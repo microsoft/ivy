@@ -218,6 +218,7 @@ class ProofChecker(object):
         goal = decls[0]
         vocab = goal_vocab(goal)
         cut = compile_expr_vocab(proof.args[0],vocab)
+        cut = normalize_goal(cut)
         subgoal = goal_subst(goal,cut,cut.lineno)
         lhs = proof.args[1]
         if not isinstance(lhs,ia.NoneAST):
@@ -294,13 +295,15 @@ class ProofChecker(object):
                 raise Redefinition(df,"redefinition of {}".format(sym))
         return [goal] + decls[1:]
 
-    def lookup_schema(self,schemaname,decl,ast):
+    def lookup_schema(self,schemaname,decl,ast,close=False):
         if schemaname in self.schemata:
             schema = self.schemata[schemaname]
             check_schema_capture(schema,decl)
         elif schemaname in self.definitions:
             schema = self.definitions[schemaname]
-            schema = clone_goal(schema,goal_prems(schema),goal_conc(schema).to_constraint())
+            fmla = goal_conc(schema).to_constraint()
+            fmla = il.close_formula(fmla) if close else fmla
+            schema = clone_goal(schema,goal_prems(schema),fmla)
             check_schema_capture(schema,decl)
         else:
             premmap = dict((x.name,x) for x in goal_prem_goals(decl))
@@ -337,7 +340,7 @@ class ProofChecker(object):
             if isinstance(proof.label,ia.NoneAST):
                 decl = goal_remove_prem(decl,schemaname)
         else:
-            schema = self.lookup_schema(schemaname,decl,proof)
+            schema = self.lookup_schema(schemaname,decl,proof,close=False)
         prob, pmatch = self.setup_schema_matching(decl,proof,schema,allow_witness=True)
         def iswit(x):
             return isinstance(x,il.Variable) and x not in prob.freesyms
@@ -345,6 +348,8 @@ class ProofChecker(object):
         pmatch = dict((x,y) for x,y in pmatch.iteritems() if not iswit(x))
 #        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
         prem = prob.schema
+        if schemaname not in premmap:
+            prem = close_unmatched(prem,pmatch)
         conc = goal_conc(prem)
         conc = lu.witness_ast(True,[],witness,conc)
         prem = clone_goal(prem,goal_prems(prem),conc)
@@ -357,7 +362,13 @@ class ProofChecker(object):
 
     def unfold_tactic(self,decls,proof):
         decl = decls[0]
-        defns = [self.lookup_schema(x,decl,proof) for x in proof.defnames]
+        defns = []
+        for unfspec in proof.unfspecs:
+            defname = unfspec.defname
+            defn = self.lookup_schema(defname,decl,proof)
+            rdefs = [rename_goal(defn,rn) for rn in unfspec.renamings]
+            rdefs.append(defn)
+            defns.append(rdefs)
         if proof.has_premise:
             premname = proof.premname
             decl = goal_apply_to_prem(decl,premname,lambda goal: unfold_goal(goal,defns))
@@ -894,11 +905,12 @@ def compile_match(proof_match,prob,decl,allow_witness=False):
 def match_rhs_vars(match):
     """ Get the symbols occurring free on the right-hand side of a match """
     res = set()
-    for v in match.values():
-        if isinstance(v,il.UninterpretedSort):
-            res.add(v)
-        else:
-            res.update(fmla_vocab(v))
+    for w in match.values():
+        for v in w if isinstance(w,list) else [w]:
+            if isinstance(v,il.UninterpretedSort):
+                res.add(v)
+            else:
+                res.update(fmla_vocab(v))
     return res
 
 def is_lambda(p):
@@ -1039,6 +1051,11 @@ def match_get(match,sym,env,default=None):
     """ get the value of a symbol in a match, checking that no symbols
     are captured in env """
     val = match.get(sym,None)
+    if isinstance(val,list):  # for unfolding only, may get a list of values
+        save = val
+        val = val[0]
+        if len(save) > 1:
+            del save[0]
     if val is not None:
         vocab = lu.used_symbols_ast(val)
         vocab.update(lu.variables_ast(val))
@@ -1365,16 +1382,22 @@ def match_from_defn(defn):
                 return {lhs.rep : il.Lambda(lhs.args,rhs)}
     raise ProofError(defn,'not a definition')
 
+def match_from_defns(defns):
+    matches = [match_from_defn(d) for d in  defns]
+    lhs = list(matches[0].keys())[0]
+    assert all(lhs in m for m in matches)
+    return {lhs:[m[lhs] for m in matches]}
+
 def unfold_goal(goal,defns):
-    for defn in defns:
-        match = match_from_defn(defn)
+    for rdefs in defns:
+        match = match_from_defns(rdefs)
         goal = apply_match_goal(match,goal,apply_match_alt)
     return goal
 
 def unfold_fmla(fmla,defns):
-    for defn in defns:
-        match = match_from_defn(defn)
-        fmla = apply_match(match,fmla)
+    for rdefs in defns:
+        match = match_from_defns(rdefs)
+        fmla = apply_match_alt(match,fmla)
     return fmla
 
 def goal_apply_to_prem(goal,premname,fn):
@@ -1391,6 +1414,17 @@ def goal_apply_to_prem(goal,premname,fn):
 def goal_apply_to_conc(goal,fn):
     return clone_goal(goal,goal_prems(goal),fn(goal_conc(goal)))
 
+# When instantiating a schema, unmatched free variables occurring only
+# in the conclusion can be universally quantified. 
+
+def close_unmatched(goal,match):
+    conc = goal_conc(goal)
+    prem_vars = lu.used_variables_asts(goal_prem_goals(goal))
+    conc_vars = [x for x in iu.unique(lu.variables_ast(conc))
+                 if x not in match and x not in prem_vars]
+    for v in reversed(conc_vars):
+        conc = il.ForAll([v],conc)
+    return clone_goal(goal,goal_prems(goal),conc)
 
 class AddSymbols(object):
     """ temporarily add some symbols to a set of symbols """

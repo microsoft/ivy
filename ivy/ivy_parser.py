@@ -1021,9 +1021,13 @@ else:
         p[0] = Renaming()
 
     def p_renaming_lt_renaminglist_gt(p):
-        'optrenaming : LT renaminglist GT'
+        'renaming : LT renaminglist GT'
         p[0] = Renaming(*p[2])
         p[0].lineno = get_lineno(p,1)
+
+    def p_optrenaming_renaming(p):
+        'optrenaming : renaming'
+        p[0] = p[1]
 
     def p_proofstep_symbol_with_defns(p):
         'proofstep : APPLY atype optrenaming WITH matches'
@@ -1058,8 +1062,31 @@ else:
         p[0].label = label
         p[0].lineno = get_lineno(p,1)
 
+    def p_renamings(p):
+        'renamings : '
+        p[0] = []
+
+    def p_renamings_renamings_renaming(p):
+        'renamings : renamings renaming'
+        p[0] = p[1]
+        p[0].append(p[2])
+
+    def p_unfspec_callatom_renamings(p):
+        'unfspec : callatom renamings'
+        p[0] = UnfoldSpec(*([p[1]]+p[2]))
+        p[0].lineno = p[1].lineno
+
+    def p_unfspecs_unfspec(p):
+        'unfspecs : unfspec'
+        p[0] = [p[1]]
+
+    def p_unfspecs_unfspecs_unfspec(p):
+        'unfspecs : unfspecs COMMA unfspec'
+        p[0] = p[1]
+        p[0].append(p[3])
+
     def p_proofstep_unfold_atype_with_defns(p):
-        'proofstep : UNFOLD atype WITH callatoms'
+        'proofstep : UNFOLD atype WITH unfspecs'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
         p[0] = UnfoldTactic(*([a]+p[4]))
@@ -1067,7 +1094,7 @@ else:
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_unfold_with_defns(p):
-        'proofstep : UNFOLD WITH callatoms'
+        'proofstep : UNFOLD WITH unfspecs'
         p[0] = UnfoldTactic(*([NoneAST()]+p[3]))
         p[0].label = NoneAST()
         p[0].lineno = get_lineno(p,1)
@@ -1206,13 +1233,17 @@ else:
         p[0].lineno = p[2].lineno
 
     def p_top_definition_optlabel_gdefn_optproof(p):
-        'top : top DEFINITION optlabel gdefn optproof'
-        lf = LabeledFormula(p[3],p[4])
-        lf.lineno = get_lineno(p,2)
+        'top : top optexplicit DEFINITION optlabel gdefn optproof'
+        foo = p[5]
+        if p[2]:
+            foo = DefinitionSchema(*foo.args)
+            foo.lineno = p[5].lineno
+        lf = LabeledFormula(p[4],foo)
+        lf.lineno = get_lineno(p,3)
         p[0] = p[1]
         p[0].declare(DefinitionDecl(addlabel(lf,'def')))
-        if p[5] is not None:
-            p[0].declare(ProofDecl(p[5]))
+        if p[6] is not None:
+            p[0].declare(ProofDecl(p[6]))
 
 
 def p_top_progress_defns(p):

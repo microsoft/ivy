@@ -562,6 +562,7 @@ class LabeledFormula(AST):
         self.temporal = None
         self.explicit = False
         self.definition = False
+        self.assumed = False
         lf_counter += 1
     @property
     def label(self):
@@ -584,6 +585,7 @@ class LabeledFormula(AST):
         res.temporal = self.temporal
         res.explicit = self.explicit
         res.definition = self.definition
+        res.assumed = self.assumed
         return res
 
     def clone_with_fresh_id(self,args):
@@ -592,6 +594,7 @@ class LabeledFormula(AST):
         res.temporal = self.temporal
         res.explicit = self.explicit
         res.definition = self.definition
+        res.assumed = self.assumed
         return res
 
     def rename(self,s):
@@ -710,6 +713,14 @@ class AssumeTactic(TacticWithMatch):
         res.label = self.label
         return res
 
+class UnfoldSpec(AST):
+    @property
+    def defname(self):
+        return self.args[0].rep
+    @property
+    def renamings(self):
+        return self.args[1:]
+
 class UnfoldTactic(Tactic):
     def tactic_name(self):
         return 'unfold'
@@ -724,8 +735,8 @@ class UnfoldTactic(Tactic):
     def premname(self):
         return self.args[0].rep
     @property
-    def defnames(self):
-        return [x.rep for x in self.args[1:]]
+    def unfspecs(self):
+        return self.args[1:]
 
 class ForgetTactic(Tactic):
     def tactic_name(self):
