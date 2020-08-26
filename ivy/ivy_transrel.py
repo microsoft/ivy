@@ -28,7 +28,7 @@ that all symbols *not* in S are preserved.
 
 """
 
-from ivy_utils import UniqueRenamer, union_to_list, list_union, list_diff, IvyError, inverse_map, compose_maps, pretty
+from ivy_utils import UniqueRenamer, NumericRenamer, union_to_list, list_union, list_diff, IvyError, inverse_map, compose_maps, pretty
 from ivy_logic import Variable, Constant, Literal, Atom, Not, And, Or,App, RelationSort, Definition, is_prenex_universal
 from ivy_logic_utils import symbols_clauses, used_symbols_clauses, rename_clauses, clauses_using_symbols, simplify_clauses,\
     used_variables_clauses, used_constants_clauses, substitute_constants_clause, substitute_constants_clauses, constants_clauses,\
@@ -58,22 +58,22 @@ def old(sym):
     """ Return the "old" version of symbol "sym", that is, the one
     representing "sym" in the pre_state.
     """
-    return sym.prefix('old_')
+    return sym.prefix('old_`')
 
 def is_old(sym):
-    return sym.startswith('old_')
+    return sym.startswith('old_`')
 
 def old_of(sym):
-    return sym.drop_prefix('old_')
+    return sym.drop_prefix('old_`')
 
 def rename(sym,rn):
     return sym.rename(rn)
 
 def is_skolem(sym):
     """
-    Symbols with __ in them in the TR are considerd to be implicitly existentially quantified.
+    Symbols with @ in them in the TR are considerd to be implicitly existentially quantified.
     """
-    return sym.contains('__')
+    return sym.contains('@')
 
 def is_global_skolem(sym):
     """
@@ -81,9 +81,9 @@ def is_global_skolem(sym):
     quantifiers outside the scope of the temporal "globally" and hence are constants over time.
     That means they don't get renamed when composing transition relations sequentially.
 
-    Global skolems have names of the form '__X...' where X is a capitol letter.
+    Global skolems have names of the form '@X...' where X is a capitol letter.
     """
-    return sym.startswith('__') and len(sym.name) > 2 and sym.name[2].isupper()
+    return sym.startswith('@') and len(sym.name) > 2 and sym.name[2].isupper()
 
 def null_update():
     return ([],true_clauses(),false_clauses())
@@ -312,7 +312,7 @@ def compose_updates(update1,axioms,update2):
     used = used_symbols_clauses(and_clauses(clauses1,clauses2))
     used.update(symbols_clauses(pre1))
     used.update(symbols_clauses(pre2))
-    rn = UniqueRenamer('__m_',used)
+    rn = NumericRenamer(used=used,suffix='@')
     map1 = dict()
     map2 = dict()
     for v in updated1:
@@ -343,7 +343,7 @@ def compose_updates(update1,axioms,update2):
 
 def exist_quant_map(syms,clauses):
     used = used_symbols_clauses(clauses)
-    rn = UniqueRenamer('__',used)
+    rn = UniqueRenamer('@',used)
     map1 = dict()
     for s in syms:
         map1[s] = rename(s,rn)

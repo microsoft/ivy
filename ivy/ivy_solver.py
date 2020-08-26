@@ -961,7 +961,7 @@ def get_model_clauses(clauses1):
 
 def sort_size_constraint(sort,size):
     if isinstance(sort,ivy_logic.UninterpretedSort):
-        syms = [ivy_logic.Symbol('__'+sort.name+'$'+str(i),sort) for i in range(size)]
+        syms = [ivy_logic.Symbol('@'+sort.name+'$'+str(i),sort) for i in range(size)]
         v = ivy_logic.Variable('X'+sort.name,sort)
         res =  ivy_logic.Or(*[ivy_logic.Equals(v,s) for s in syms])
 #        print "sort_size_constraint : {}".format(res)
@@ -975,7 +975,7 @@ def relation_size_constraint(relation, size):
 
     consts = [
         [
-            lg.Const('__${}${}${}'.format(relation.name, i, j), s)
+            lg.Const('@${}${}${}'.format(relation.name, i, j), s)
             for j, s in enumerate(relation.sort.domain)
         ]
         for i in range(size)
@@ -1256,7 +1256,7 @@ def clauses_model_to_clauses(clauses1,ignore = None, implied = None,model = None
 #        print "dict: {}".format([(str(x),str(y)) for x,y in m.iteritems()])
     # else, existentially quantify the names of the universe elements
     else:
-        m = dict((c.rep,ivy_logic.Constant(c.rep.prefix('__')))
+        m = dict((c.rep,ivy_logic.Constant(c.rep.prefix('@')))
                  for s in h.sorts() for c in h.sort_universe(s))
     res = substitute_constants_clauses(res,m)
 #    print "core after rename: {} ".format(unsat_core(res,true_clauses()))

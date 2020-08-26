@@ -117,7 +117,7 @@ def varname(name):
     if name.startswith('"'):
         return name
     
-    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('__prm:','prm__').replace('prm:','prm__').replace('__fml:','').replace('fml:','').replace('ret:','')
+    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('__prm:','prm__').replace('prm:','prm__').replace('@fml:','').replace('fml:','').replace('ret:','')
     name = re.sub(puncs,'__',name).replace('@@','.')
     return name.replace(':','__COLON__')
 #    return name.split(':')[-1]

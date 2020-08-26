@@ -714,7 +714,7 @@ class TseitinContext(object):
     def __init__(self,used = None):
         self.clauses = []
         self.used = used if used else {}
-        self.fresh = UniqueRenamer('__ts',self.used)
+        self.fresh = UniqueRenamer('@ts',self.used)
     def __enter__(self):
         global tseitin_context
         self.save = tseitin_context
@@ -1120,7 +1120,7 @@ def or_clauses2(clauses1,clauses2):
     if [] in clauses2: return clauses1
 
     used = used_symbols_clauses(clauses1 + clauses2);
-    v = bool_const(UniqueRenamer('__ts',used)())
+    v = bool_const(UniqueRenamer('@ts',used)())
 
     clauses1 = [[Literal(1,v)] + c for c in clauses1]
     clauses2 = [[Literal(0,v)] + c for c in clauses2]
@@ -1151,7 +1151,7 @@ def or_clauses(*args):
         res,vs = args[0],[And()]
     else:
         used = set(chain(*[arg.symbols() for arg in args]))
-        rn = UniqueRenamer('__ts0',used)
+        rn = NumericRenamer(suffix='@if',used=used)
         res,vs,args = or_clauses_int(rn,args)
     fixed_vs = []
     fixed_args = []
@@ -1178,7 +1178,7 @@ def ite_clauses(cond,args):
         args[1] = Clauses(args[1].fmlas,args[0].defs,args[1].annot) 
     used = set(chain(*[arg.symbols() for arg in args]))
     used.update(symbols_ast(cond))
-    rn = UniqueRenamer('__ts0',used)
+    rn = NumericRenamer(suffix='@if',used=used)
     return ite_clauses_int(rn,cond,args)
 
 def elim_definitions(clauses,dead):
@@ -1277,7 +1277,7 @@ def tagged_or_clauses(prefix,*args):
     predicate symbols begin with "prefix". See find_true_disjunct.
     """
     args = coerce_args_to_clauses(args)
-    res,vs,args = or_clauses_int(UniqueRenamer('__to0',dict()),args)
+    res,vs,args = or_clauses_int(UniqueRenamer('@to0',dict()),args)
     return fix_or_annot(res,vs,args)
 
 def find_true_disjunct(clauses,eval_fun):
@@ -1352,7 +1352,7 @@ def exists_quant_clauses_map(syms,clauses):
         for x in w:
             map1[x] = v
     clauses = Clauses(clauses.fmlas,defs)
-    rn = UniqueRenamer('__',used)
+    rn = UniqueRenamer('@',used)
     for s in syms:
         map1[s] = rename(s,rn)
     return map1,rename_clauses(clauses,map1)
@@ -1396,7 +1396,7 @@ def unfold_definitions_clauses(clauses):
 
 def dual_clauses(clauses, skolemizer=None):
     if skolemizer == None:
-        skolemizer = lambda v: var_to_skolem('__',Variable(v.rep,v.sort))
+        skolemizer = lambda v: var_to_skolem('@',Variable(v.rep,v.sort))
     vs = used_variables_in_order_clauses(clauses)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     clauses = substitute_clauses(clauses,sksubs)
@@ -1409,7 +1409,7 @@ def dual_clauses(clauses, skolemizer=None):
 
 def dual_formula(fmla, skolemizer=None):
     if skolemizer == None:
-        skolemizer = lambda v: var_to_skolem('__',Variable(v.rep,v.sort))
+        skolemizer = lambda v: var_to_skolem('@',Variable(v.rep,v.sort))
     vs = used_variables_in_order_ast(fmla)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     fmla = negate(substitute_ast(fmla,sksubs))
@@ -1421,7 +1421,7 @@ def dual_formula(fmla, skolemizer=None):
 
 def skolemize_formula(fmla, skolemizer=None):
     if skolemizer == None:
-        skolemizer = lambda v: var_to_skolem('__sk__',Variable(v.rep,v.sort))
+        skolemizer = lambda v: var_to_skolem('sk@',Variable(v.rep,v.sort))
     vs = []
     while is_exists(fmla):
         vs.extend(fmla.variables)
@@ -1500,7 +1500,7 @@ def witness_ast(pos,vs,witnesses,fmla):
 
 def reskolemize_clauses(clauses, skolemizer):
     print clauses
-    cs = [c for c in used_constants_clauses(clauses) if '__' in c.rep]
+    cs = [c for c in used_constants_clauses(clauses) if '@' in c.rep]
 #    print "reskolemize_clauses c = {}".format(cs)
     sksubs = dict((c,skolemizer(Variable(c.rep,c.sort))) for c in cs)
     return substitute_constants_clauses(clauses,sksubs)

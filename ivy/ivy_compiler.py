@@ -23,6 +23,7 @@ import ivy_theory as ith
 import ivy_isolate as iso
 import ivy_printer
 import ivy_proof as ip
+import ivy_transrel as tr
 from collections import defaultdict
 from tarjan import tarjan
 
@@ -288,7 +289,8 @@ def compile_inline_call(self,args,methodcall=False):
     return None
 
 def old_sym(sym,old):
-    return sym.prefix('old_') if old else sym
+#    return sym.prefix('old_') if old else sym
+    return tr.old(sym) if old else sym
 
 def compile_app(self,old=False):
     if self.rep == "true" or self.rep == "false":

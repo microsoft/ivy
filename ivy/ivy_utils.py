@@ -179,6 +179,20 @@ class UniqueRenamer(object):
         self.used.add(res)
         return res
 
+class NumericRenamer(object):
+    def __init__(self,prefix='',used=[],suffix=''):
+        self.prefix, self.used = prefix, set(str(s) for s in used)
+        self.suffix = suffix
+        self.next_num = 0
+    def __call__(self,name = ''):
+        thing = self.prefix+name+self.suffix
+        while True:
+            self.next_num += 1
+            res = thing + str(self.next_num)
+            if res not in self.used:
+                self.used.add(res)
+                return res
+
 def distinct_renaming(names1,names2):
     rn = UniqueRenamer('',names2)
     return dict((s,rn(s)) for s in names1)
