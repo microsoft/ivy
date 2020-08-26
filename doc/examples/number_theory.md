@@ -102,7 +102,7 @@ We prove some useful properties of quotients and remainders of
 division. First we need a couple of lemmas about multiplication
 and division to use later.
 
-Lemma (Multiplication expanding).
+**Lemma (Multiplication expanding).**
 
 If `X` is positive, then `MX >= M`.
 
@@ -115,7 +115,7 @@ theorem [mul_expand] {
 }
 
 ```
-Lemma (Division by subtraction).
+**Lemma (Division by subtraction).**
 
 If `M` positive and `N >= M` then `N:nat/M = (N - M) / M + 1`
 
@@ -149,7 +149,7 @@ relation quot_rem(N:nat,M:nat,Q:nat,R:nat)
 explicit definition quot_rem(N,M,Q,R) = R < M & N = Q * M + R
 
 ```
-Theorem (Quotient/Remainder existence).
+**Theorem (Quotient/Remainder existence).**
 
 Let `N,M` be natural numbers with `M > 0`. There exists a quotient/remainder
 pair `(Q,R)` for division of N by M.
@@ -193,7 +193,7 @@ proof {
 }
 
 ```
-Theorem (Quotient/Remainder uniqueness).
+**Theorem (Quotient/Remainder uniqueness).**
 
 Let `N,M` be natural numbers with `M > 0` and let `Q,R,Q1,R1` be such that
 `quot_rem(N,M,Q,R)` and `quot_rem(N,M,Q1,R1)`. Then `Q1=Q` and `R1=R`.
@@ -234,7 +234,7 @@ proof {
 }
 
 ```
-Lemma (Division).
+**Lemma (Division).**
 
 If `M > 0` then for some `R`, `quot_rem(N,M,N/M,R)`.
 
@@ -369,7 +369,7 @@ proof {
 ```
 We prove some useful properties of GCD.
 
-Theorem (GCD with self)
+**Theorem (GCD with self)**
 
 If X is positive, the GCD of X and itself is X.
 
@@ -394,7 +394,7 @@ proof {
 }
 
 ```
-Theorem (GCD symmetric).
+**Theorem (GCD symmetric).**
 
 If X and Y are positive, then `gcd(X,Y) = gcd(Y,X)`.
 
@@ -427,7 +427,7 @@ explicit definition prime(X) = X > 1 & forall Y. dvds(Y,X) -> Y=1 | Y=X
 ```
 Two positive numbers are 'co-prime' if their GCD is one.
 
-Lemma (Prime/Coprime).
+**Lemma (Prime/Coprime).**
 
 If `N>0` is a natural number and `P` is a prime number, then either
 `N` and `P` are coprime or `P` divides `N`.
@@ -456,7 +456,7 @@ proof {
 
 
 ```
-Lemma (Divisor, alternate definition).
+**Lemma (Divisor, alternate definition).**
 
 Natural number `X` is a divisor of `Y` iff `X` is positive and
 there exists a `Z` such that `X * Z = Y`.
@@ -492,7 +492,7 @@ The next lemma is the basis for Euclid's algorithm for computing the
 GCD. That is, provided `N > M`, `gcd(N,M)` is preserved by
 subtracting `M` from `N`. 
 
-Lemma (GCD/Euclid).
+**Lemma (GCD/Euclid).**
 
 If `N>M>0` then `gcd(M,N) = gcd(M,N-M)`
 
@@ -563,7 +563,7 @@ We can use the above to prove Bezout's lemma, an important fact
 about GCD's that we will apply to help us prove facts about prime
 factorizations.  
 
-Theorem (Bezout's lemma).
+**Theorem (Bezout's lemma).**
 
 If `S,T` are positive, then there exists ~A,B` such that `A*S-B*T =
 gcd(S,T)`.
@@ -635,7 +635,7 @@ proof {
 ```
 Here is a useful consequence of Bezout's lemma.
 
-Lemma (Coprime/Product).
+**Lemma (Coprime/Product).**
 
 For any positive `P`, `N` and `M`, if `N` and `P are co-prime and `P`
 divides `N * M` then `P` divides `M`.
@@ -662,7 +662,7 @@ proof {
 ```
 Also, using Bezout's lemma, we can show the following.
 
-Lemma (Divisor/GCD).
+**Lemma (Divisor/GCD).**
 
 If `a` and `b` are positive, and if `c` is a common divisor of
 `a,b`, then `c` is a divisor of `gcd(a,b)`.
@@ -695,7 +695,7 @@ proof {
 A consequence the Coprime/Product lemma is that if a prime divides a
 product, it divides one of the factors.
 
-Lemma (Prime/Product).
+**Lemma (Prime/Product).**
 
 For any prime `P` and `N` and `M`, if `P` divides `N * M` then `P`
 divides `M`.
@@ -747,7 +747,7 @@ explicit definition squared(X) = X * X
 This is a useful special case of the Prime/Product lemma that we'll
 use twice in the proof.
 
-Lemma (Prime/Square).
+**Lemma (Prime/Square).**
 
 If a prime divides `squared(A)` then it divides `A`.
 
@@ -773,7 +773,7 @@ Actually, we prove the closet thing we can in integer arithmetic,
 that is, there is no reduced fraction `a/b` such that `squared(a/b)
 = 2`.  We state this as follows:
 
-Theorem (Square root of 2 irrational).
+**Theorem (Square root of 2 irrational).**
 
 Given positive natural numbers `a,b` such that `gcd(a,b) = 1`, it is not the
 case that `squared(a) = 2 * squared(b)`.
