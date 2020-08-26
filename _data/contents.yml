@@ -17,6 +17,7 @@
   - examples/list_reverse
   - examples/indexset
   - examples/window
+  - examples/number_theory
 - title: Sharded Hash Table
   docs:
   - examples/sht/sharded_hash_table

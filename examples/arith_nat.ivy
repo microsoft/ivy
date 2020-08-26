@@ -1,0 +1,78 @@
+#lang ivy1.7
+
+
+include deduction
+
+
+axiom [admit] {
+    relation p
+    property p
+}
+
+module arith_nat = {
+
+    type this
+    interpret this -> nat
+
+    # theorem [lep] {
+    #     function p(X:this) : bool
+    #     property [prem1] exists Z. p(Z)
+    #     property exists L. p(L) & forall B. (p(B) -> L <= B)
+    # }
+
+    # proof {
+    #     instantiate [p] lep[this] with n=0:this,p(X) = p(X)
+    #     tactic skolemize
+    #     instantiate with L = _L
+    #     instantiate p with B = _B(_L)
+    # }
+
+    axiom [gen_ind] {
+        relation p(X:this)
+        theorem [prem] {
+            individual x:this
+            property [ind_hyp] forall Y. Y < x -> p(Y)
+            property p(x)
+        }
+        #--------------------------
+        property p(X)    
+    }
+
+    theorem [gep] {
+        individual n : this
+        function p(X:this) : bool
+        property [prem1] exists Z. p(Z)
+        property [prem2] forall Y. ~(Y > n & p(Y))
+        property exists L. p(L) & forall B. (p(B) -> L >= B)
+    }
+
+    proof {
+        apply elimImp with prem1 = prem2
+        forget prem2
+        apply ind[this] with X=n
+        proof [base] {
+            apply introImp<p1/prem>
+            apply introImp<p2/prem>
+            tactic skolemize
+            instantiate [p3] p2 with Y = _Z
+            instantiate with L = 0:this
+            instantiate p2 with Y = _B(0)
+        }
+        proof [step] {
+            apply introImp<p1/prem>
+            apply introImp<p2/prem>
+            apply exmid with q = p(x+1)
+            proof [pos] {
+                instantiate with L=x+1
+                tactic skolemize
+                instantiate p2 with Y = _B
+                forget p1
+            }
+            proof [neg] {
+                tactic skolemize
+                instantiate p2 with Y = _Y
+                instantiate with L = _L
+            }
+        }
+    }
+}
