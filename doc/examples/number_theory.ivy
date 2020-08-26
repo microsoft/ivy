@@ -1,9 +1,13 @@
 #lang ivy1.7
+# ---
+# layout: page
+# title: Number theory
+# ---
 
 #
 # Ivy is based on the idea that the automated parts of a proof should
 # be expressed in a decidable logical fragment so that the automated
-# prover will behave in a more predicatable and stable way.  Ivy's
+# prover will behave in a more predictable and stable way.  Ivy's
 # fragment checker provides feedback when a proof goal falls outside
 # the decidable fragment to help in fixing the problem. Typically, to
 # stay within the decidable realm, we break the proof into lemmas, or
@@ -14,7 +18,7 @@
 # decidable *if* the theories used are decidable for formulas without
 # quantifiers.  This holds true for the theory of linear integer
 # arithmetic (LIA). A formula is on LIA if in every term of the form
-# `X=Y`, either `X` or `Y` is a numeric constant. If, however, we
+# `X*Y`, either `X` or `Y` is a numeric constant. If, however, we
 # allow non-linear terms, then validity of even quantifier-free
 # formulas is undecidable.
 #
@@ -36,6 +40,11 @@
 # manually instantiating quantifiers that the fragment check complains
 # about. However, in some cases we will also have to provide some
 # "hints" to help Z3 prove simple arithmetic facts.
+#
+# The theorems developed here are based on the presentation in the
+# online textbook [Logic and
+# Proof](https://leanprover.github.io/logic_and_proof/index.html) by
+# Leonardo DeMoura.
 #
 # First, we instantiate a type `nat` corresponding to the natural numbers.
 
@@ -77,7 +86,7 @@ proof {
 # arithmetic, it's better to go in small steps to reduce confusion.
 # Fortunately, although Z3 can't handle the above very trivial proof,
 # it can often handle substantially more complex proof goals. The
-# point is that, with undeciable theories, we sometimes fail on even
+# point is that, with undecidable theories, we sometimes fail on even
 # very small problems and we need some strategy to recover from these
 # failures.
 
@@ -139,19 +148,19 @@ explicit definition quot_rem(N,M,Q,R) = R < M & N = Q * M + R
 # `N-M`, by the inductive hypothesis. Then `Q=_Q+1` and `R=_R`.
 #
 # To convince the prover of this, we start by unfolding the definition
-# of `quot_rem`, then apply the induciton schema `N` substituted for
-# the induction variable `X` in the schema. This is sufficint to match
+# of `quot_rem`, then apply the induction schema `N` substituted for
+# the induction variable `X` in the schema. This is sufficient to match
 # the conclusion `p(X)` in the schema to out proof goal. We must now
 # prove our property for arbitrary `x`, assuming the it holds for all
-# numbers less than `x` (the induciton hypothesis). We then split
+# numbers less than `x` (the induction hypothesis). We then split
 # cases on whether `x < M`. This is easy because the quotient must be
-# 0 and the remainder must be `x`. We 'forget' the induciton
+# 0 and the remainder must be `x`. We 'forget' the induction
 # hypothesis, since it isn't needed and it has a quantifier. Z3 does
 # the rest.
 #
 # In the remaining case, `x >= M`, we subtract `M` from `x`. The
 # inductive hypothesis gives is a quotient/remainder pair `(_Q,_R)`
-# for `x-M`. Adding one to the quotient, we get a quotieint/remainder
+# for `x-M`. Adding one to the quotient, we get a quotient/remainder
 # pair for `x`.
 
 
@@ -173,7 +182,7 @@ proof {
 
 # Theorem (Quotient/Remainder uniqueness).
 # 
-# Let `N,M` be natural numbers with `M > 0` and let `Q,R,Q1,R1` be such thar
+# Let `N,M` be natural numbers with `M > 0` and let `Q,R,Q1,R1` be such that
 # `quot_rem(N,M,Q,R)` and `quot_rem(N,M,Q1,R1)`. Then `Q1=Q` and `R1=R`.
 #
 # Proof. Assume `Q1~=Q` and consider the case `Q < Q1`. We have `R
@@ -184,7 +193,7 @@ proof {
 # Notice in the proof, the cases `Q < Q1` and `Q > Q1` are not
 # quite symmetric. This is because in the latter case, Z3 doesn't
 # get the fact that `M * (Q:nat -Q1) >= M` and we have to prove it
-# manually. This is characteriztic of non-linear arithmetic using
+# manually. This is characteristic of non-linear arithmetic using
 # Z3: sometimes there are very simple facts that is doesn't get,
 # and there is some guesswork involved in finding the missing fact
 # that it needs. Although the proof below looks simple, it was
@@ -253,7 +262,7 @@ proof {
 # Definition (Divisor).
 #
 # Relation `dvds(X,Y)` is true if X is a divisor of Y. We define it
-# here in terms of the integer divison operator instead of saying the
+# here in terms of the integer division operator instead of saying the
 # there exists a number `N` such that `N * Y = Y`. This is convenient
 # because it lets Z3's non-linear arithmetic capability do some work
 # for us. Later, though, we'll need to introduce the more traditional
@@ -341,8 +350,8 @@ proof {
 #
 # Since `X` is a common divisor, the GCD must be greater than or equal
 # to `X`. Since no divisor of `X` is greater that `X`, `X` must be the
-# GCD. To get Z3 to prove this, we instantiate the definitng property
-# of GCD. Unfolding the definitions of `is_gcd`, `commddiv` and
+# GCD. To get Z3 to prove this, we instantiate the definition property
+# of GCD. Unfolding the definitions of `is_gcd`, `commdiv` and
 # `dvds`, we get a formula of arithmetic saying that every divisor `W`
 # of `X` is <= the GCD. In particular, by plugging in `X` for `W`, we
 # get that the CGD is <= X. Now the proof goal is
@@ -458,7 +467,7 @@ proof {
 # `M = A * Z` and `N = B * Z`. Then `N-M = Z * (B-A)`. Thus, Z is a common divisor of
 # `M` and `N-M`.
 #
-# Notice that in the formal proof, something funy is happening at line
+# Notice that in the formal proof, something funny is happening at line
 # `[*]`.  That is, we take that premise `commdiv(Z,M,N)` and unfold
 # `commdiv` to get `dvds(Z,M) & dvds(A,N)`. Then we unfold with
 # `dvds_alt` which is `dvds(X,Y) <-> (X > 0 & exists Z. Z * X =
@@ -473,7 +482,7 @@ proof {
 # generated names. In the `unfold` command, we give two
 # alpha-renamings `<A/Z>` and `<B/Z>`. The first is used for the first
 # (left-most) unfolding of `dvds_alt` and the second is used for the
-# second unfolding. This elimantes the variable name clash and gives
+# second unfolding. This eliminates the variable name clash and gives
 # us two distinct names we can refer to later. In particular, after Skolemization,
 # these become `_A` and `_B`, which we can use to instantiate the existentials in
 # the conclusion, at line `[**]`.
@@ -514,12 +523,12 @@ proof {
 }
 
 # We can use the above to prove Bezout's lemma, an important fact
-# about GCD's that we will apply to help us prove fcts about prime
+# about GCD's that we will apply to help us prove facts about prime
 # factorizations.  
 
 # Theorem (Bezout's lemma).
 #
-# If `S,T` are positive, then ther exists ~A,B` such that `A*S-B*T =
+# If `S,T` are positive, then there exists ~A,B` such that `A*S-B*T =
 # gcd(S,T)`.
 #
 # Proof. By induction over `max(S,T` using the GCD/Euclid lemma.
@@ -528,10 +537,10 @@ proof {
 # premise `M = max(S,T)`. We can then match the general induction
 # schema with the induction variable `X=M`. We them, in effect,
 # Skolemize the quantifiers on `S,T` using the `introA` rule and we
-# split cases on whether `S > T`, ~S=T` or `S<T`. In the first caxse,
+# split cases on whether `S > T`, ~S=T` or `S<T`. In the first case,
 # we take the inductive hypothesis for `gcd(S-T,T)`. That is, since
 # `S>T` we know that `max(S-T,T) < max(S,T)`, so the theorem holds by
-# induction on `max(S,T)`. THere is a bit of a technicality here, as
+# induction on `max(S,T)`. There is a bit of a technicality here, as
 # we have to plug in `max(S,S-T)` as the induction parameter `Y` of
 # the induction hypothesis.  Now by the GCD/Euclid result, we get the
 # theorem by plugging in `A+B` for `B`.
@@ -541,7 +550,7 @@ proof {
 # termination case for Euclid's algorithm). Finally, the case `S > T`
 # is symmetric to `S < T`.
 #
-# Having proved the lemma for all values of `max(S,T)`, we elimiante
+# Having proved the lemma for all values of `max(S,T)`, we eliminate
 # the induction variable `M` by instantiating our lemma with
 # `M=max(S,T)` (i.e., witnessing the fact that every pair `M,T` has a
 # max).
@@ -617,7 +626,7 @@ proof {
 # If `a` and `b` are positive, and if `c` is a common divisor of
 # `a,b`, then `c` is a divisor of `gcd(a,b)`.
 #
-# Proof. By Bezout's lemma, we have `gcd(a,b) = A*a - B*b`. Morover,
+# Proof. By Bezout's lemma, we have `gcd(a,b) = A*a - B*b`. Moreover,
 # we have `C * c = a` and `D * c = b`.  It follows that `c * (_A * _Z
 # - _B * _Z_a) = gcd(a,b)`.
 
@@ -711,7 +720,7 @@ proof {
 }
 
 # Now we're ready to prove that there is no rational square root of 2.
-# Actually, we prove the closet thing we can in integer arithetic,
+# Actually, we prove the closet thing we can in integer arithmetic,
 # that is, there is no reduced fraction `a/b` such that `squared(a/b)
 # = 2`.  We state this as follows:
 #

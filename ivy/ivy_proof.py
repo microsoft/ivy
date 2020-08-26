@@ -354,6 +354,7 @@ class ProofChecker(object):
         conc = lu.witness_ast(True,[],witness,conc)
         prem = clone_goal(prem,goal_prems(prem),conc)
         prem  = apply_match_goal(pmatch,prem,apply_match_alt)
+        prem = drop_supplied_prems(prem,decl,proof.match())
         if not isinstance(proof.label,ia.NoneAST):
             prem = prem.clone([proof.label,prem.formula])
         if any(prem.name == x.name for x in goal_prem_goals(decl)):
@@ -1012,7 +1013,7 @@ def goals_eq_mod_alpha(x,y):
                 if xp != yp:
                     return False
     else:
-        if isinstance(y,ia.SchemaBody):
+        if isinstance(y.formula,ia.SchemaBody):
             return False
     return il.equal_mod_alpha(goal_conc(x),goal_conc(y))
 
@@ -1425,6 +1426,25 @@ def close_unmatched(goal,match):
     for v in reversed(conc_vars):
         conc = il.ForAll([v],conc)
     return clone_goal(goal,goal_prems(goal),conc)
+
+# When instantiating a schema, we drop the premises that supplied in the
+# proof goal. 
+
+def drop_supplied_prems(schema,goal,proof_match):
+    gprems = goal_prems_by_name(goal)
+    pmap = dict()
+    for m in proof_match:
+        lhs,rhs = m.args
+        if isinstance(lhs,ia.Atom) and len(lhs.args) == 0:
+            if isinstance(rhs,ia.Atom) and len(rhs.args) == 0:
+                pmap[lhs.rep] = rhs.rep
+    def is_supplied(prem):
+        if isinstance(prem,ia.LabeledFormula) and prem.name in pmap:
+            gname = pmap[prem.name]
+            return gname in gprems and goals_eq_mod_alpha(prem,gprems[gname])
+        return False
+    return clone_goal(schema,[x for x in goal_prems(schema) if not is_supplied(x)],
+                      goal_conc(schema))
 
 class AddSymbols(object):
     """ temporarily add some symbols to a set of symbols """
