@@ -49,6 +49,7 @@ checks = [
           ['oddeven3','OK'],
           ['oddeven4','OK'],
           ['learning_switch1','trace=true','learning_switch1.ivy: line 37:'],
+          ['ded1','OK'],
       ]
     ],
     ['../doc/examples/testing',
@@ -96,6 +97,7 @@ checks = [
       ['udp_test','OK'],
       ['list_reverse','OK'],
       ['indexset','OK'],
+      ['number_theory','OK'],
       ]
      ],
     ['../examples/ivy',

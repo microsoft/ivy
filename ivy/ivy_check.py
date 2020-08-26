@@ -674,6 +674,8 @@ def check_separately(isolate):
     return get_isolate_attr(isolate,'separate','false') == 'true'
 
 def mc_isolate(isolate,meth=ivy_mc.check_isolate):
+    im.module.labeled_axioms.extend(lf for lf in im.module.labeled_props if lf.assumed)
+    im.module.labeled_props = [lf for lf in im.module.labeled_props if not lf.assumed]
     if im.module.labeled_props:
         raise IvyError(im.module.labeled_props[0],'model checking not supported for property yet')
     if not check_separately(isolate):
