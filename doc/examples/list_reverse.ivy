@@ -332,7 +332,7 @@ isolate double_reverse1 = {
     # of `U` that we need.
 
     proof
-        assume rt.into with U = arr.end(B)
+        assume rt.into with U = arr.end(B), X=X
 
     # Here is the resulting proof goal:
     #

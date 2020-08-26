@@ -145,6 +145,10 @@ class ProofChecker(object):
                 return self.compose_proofs(decls,proof.args)
             elif isinstance(proof,ia.AssumeTactic):
                 return self.assume_tactic(decls,proof)
+            elif isinstance(proof,ia.UnfoldTactic):
+                return self.unfold_tactic(decls,proof)
+            elif isinstance(proof,ia.ForgetTactic):
+                return self.forget_tactic(decls,proof)
             elif isinstance(proof,ia.ShowGoalsTactic):
                 return self.show_goals_tactic(decls,proof)
             elif isinstance(proof,ia.DeferGoalTactic):
@@ -173,7 +177,7 @@ class ProofChecker(object):
         for idx,decl in enumerate(decls):
             if decl.label.rep == proof.label.rep:
                 return decls[:idx] + decls[idx+1:] + self.apply_proof([decl],proof.proof)
-        raise IvyError(proof,'no goal with label {}'.format(proof.label))
+        raise iu.IvyError(proof,'no goal with label {}'.format(proof.label))
 
     def tactic_tactic(self,decls,proof):
         tn = proof.tactic_name
@@ -214,6 +218,7 @@ class ProofChecker(object):
         goal = decls[0]
         vocab = goal_vocab(goal)
         cut = compile_expr_vocab(proof.args[0],vocab)
+        cut = normalize_goal(cut)
         subgoal = goal_subst(goal,cut,cut.lineno)
         lhs = proof.args[1]
         if not isinstance(lhs,ia.NoneAST):
@@ -290,13 +295,15 @@ class ProofChecker(object):
                 raise Redefinition(df,"redefinition of {}".format(sym))
         return [goal] + decls[1:]
 
-    def lookup_schema(self,schemaname,decl,ast):
+    def lookup_schema(self,schemaname,decl,ast,close=False):
         if schemaname in self.schemata:
             schema = self.schemata[schemaname]
             check_schema_capture(schema,decl)
         elif schemaname in self.definitions:
             schema = self.definitions[schemaname]
-            schema = clone_goal(schema,goal_prems(schema),goal_conc(schema).to_constraint())
+            fmla = goal_conc(schema).to_constraint()
+            fmla = il.close_formula(fmla) if close else fmla
+            schema = clone_goal(schema,goal_prems(schema),fmla)
             check_schema_capture(schema,decl)
         else:
             premmap = dict((x.name,x) for x in goal_prem_goals(decl))
@@ -333,19 +340,52 @@ class ProofChecker(object):
             if isinstance(proof.label,ia.NoneAST):
                 decl = goal_remove_prem(decl,schemaname)
         else:
-            schema = self.lookup_schema(schemaname,decl,proof)
+            schema = self.lookup_schema(schemaname,decl,proof,close=False)
         prob, pmatch = self.setup_schema_matching(decl,proof,schema,allow_witness=True)
+        def iswit(x):
+            return isinstance(x,il.Variable) and x not in prob.freesyms
+        witness = dict((x,y) for x,y in pmatch.iteritems() if iswit(x))
+        pmatch = dict((x,y) for x,y in pmatch.iteritems() if not iswit(x))
 #        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
         prem = prob.schema
+        if schemaname not in premmap:
+            prem = close_unmatched(prem,pmatch)
         conc = goal_conc(prem)
-        conc = lu.witness_ast(True,[],pmatch,conc)
+        conc = lu.witness_ast(True,[],witness,conc)
         prem = clone_goal(prem,goal_prems(prem),conc)
         prem  = apply_match_goal(pmatch,prem,apply_match_alt)
+        prem = drop_supplied_prems(prem,decl,proof.match())
         if not isinstance(proof.label,ia.NoneAST):
             prem = prem.clone([proof.label,prem.formula])
         if any(prem.name == x.name for x in goal_prem_goals(decl)):
             raise ProofError(proof,'instance name {} clashes with context'.format(prem.name))
         return [goal_add_prem(decl,prem,proof.lineno)] + decls[1:]
+
+    def unfold_tactic(self,decls,proof):
+        decl = decls[0]
+        defns = []
+        for unfspec in proof.unfspecs:
+            defname = unfspec.defname
+            defn = self.lookup_schema(defname,decl,proof)
+            rdefs = [rename_goal(defn,rn) for rn in unfspec.renamings]
+            rdefs.append(defn)
+            defns.append(rdefs)
+        if proof.has_premise:
+            premname = proof.premname
+            decl = goal_apply_to_prem(decl,premname,lambda goal: unfold_goal(goal,defns))
+            if decl is None:
+                raise ProofError(proof,'no premise {} found to unfold in'.format(premname))
+        else:
+            decl = goal_apply_to_conc(decl,lambda fmla: unfold_fmla(fmla,defns))
+        return [decl] + decls[1:]
+
+    def forget_tactic(self,decls,proof):
+        decl = decls[0]
+        prems = goal_prems(decl)
+        prems = [p for p in prems if not (isinstance(p,ia.LabeledFormula)
+                                          and p.name in proof.premnames)]
+        decl = clone_goal(decl,prems,goal_conc(decl))
+        return [decl] + decls[1:]
 
     def if_tactic(self,decls,proof):
         cond = proof.args[0]
@@ -644,6 +684,7 @@ def rename_goal(goal,renaming):
         check_alpha_capture(goal,match)
         goal = apply_match_goal(match,goal,apply_match_alt)
         goal = clone_goal(goal,goal_prems(goal),il.alpha_rename(rmap,goal_conc(goal)))
+        goal = goal.rename(rmap.get(goal.name,goal.name))
         return goal
     res = rec_goal(goal)
     return res
@@ -839,15 +880,15 @@ def compile_match(proof_match,prob,decl,allow_witness=False):
     freesyms may be used in the match."""
 
     schema = prob.schema
+    freesyms = prob.freesyms.copy()
     if allow_witness:
-        prob.freesyms.update(logic_util.used_variables(goal_conc(schema)))
+        freesyms.update(logic_util.used_variables(goal_conc(schema)))
     matches = compile_match_list(proof_match,schema,decl,allow_witness=allow_witness)
-    matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
+    matches = [compile_one_match(m.lhs(),m.rhs(),freesyms,prob.constants) for m in matches]
     res = merge_matches(*matches)
     return res
         
         
-    freesyms = prob.freesyms
     res = dict()
     for m in proof_match:
         if il.is_app(m.lhs()):
@@ -865,11 +906,12 @@ def compile_match(proof_match,prob,decl,allow_witness=False):
 def match_rhs_vars(match):
     """ Get the symbols occurring free on the right-hand side of a match """
     res = set()
-    for v in match.values():
-        if isinstance(v,il.UninterpretedSort):
-            res.add(v)
-        else:
-            res.update(fmla_vocab(v))
+    for w in match.values():
+        for v in w if isinstance(w,list) else [w]:
+            if isinstance(v,il.UninterpretedSort):
+                res.add(v)
+            else:
+                res.update(fmla_vocab(v))
     return res
 
 def is_lambda(p):
@@ -971,7 +1013,7 @@ def goals_eq_mod_alpha(x,y):
                 if xp != yp:
                     return False
     else:
-        if isinstance(y,ia.SchemaBody):
+        if isinstance(y.formula,ia.SchemaBody):
             return False
     return il.equal_mod_alpha(goal_conc(x),goal_conc(y))
 
@@ -1010,6 +1052,11 @@ def match_get(match,sym,env,default=None):
     """ get the value of a symbol in a match, checking that no symbols
     are captured in env """
     val = match.get(sym,None)
+    if isinstance(val,list):  # for unfolding only, may get a list of values
+        save = val
+        val = val[0]
+        if len(save) > 1:
+            del save[0]
     if val is not None:
         vocab = lu.used_symbols_ast(val)
         vocab.update(lu.variables_ast(val))
@@ -1210,6 +1257,8 @@ def match_quants(pat,inst,freesyms,constants):
         return mat
 
 def compose_matches(freesyms,mat1,mat2,quants):
+    if mat1 is None or mat2 is None:
+        return None
     res = dict()
     for sym in freesyms:
         if sym not in quants:
@@ -1272,6 +1321,7 @@ def skolemize_goal(goal):
 
 def skolemize_fmla(fmla,pos,renamer,skfuns):
     univs = []
+    outer = []
     var_uniq = il.VariableUniqifier()
     def rec( fmla,pos):
         if isinstance(fmla,il.Not):
@@ -1286,7 +1336,7 @@ def skolemize_fmla(fmla,pos,renamer,skfuns):
         is_e = il.is_exists(fmla)
         is_a = il.is_forall(fmla)
         if is_a and pos or is_e and not pos:
-            fvs = list(iu.unique(lu.variables_ast(fmla)))
+            fvs = list(x for x in iu.unique(lu.variables_ast(fmla)) if x in outer)
             body = fmla.body
             for v in fmla.variables:
                 sym = il.Symbol(renamer('_'+v.name),
@@ -1300,8 +1350,12 @@ def skolemize_fmla(fmla,pos,renamer,skfuns):
             for v in fmla.variables:
                 u = var_uniq(v)
                 univs.append(u)
+                outer.append(u)
                 body = il.substitute(body,[(v,u)])
-            return rec(body,pos)
+            res = rec(body,pos)
+            for v in fmla.variables:
+                outer.pop()
+            return res
         return fmla
     body = rec(fmla,pos)
     if univs:
@@ -1315,6 +1369,82 @@ def compile_witness_list(proof,goal):
     the_goal_vocab.variables.extend(list(logic_util.used_variables(goal_conc(goal))))
     return [compile_expr_vocab(d,the_goal_vocab) for d in proof.args]
     
+
+def match_from_defn(defn):
+    vs = set()
+    defn = defn.formula
+    while isinstance(defn,il.ForAll):
+        vs.update(defn.variables)
+        defn = defn.body
+    if il.is_eq(defn) or isinstance(defn,il.Iff):
+        lhs,rhs = defn.args
+        if il.is_app(lhs) & (all(x in vs for x in lhs.args) or True):
+            if iu.distinct(lhs.args):
+                return {lhs.rep : il.Lambda(lhs.args,rhs)}
+    raise ProofError(defn,'not a definition')
+
+def match_from_defns(defns):
+    matches = [match_from_defn(d) for d in  defns]
+    lhs = list(matches[0].keys())[0]
+    assert all(lhs in m for m in matches)
+    return {lhs:[m[lhs] for m in matches]}
+
+def unfold_goal(goal,defns):
+    for rdefs in defns:
+        match = match_from_defns(rdefs)
+        goal = apply_match_goal(match,goal,apply_match_alt)
+    return goal
+
+def unfold_fmla(fmla,defns):
+    for rdefs in defns:
+        match = match_from_defns(rdefs)
+        fmla = apply_match_alt(match,fmla)
+    return fmla
+
+def goal_apply_to_prem(goal,premname,fn):
+    prems = goal_prems(goal)
+    premmap = dict((x.name,idx) for idx,x in enumerate(prems))
+    if premname in premmap:
+        idx = premmap[premname]
+        prem = prems[idx]
+        if not isinstance(prem,ia.LabeledFormula):
+            return None
+        return clone_goal(goal,prems[0:idx]+[fn(prems[idx])]+prems[idx+1:],goal_conc(goal))
+    return None
+
+def goal_apply_to_conc(goal,fn):
+    return clone_goal(goal,goal_prems(goal),fn(goal_conc(goal)))
+
+# When instantiating a schema, unmatched free variables occurring only
+# in the conclusion can be universally quantified. 
+
+def close_unmatched(goal,match):
+    conc = goal_conc(goal)
+    prem_vars = lu.used_variables_asts(goal_prem_goals(goal))
+    conc_vars = [x for x in iu.unique(lu.variables_ast(conc))
+                 if x not in match and x not in prem_vars]
+    for v in reversed(conc_vars):
+        conc = il.ForAll([v],conc)
+    return clone_goal(goal,goal_prems(goal),conc)
+
+# When instantiating a schema, we drop the premises that supplied in the
+# proof goal. 
+
+def drop_supplied_prems(schema,goal,proof_match):
+    gprems = goal_prems_by_name(goal)
+    pmap = dict()
+    for m in proof_match:
+        lhs,rhs = m.args
+        if isinstance(lhs,ia.Atom) and len(lhs.args) == 0:
+            if isinstance(rhs,ia.Atom) and len(rhs.args) == 0:
+                pmap[lhs.rep] = rhs.rep
+    def is_supplied(prem):
+        if isinstance(prem,ia.LabeledFormula) and prem.name in pmap:
+            gname = pmap[prem.name]
+            return gname in gprems and goals_eq_mod_alpha(prem,gprems[gname])
+        return False
+    return clone_goal(schema,[x for x in goal_prems(schema) if not is_supplied(x)],
+                      goal_conc(schema))
 
 class AddSymbols(object):
     """ temporarily add some symbols to a set of symbols """

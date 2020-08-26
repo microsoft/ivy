@@ -146,6 +146,8 @@ reserved = all_reserved = {
    'constructor' : 'CONSTRUCTOR',
    'finite' : 'FINITE',
    'tactic' : 'TACTIC',
+    'unfold' : 'UNFOLD',
+    'forget' : 'FORGET',
 }
 
 tokens += tuple(all_reserved.values())
@@ -254,7 +256,7 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         if self.version <= [1,6]:
-            for s in ['decreases','specification','implementation','require','ensure','around','parameter','apply','theorem','showgoals','spoil','explicit','thunk','isa','autoinstance','constructor','tactic','finite']:
+            for s in ['decreases','specification','implementation','require','ensure','around','parameter','apply','theorem','showgoals','spoil','explicit','thunk','isa','autoinstance','constructor','tactic','finite','unfold','forget']:
                 if s in reserved:
                     del reserved[s]
         else:

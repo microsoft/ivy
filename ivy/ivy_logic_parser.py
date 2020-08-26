@@ -147,6 +147,13 @@ else:
         p[0].lineno = get_lineno(p,2)
         
 
+    def p_term_term_colon_term(p):
+        'term : term COLON atype'
+        if hasattr(p[1],"sort"):
+            raise iu.IvyError(p[3],"multiple sort annotations")
+        p[1].sort = p[3]
+        p[0] = p[1]
+
 def p_term_var(p):
     'term : var'
     p[0] = p[1]

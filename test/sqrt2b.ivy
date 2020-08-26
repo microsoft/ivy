@@ -1,0 +1,66 @@
+#lang ivy1.7
+
+include gcd2
+
+function squared(X:nat) : nat
+definition [squareddef] {squared(X) = X * X}
+
+theorem [dvd_pow2] {
+    individual a : nat
+    individual b : nat
+    property [prem1] dvds(b,squared(a))
+    property prime(b)
+    property dvds(b,a)
+}
+
+proof {
+    unfold prem1 with squared
+    instantiate prime_dvds_product with P = b, N=a, M=a
+}
+    
+theorem [dvds_exist] {
+    individual a : nat
+    individual b : nat
+    property [prem] dvds(a,b)
+    property exists W. a * W = b
+} proof {
+    unfold prem with dvds
+    instantiate with W = b/a
+}
+
+
+property [prime2] prime(2) proof {
+    unfold with prime,commdiv,dvds
+}
+
+
+theorem [pow2mul] {property squared(X*Y) = squared(X) * squared(Y)}
+proof {
+    property [sqxy] (X:nat * Y) * (X * Y) = (X * X) * (Y * Y)
+    instantiate [s1] squared with X = X
+    instantiate [s2] squared with X = Y
+    instantiate [s3] squared with X = X*Y
+}
+
+isolate sqrt2irrat_iso = {
+    theorem [sqrt2irrat] {
+        individual a : nat
+        individual b : nat
+        property a > 0 & b > 0
+        property [co] gcd(a,b) = 1
+        property squared(a) ~= 2 * squared(b)
+    }
+    proof {
+        instantiate [dp1] dvd_pow2 with a=a,b=2:nat
+        property exists W. 2 * W = a named c1 proof {apply dvds_exist}
+        instantiate pow2mul with X=2:nat,Y=c1
+        instantiate squared with X=2:nat
+        instantiate [dp2] dvd_pow2 with a=b,b=2:nat
+        instantiate dvds_gcd with a=a,b=b,c=2:nat
+        showgoals
+    }
+} with nat,dvds,prime2
+    
+    
+        
+    

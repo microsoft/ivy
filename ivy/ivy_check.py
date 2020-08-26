@@ -220,7 +220,7 @@ class ConjAssumer(Checker):
         self.lf = lf
         Checker.__init__(self,lf.formula,invert=False)
     def start(self):
-        print pretty_lf(self.lf) + "  [proved by tactic]"
+        print pretty_lf(self.lf) + "  [assumed]"
     def assume(self):
         return True
 
@@ -443,7 +443,8 @@ def check_isolate():
                 clauses1 = lut.true_clauses(annot=act.EmptyAnnotation())
                 pre = itp.State(value = clauses1)
                 props = [x for x in im.module.labeled_props if not x.temporal]
-                fcs = ([(ConjAssumer if prop.id in subgoalmap else ConjChecker)(prop) for prop in props])
+                props = [p for p in props if not(p.id in subgoalmap and p.explicit)]
+                fcs = ([(ConjAssumer if prop.assumed or prop.id in subgoalmap else ConjChecker)(prop) for prop in props])
                 check_fcs_in_state(mod,ag,pre,fcs)
             else:
                 for lf in schema_instances + mod.labeled_props:
@@ -673,6 +674,8 @@ def check_separately(isolate):
     return get_isolate_attr(isolate,'separate','false') == 'true'
 
 def mc_isolate(isolate,meth=ivy_mc.check_isolate):
+    im.module.labeled_axioms.extend(lf for lf in im.module.labeled_props if lf.assumed)
+    im.module.labeled_props = [lf for lf in im.module.labeled_props if not lf.assumed]
     if im.module.labeled_props:
         raise IvyError(im.module.labeled_props[0],'model checking not supported for property yet')
     if not check_separately(isolate):

@@ -705,3 +705,11 @@ def parse_int_subscripts(name):
         raise iu.IvyError(None,'bad subscript syntax: {}'.format(name))
     prms = [int(t[:-1]) for t in things]
     return thy,prms
+
+def distinct(l):
+    seen = set()
+    for x in l:
+        if x in seen:
+            return False
+        seen.add(x)
+    return True

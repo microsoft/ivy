@@ -293,7 +293,10 @@ class App(Term):
             res += ':' + repr(self.sort)
         return res
     def clone(self,args):
-       return type(self)(self.rep,*args)
+        res = type(self)(self.rep,*args)
+        if hasattr(self,"sort"):
+            res.sort = self.sort
+        return res
     def __eq__(self,other):
         return type(self) == type(other) and self.rep == other.rep and self.args == other.args
     def is_numeral(self):
@@ -559,6 +562,7 @@ class LabeledFormula(AST):
         self.temporal = None
         self.explicit = False
         self.definition = False
+        self.assumed = False
         lf_counter += 1
     @property
     def label(self):
@@ -571,6 +575,8 @@ class LabeledFormula(AST):
         return self.args[1]
     def __str__(self):
         return '[' + str(self.label) + '] ' + str(self.formula) if self.label else str(self.formula)
+    def __repr__(self):
+        return str(self)
     def clone(self,args):
         global lf_counter
         res = AST.clone(self,args)
@@ -579,6 +585,7 @@ class LabeledFormula(AST):
         res.temporal = self.temporal
         res.explicit = self.explicit
         res.definition = self.definition
+        res.assumed = self.assumed
         return res
 
     def clone_with_fresh_id(self,args):
@@ -587,7 +594,11 @@ class LabeledFormula(AST):
         res.temporal = self.temporal
         res.explicit = self.explicit
         res.definition = self.definition
+        res.assumed = self.assumed
         return res
+
+    def rename(self,s):
+        return self.clone([self.args[0].rename(s),self.args[1]])
 
 class LabeledDecl(Decl):
     def defines(self):
@@ -701,6 +712,38 @@ class AssumeTactic(TacticWithMatch):
         res = AST.clone(self,args)
         res.label = self.label
         return res
+
+class UnfoldSpec(AST):
+    @property
+    def defname(self):
+        return self.args[0].rep
+    @property
+    def renamings(self):
+        return self.args[1:]
+
+class UnfoldTactic(Tactic):
+    def tactic_name(self):
+        return 'unfold'
+    def clone(self,args):
+        res = AST.clone(self,args)
+        res.label = self.label
+        return res
+    @property
+    def has_premise(self):
+        return not isinstance(self.args[0],NoneAST)
+    @property
+    def premname(self):
+        return self.args[0].rep
+    @property
+    def unfspecs(self):
+        return self.args[1:]
+
+class ForgetTactic(Tactic):
+    def tactic_name(self):
+        return 'forget'
+    @property
+    def premnames(self):
+        return [x.rep for x in self.args]
 
 class ShowGoalsTactic(Tactic):
     def tactic_name(self):
@@ -1327,6 +1370,8 @@ def app_to_atom(app):
     res = Atom(app.rep,app.args)
     if hasattr(app,'lineno'):
         res.lineno = app.lineno
+    if hasattr(app,'sort'):
+        res.sort = app.sort
     return res
 
 def apps_to_atoms(apps):
@@ -1347,6 +1392,11 @@ def str_subst(s,subst):
     return compose_names(it,*names[1:])
 #    return subst.get(s,s)
 
+def str_subst_str(s,subst):
+    if s == 'this':
+        return subst.get(s,s)
+    return str_subst(s,subst)
+
 def subst_subscripts_comp(s,subst):
     if isinstance(s,This) or s.startswith('"') :
         return s
@@ -1365,7 +1415,7 @@ def subst_subscripts_comp(s,subst):
             raise iu.IvyError(None,'cannot substitute "this" for {} in {}'.format(g[0],s))
         return pref
     try:
-        res =  pref + ''.join(('[' + str_subst(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
+        res =  pref + ''.join(('[' + str_subst_str(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
     except:
         print "s: {} subst : {}".format(s,subst)
 #    print "res: {}".format(res)
@@ -1404,8 +1454,11 @@ class AstRewriteSubstPrefix(object):
     def __init__(self,subst,pref,to_pref = None,static=None):
         self.subst,self.pref,self.to_pref,self.static = subst,pref,to_pref,static
     def rewrite_name(self,name):
-        return subst_subscripts(name,self.subst)
+        res = subst_subscripts(name,self.subst)
+        return res
     def prefix_str(self,name,always):
+        if name == 'this' and self.pref:
+            return self.pref.rep
         if not (self.pref and (always or self.to_pref == None or split_name(name)[0] in self.to_pref)):
             return name
         return iu.compose_names(self.pref.rep,name)
@@ -1482,7 +1535,8 @@ def ast_rewrite(x,rewrite):
                 arg0 = rewrite.pref
         else:
             atom = arg0.clone(ast_rewrite(arg0.args,rewrite))
-            arg0 = rewrite.rewrite_atom(atom,always=True)
+            always = not(hasattr(rewrite,'local') and rewrite.local)
+            arg0 = rewrite.rewrite_atom(atom,always=always)
         res = x.clone([arg0] + [ast_rewrite(y,rewrite) for y in x.args[1:]])
         return res
     if isinstance(x,TypeDef):
@@ -1490,6 +1544,12 @@ def ast_rewrite(x,rewrite):
         if res.args[0].args:
             raise iu.IvyError(x,'Types cannot have parameters: {}'.format(x.name))
         return res
+    if isinstance(x,SchemaBody) or isinstance(x,Tactic):
+        old_local = rewrite.local if hasattr(rewrite,'local') else False
+        rewrite.local = True
+        x = x.clone(ast_rewrite(x.args,rewrite))
+        rewrite.local = old_local
+        return x
     if hasattr(x,'args'):
         return x.clone(ast_rewrite(x.args,rewrite)) # yikes!
     print "wtf: {} {}".format(x,type(x))
