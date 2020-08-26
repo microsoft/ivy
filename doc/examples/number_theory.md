@@ -139,7 +139,7 @@ Now we define the notion of quotient and remainder. It is convenient
 to create a macro `quot_rem` for this, so we don't have to keep
 writing this formula.
 
-Definition (Quotient/Remainder)
+**Definition (Quotient/Remainder).**
 
 A quotient/remainder pair (Q,R) for division of N by M is such that
 `R < M` and `N = Q*M + R`.
@@ -159,9 +159,9 @@ Proof by general induction on `N`. If `N` is less than `M`, then
 `N-M`, by the inductive hypothesis. Then `Q=_Q+1` and `R=_R`.
 
 To convince the prover of this, we start by unfolding the definition
-of `quot_rem`, then apply the induction schema `N` substituted for
+of `quot_rem`, then apply the induction schema with `N` substituted for
 the induction variable `X` in the schema. This is sufficient to match
-the conclusion `p(X)` in the schema to out proof goal. We must now
+the conclusion `p(X)` in the schema to our proof goal. We must now
 prove our property for arbitrary `x`, assuming the it holds for all
 numbers less than `x` (the induction hypothesis). We then split
 cases on whether `x < M`. This is easy because the quotient must be
@@ -170,7 +170,7 @@ hypothesis, since it isn't needed and it has a quantifier. Z3 does
 the rest.
 
 In the remaining case, `x >= M`, we subtract `M` from `x`. The
-inductive hypothesis gives is a quotient/remainder pair `(_Q,_R)`
+inductive hypothesis gives us a quotient/remainder pair `(_Q,_R)`
 for `x-M`. Adding one to the quotient, we get a quotient/remainder
 pair for `x`.
 
@@ -270,13 +270,14 @@ proof {
 }
 
 ```
+
 Greatest Common Divisors and Prime numbers
 ------------------------------------------
 
 We start by defining some elementary concepts from number
 theory, including 'divisor' and 'common divisor'.
 
-Definition (Divisor).
+**Definition (Divisor).**
 
 Relation `dvds(X,Y)` is true if X is a divisor of Y. We define it
 here in terms of the integer division operator instead of saying the
@@ -296,7 +297,7 @@ relation dvds(X:nat,Y:nat)
 explicit definition dvds(X,Y) = (X > 0 & (Y/X) * X = Y)
 
 ```
-Definition (Common Divisor).
+**Definition (Common Divisor).**
 
 Relation `commdiv(Z,X,Y)` is true if Z is a common divisor of X and
 of Y.
@@ -305,7 +306,8 @@ of Y.
 function commdiv(Z,X,Y) = dvds(Z,X) & dvds(Z,Y) 
 
 ```
-Definition (GCD).
+
+**Definition (GCD).**
 
 Definition of greatest common divisor. Z is a GCD of X,Y if Z
 is a common divisor of X and Y and if no lesser number is so.
@@ -323,7 +325,8 @@ definition {is_gcd(Z,X,Y) =
     commdiv(Z,X,Y) & forall W. commdiv(W,X,Y) -> Z >= W}
 
 ```
-Definition (GCD function). 
+
+**Definition (GCD function).**
 
 We can now define a function `gcd(X,Y)` that returns the GCD when X
 and Y are positive and is otherwise undefined. We first prove a
@@ -375,7 +378,7 @@ If X is positive, the GCD of X and itself is X.
 
 Since `X` is a common divisor, the GCD must be greater than or equal
 to `X`. Since no divisor of `X` is greater that `X`, `X` must be the
-GCD. To get Z3 to prove this, we instantiate the definition property
+GCD. To get Z3 to prove this, we instantiate the defining property
 of GCD. Unfolding the definitions of `is_gcd`, `commdiv` and
 `dvds`, we get a formula of arithmetic saying that every divisor `W`
 of `X` is <= the GCD. In particular, by plugging in `X` for `W`, we
@@ -414,7 +417,7 @@ proof {
 }
 
 ```
-Definition (prime number).
+**Definition (prime number).**
 
 A natural number `X > 1`  is *prime* if its divisors are only one and
 itself.
@@ -503,7 +506,7 @@ bi-implication are similar, but not quite identical. In the forward case, suppos
 `M` and `N-M`.
 
 Notice that in the formal proof, something funny is happening at line
-`[*]`.  That is, we take that premise `commdiv(Z,M,N)` and unfold
+`[*]`.  That is, we take the premise `commdiv(Z,M,N)` and unfold
 `commdiv` to get `dvds(Z,M) & dvds(A,N)`. Then we unfold with
 `dvds_alt` which is `dvds(X,Y) <-> (X > 0 & exists Z. Z * X =
 Y)`. Since there are two instances of `dvds` in our formula, we
@@ -565,16 +568,16 @@ factorizations.
 
 **Theorem (Bezout's lemma).**
 
-If `S,T` are positive, then there exists ~A,B` such that `A*S-B*T =
+If `S,T` are positive, then there exist `A,B` such that `A*S-B*T =
 gcd(S,T)`.
 
-Proof. By induction over `max(S,T` using the GCD/Euclid lemma.
+Proof. By induction over `max(S,T)` using the GCD/Euclid lemma.
 
 To prove this, we first restate the theorem with an additional
 premise `M = max(S,T)`. We can then match the general induction
-schema with the induction variable `X=M`. We them, in effect,
+schema with the induction variable `X=M`. We then, in effect,
 Skolemize the quantifiers on `S,T` using the `introA` rule and we
-split cases on whether `S > T`, ~S=T` or `S<T`. In the first case,
+split cases on whether `S > T`, `S=T` or `S<T`. In the first case,
 we take the inductive hypothesis for `gcd(S-T,T)`. That is, since
 `S>T` we know that `max(S-T,T) < max(S,T)`, so the theorem holds by
 induction on `max(S,T)`. There is a bit of a technicality here, as
@@ -637,7 +640,7 @@ Here is a useful consequence of Bezout's lemma.
 
 **Lemma (Coprime/Product).**
 
-For any positive `P`, `N` and `M`, if `N` and `P are co-prime and `P`
+For any positive `P`, `N` and `M`, if `N` and `P` are co-prime and `P`
 divides `N * M` then `P` divides `M`.
 
 Proof. By Bezout's lemma, we have `gcd(T,P) = A*T - B*P`. Now assume
@@ -698,7 +701,7 @@ product, it divides one of the factors.
 **Lemma (Prime/Product).**
 
 For any prime `P` and `N` and `M`, if `P` divides `N * M` then `P`
-divides `M`.
+divides `N` or `M`.
 
 Proof. Use the Prime/Coprime lemma, the Coprime/Product theorem and
 the definition of prime.
@@ -729,6 +732,7 @@ proof {
 }
 
 ```
+
 Squares and square roots
 ------------------------
 
@@ -738,6 +742,8 @@ number is a square root of two.
 
 First, for convenience, we define the squaring function:
 
+**Definition (Squaring).**
+
 ```
 function squared(X:nat) : nat
 explicit definition squared(X) = X * X
@@ -745,7 +751,7 @@ explicit definition squared(X) = X * X
 ```
 
 This is a useful special case of the Prime/Product lemma that we'll
-use twice in the proof.
+use twice in the proof:
 
 **Lemma (Prime/Square).**
 
@@ -797,9 +803,8 @@ smaller steps.
 Also, notice that we used an 'isolate' to help structure the proof.
 This allowed us to say in the 'with' clause that the proof of all
 the subgoals should apply the full definition of `dvds`. This is
-safe in terms of decidability because in the proof because the
-definition has no quantifiers, and we only apply `dvds` to ground
-terms.
+safe in terms of decidability because the definition has no
+quantifiers, and we only apply `dvds` to ground terms.
 
 
 
