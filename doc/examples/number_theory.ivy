@@ -130,7 +130,7 @@ theorem [div_rec] {
 # to create a macro `quot_rem` for this, so we don't have to keep
 # writing this formula.
 
-# Definition (Quotient/Remainder)
+# **Definition (Quotient/Remainder).**
 #
 # A quotient/remainder pair (Q,R) for division of N by M is such that
 # `R < M` and `N = Q*M + R`.
@@ -259,7 +259,7 @@ proof {
 # We start by defining some elementary concepts from number
 # theory, including 'divisor' and 'common divisor'.
 
-# Definition (Divisor).
+# **Definition (Divisor).**
 #
 # Relation `dvds(X,Y)` is true if X is a divisor of Y. We define it
 # here in terms of the integer division operator instead of saying the
@@ -277,14 +277,14 @@ proof {
 relation dvds(X:nat,Y:nat)
 explicit definition dvds(X,Y) = (X > 0 & (Y/X) * X = Y)
 
-# Definition (Common Divisor).
+# **Definition (Common Divisor).**
 #
 # Relation `commdiv(Z,X,Y)` is true if Z is a common divisor of X and
 # of Y.
 
 function commdiv(Z,X,Y) = dvds(Z,X) & dvds(Z,Y) 
 
-# Definition (GCD).
+# **Definition (GCD).**
 #
 # Definition of greatest common divisor. Z is a GCD of X,Y if Z
 # is a common divisor of X and Y and if no lesser number is so.
@@ -300,7 +300,7 @@ relation is_gcd(Z:nat,X:nat,Y:nat)
 definition {is_gcd(Z,X,Y) =
     commdiv(Z,X,Y) & forall W. commdiv(W,X,Y) -> Z >= W}
 
-# Definition (GCD function). 
+# **Definition (GCD function). **
 #
 # We can now define a function `gcd(X,Y)` that returns the GCD when X
 # and Y are positive and is otherwise undefined. We first prove a
@@ -385,7 +385,7 @@ proof {
     unfold g2 with is_gcd,commdiv
 }
 
-# Definition (prime number).
+# **Definition (prime number).**
 #
 # A natural number `X > 1`  is *prime* if its divisors are only one and
 # itself.
@@ -692,6 +692,8 @@ proof {
 # number is a square root of two. 
 
 # First, for convenience, we define the squaring function:
+#
+# **Definition (Squaring).**
 
 function squared(X:nat) : nat
 explicit definition squared(X) = X * X
