@@ -81,9 +81,9 @@ def is_global_skolem(sym):
     quantifiers outside the scope of the temporal "globally" and hence are constants over time.
     That means they don't get renamed when composing transition relations sequentially.
 
-    Global skolems have names of the form '@X...' where X is a capitol letter.
+    Global skolems have names of the form '@X...' where X is a capital letter.
     """
-    return sym.startswith('@') and len(sym.name) > 2 and sym.name[2].isupper()
+    return sym.startswith('@') and len(sym.name) > 1 and sym.name[1].isupper()
 
 def null_update():
     return ([],true_clauses(),false_clauses())
