@@ -36,7 +36,7 @@ class TraceBase(art.AnalysisGraph):
         self.returned = None
 
     def is_skolem(self,sym):
-        res = itr.is_skolem(sym) and not (sym.name.startswith('__') and sym.name[2:3].isupper())
+        res = itr.is_skolem(sym) and not (sym.name.startswith('@') and sym.name[1:2].isupper())
         # if not res and self.top_level:
         #     name = sym.name
         #     res = name.startswith('loc:') or name.startswith('fml:')

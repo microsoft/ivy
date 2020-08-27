@@ -117,7 +117,7 @@ def varname(name):
     if name.startswith('"'):
         return name
     
-    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('__prm:','prm__').replace('prm:','prm__').replace('@fml:','').replace('fml:','').replace('ret:','')
+    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('@prm:','prm__').replace('prm:','prm__').replace('@fml:','').replace('fml:','').replace('ret:','')
     name = re.sub(puncs,'__',name).replace('@@','.')
     return name.replace(':','__COLON__')
 #    return name.split(':')[-1]
@@ -1067,7 +1067,7 @@ def emit_action_gen(header,impl,name,action,classname):
     inputs = [x for x in ilu.used_symbols_clauses(pre_clauses) if is_local_sym(x) and not x.is_numeral()]
     inputset = set(inputs)
     for p in action.formal_params:
-        p = p.prefix('__')
+        p = p.prefix('@')
         if p not in inputset:
             inputs.append(p)
     pre_clauses, inputs, fsyms = extract_input_fields(pre_clauses,inputs)

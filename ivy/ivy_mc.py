@@ -1102,7 +1102,7 @@ def to_aiger(mod,ext_act):
 
     invariant = il.And(*[il.drop_universals(lf.formula) for lf in conjs])
 #    iu.dbg('invariant')
-    skolemizer = lambda v: ilu.var_to_skolem('__',il.Variable(v.rep,v.sort))
+    skolemizer = lambda v: ilu.var_to_skolem('@',il.Variable(v.rep,v.sort))
     vs = ilu.used_variables_in_order_ast(invariant)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     invariant = ilu.substitute_ast(invariant,sksubs)
