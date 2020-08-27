@@ -183,15 +183,36 @@ class NumericRenamer(object):
     def __init__(self,prefix='',used=[],suffix=''):
         self.prefix, self.used = prefix, set(str(s) for s in used)
         self.suffix = suffix
-        self.next_num = 0
     def __call__(self,name = ''):
         thing = self.prefix+name+self.suffix
+        next_num = 0
         while True:
-            self.next_num += 1
-            res = thing + str(self.next_num)
+            next_num += 1
+            res = thing + str(next_num)
             if res not in self.used:
                 self.used.add(res)
                 return res
+
+class NumericUniquifier(object):
+    def __init__(self,used=[]):
+        self.used = set(str(s) for s in used)
+    def __call__(self,name):
+        if name not in self.used:
+            res = name
+        else:
+            pos = len(name)
+            while pos > 0 and name[pos-1].isdigit():
+                pos -= 1
+            thing = name[:pos]
+            next_num = int(name[pos:]) if pos < len(name) else 0
+            while True:
+                next_num += 1
+                res = thing + str(next_num)
+                if res not in self.used:
+                    break
+        self.used.add(res)
+        return res
+
 
 def distinct_renaming(names1,names2):
     rn = UniqueRenamer('',names2)

@@ -28,7 +28,7 @@ that all symbols *not* in S are preserved.
 
 """
 
-from ivy_utils import UniqueRenamer, NumericRenamer, union_to_list, list_union, list_diff, IvyError, inverse_map, compose_maps, pretty
+from ivy_utils import UniqueRenamer, NumericRenamer, NumericUniquifier, union_to_list, list_union, list_diff, IvyError, inverse_map, compose_maps, pretty
 from ivy_logic import Variable, Constant, Literal, Atom, Not, And, Or,App, RelationSort, Definition, is_prenex_universal
 from ivy_logic_utils import symbols_clauses, used_symbols_clauses, rename_clauses, clauses_using_symbols, simplify_clauses,\
     used_variables_clauses, used_constants_clauses, substitute_constants_clause, substitute_constants_clauses, constants_clauses,\
@@ -290,7 +290,7 @@ def rename_distinct(clauses1,clauses2):
 #    print "rename_distinct clauses2 = {!r}".format(clauses2)
     used1 = used_symbols_clauses(clauses1)
     used2 = used_symbols_clauses(clauses2)
-    rn = UniqueRenamer('',used2)
+    rn = NumericUniquifier(used2)
     map1 = dict()
     for s in used1:
         if is_skolem(s) and not is_global_skolem(s):
