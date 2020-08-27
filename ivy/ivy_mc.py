@@ -717,7 +717,7 @@ def elim_ite(expr,cnsts):
         global ite_ctr
         c,x,y = expr.args
         if not is_finite_sort(x.sort):
-            v = il.Symbol('__ite[{}]'.format(ite_ctr),x.sort)
+            v = il.Symbol('@ite[{}]'.format(ite_ctr),x.sort)
             ite_ctr += 1
             cnsts.append(il.Ite(elim_ite(c,cnsts),elim_ite(il.Equals(v,x),cnsts),elim_ite(il.Equals(v,y),cnsts)))
             return v
@@ -829,7 +829,7 @@ class Qelim(object):
         self.sort_constants = sort_constants
         self.sort_constants2 = sort_constants2
     def fresh(self,expr):
-        res = il.Symbol('__qe[{}]'.format(self.syms_ctr),expr.sort)
+        res = il.Symbol('@qe[{}]'.format(self.syms_ctr),expr.sort)
         self.syms[expr] = res
         self.syms_ctr += 1
         return res
@@ -1020,7 +1020,7 @@ def to_table_lookup(trans,invariant):
     
     def arg_sym(sort):
         global to_table_lookup_counter
-        res = il.Symbol('__arg[{}]'.format(to_table_lookup_counter),sort)
+        res = il.Symbol('@arg[{}]'.format(to_table_lookup_counter),sort)
         to_table_lookup_counter += 1
         return res
 
@@ -1078,7 +1078,7 @@ def to_aiger(mod,ext_act):
     ext_acts = [mod.actions[x].add_label(x) for x in sorted(mod.public_actions)]
     ext_act = ia.EnvAction(*ext_acts)
 
-    init_var = il.Symbol('__init',il.find_sort('bool')) 
+    init_var = il.Symbol('@init',il.find_sort('bool')) 
     init = add_err_flag(ia.Sequence(*([a for n,a in mod.initializers]+[ia.AssignAction(init_var,il.And())])),erf,errconds)
     action = ia.Sequence(ia.AssignAction(erf,il.Or()),ia.IfAction(init_var,ext_act,init))
     
@@ -1185,12 +1185,12 @@ def to_aiger(mod,ext_act):
     # step 4: instantiate the axioms using patterns
 
     # We have to condition both the transition relation and the
-    # invariant on the axioms, so we define a boolean symbol '__axioms'
+    # invariant on the axioms, so we define a boolean symbol '@axioms'
     # to represent the axioms.
 
     axs = instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs)
     ax_conj = il.And(*axs)
-    ax_var = il.Symbol('__axioms',ax_conj.sort)
+    ax_var = il.Symbol('@axioms',ax_conj.sort)
     ax_def = il.Definition(ax_var,ax_conj)
     invariant = il.Implies(ax_var,invariant)
     trans = ilu.Clauses(trans.fmlas+[ax_var],trans.defs+[ax_def])
@@ -1223,7 +1223,7 @@ def to_aiger(mod,ext_act):
                 prop_abs[expr] = res  # prevent adding this again to new_stvars
             else:
                 global prop_abs_ctr
-                res = il.Symbol('__abs[{}]'.format(prop_abs_ctr),expr.sort)
+                res = il.Symbol('@abs[{}]'.format(prop_abs_ctr),expr.sort)
 #                print '{} = {}'.format(res,expr)
                 prop_abs[expr] = res
                 prop_abs_ctr += 1
@@ -1299,7 +1299,7 @@ def to_aiger(mod,ext_act):
     
     # Turn the transition constraint into a definition
     
-    cnst_var = il.Symbol('__cnst',il.find_sort('bool'))
+    cnst_var = il.Symbol('@cnst',il.find_sort('bool'))
     new_defs = list(trans.defs)
     new_defs.append(il.Definition(tr.new(cnst_var),fix(cnst_var)))
     new_defs.append(il.Definition(fix(cnst_var),il.Or(cnst_var,il.Not(il.And(*trans.fmlas)))))
@@ -1316,7 +1316,7 @@ def to_aiger(mod,ext_act):
     used.update(ilu.symbols_ast(invariant))
     inputs = [sym for sym in used if
               sym not in def_set and not il.is_interpreted_symbol(sym)]
-    fail = il.Symbol('__fail',il.find_sort('bool'))
+    fail = il.Symbol('@fail',il.find_sort('bool'))
     outputs = [fail]
     
 
@@ -1474,7 +1474,7 @@ class AigerMatchHandler2(ivy_trace.TraceBase):
         stmap = self.aiger.get_state(post)                     
 #            iu.dbg('stmap')
         for v in self.aiger.latches: # last two are used for encoding
-            if v in self.decoder and v.name != '__init':
+            if v in self.decoder and v.name != '@init':
                 val = stmap[v]
                 if val is not None:
                     stvals.append(il.Equals(self.decoder[v],val))
@@ -1524,7 +1524,7 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,action,stvarset,ext_act,ann
 #            iu.dbg('stmap')
             current = dict()
             for v in aiger.latches: # last two are used for encoding
-                if v in decoder and v.name != '__init':
+                if v in decoder and v.name != '@init':
                     val = stmap[v]
                     if val is not None:
                         stvals.append(il.Equals(decoder[v],val))
