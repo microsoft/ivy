@@ -285,6 +285,17 @@ def make_vc(action,precond=[],postcond=[],check_asserts=True):
     fcc = lut.dual_clauses(fc, witness)
     clauses = lut.and_clauses(clauses,fcc)
 
+    # Fix some internally generated names so they can be seen by users
+
+    rmap = dict()
+    for sym in lut.used_symbols_clauses(clauses):
+        if sym.name.startswith('@fml:'):
+            rmap[sym] = sym.drop_prefix('@fml:').suffix('@fml')
+        elif sym.name.startswith('@loc:'):
+            rmap[sym] = sym.drop_prefix('@loc:').suffix('@loc')
+    if rmap:
+        clauses = lut.rename_clauses(clauses,rmap)
+            
     return clauses
 
 

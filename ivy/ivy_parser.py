@@ -251,6 +251,8 @@ class Ivy(object):
         else:
             name,lineno = df
             cls = None
+        if isinstance(name,str) and '@' in name:
+            report_error(ParseError(lineno.line,name,'symbols with @ sign are reserved'))
         for x in self.defined[name]:
             olineno,ocls = x[0],x[1]
             conflict = ((ocls is not ObjectDecl) if cls is TypeDecl 

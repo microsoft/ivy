@@ -8,8 +8,10 @@ import ivy_temporal as tm
 import ivy_logic as lg
 import ivy_utils as iu
 import ivy_trace as tr
+import ivy_transrel as itr
 import ivy_logic_utils as lu
 import ivy_proof as pr
+import ivy_ast as ias
 
 # This tactic reduces a safety property to initiatation and consecution
 # subgoals. TODO: we lose the annotation here, so we can't extract a
@@ -28,7 +30,9 @@ def vcgen(self,decls,proof):
     return [goal1,goal2] + decls[1:]
 
 def vc_to_goal(lineno,name,vc,action):
-    return pr.make_goal(lineno,name,[],lg.Not(lu.clauses_to_formula(vc)),
+    sks = list(iu.unique(s for s in lu.symbols_clauses(vc) if itr.is_skolem(s)))
+    prems = [ias.ConstantDecl(s) for s in sks]
+    return pr.make_goal(lineno,name,prems,lg.Not(lu.clauses_to_formula(vc)),
                         annot=(action,vc.annot))
 
 def triple_to_goal(lineno,name,action,precond=[],postcond=[]):
