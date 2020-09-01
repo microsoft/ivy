@@ -546,6 +546,8 @@ def get_assumes_and_asserts(preconds_only):
             # print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
             if ldf.id not in pfs:
                 asserts.append((ldf.formula,ldf))
+                check_feu(assumes,asserts,macros)
+                asserts.pop()
             elif ldf.id in sgs and not ldf.explicit:
                 assumes.append((ldf.formula,ldf))
 
