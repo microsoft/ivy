@@ -498,6 +498,10 @@ def reachable(items,iter_succ,key=lambda x:x):
                 l.append(i)
     return list(reversed(l))
 
+def on_cycle(item,iter_succ,key=lambda x:x):
+    succs = list(iter_succ(key(item)))
+    rch = set(key(x) for x in reachable(succs,iter_succ,key))
+    return key(item) in rch
 
 def cycle(arcs,first=lambda x:x[0],second=lambda x:x[1]):
     """ finds a cycle of arcs in a graph. first maps arcs to

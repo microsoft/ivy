@@ -751,37 +751,35 @@ proof {
 # can be a process of trial and error. If we failed to prove a lemma, we break it into
 # smaller steps.
 #
-# Also, notice that we used an 'isolate' to help structure the proof.
-# This allowed us to say in the 'with' clause that the proof of all
-# the subgoals should apply the full definition of `dvds`. This is
-# safe in terms of decidability because the definition has no
-# quantifiers, and we only apply `dvds` to ground terms.
-#
+# Also, notice that we pull in the definition of `dvds` without instantiating
+# the quantifiers. Even though this definiton has arithmetic operators over quantified
+# variables, the verification conditions remain in the decidable fragment because
+# the definition is expanded as a macro and all occurrences of `dvds` are over ground
+# terms. This saves us having to instantiate or unfold the definition manually.
 
 
-isolate sqrt2irrat_iso = {
-    theorem [sqrt2irrat] {
-        individual a : nat
-        individual b : nat
-        property a > 0 & b > 0
-        property [co] gcd(a,b) = 1
-        property squared(a) = 2 * squared(b)
-        property false
+theorem [sqrt2irrat] {
+    individual a : nat
+    individual b : nat
+    property a > 0 & b > 0
+    property [co] gcd(a,b) = 1
+    property squared(a) = 2 * squared(b)
+    property false
+}
+proof {
+    instantiate dvds
+    property [prime2] prime(2) proof {
+        unfold with prime,commdiv,dvds
     }
-    proof {
-        property [prime2] prime(2) proof {
-            unfold with prime,commdiv,dvds
-        }
-        property [a2_even] dvds(2,squared(a)) proof {
-            unfold with dvds_alt
-            instantiate with Z=squared(b)
-        } 
-        instantiate [dp1] prime_square with a=a,b=2:nat,prem1=a2_even
-        unfold dp1 with dvds_alt
-        tactic skolemize
-        property squared(a) = 4 * squared(_Z) proof {unfold with squared}
-        instantiate [dp2] prime_square with a=b,b=2:nat
-        instantiate dvds_gcd with a=a,b=b,c=2:nat
-    }
-} with nat,dvds
+    property [a2_even] dvds(2,squared(a)) proof {
+        unfold with dvds_alt
+        instantiate with Z=squared(b)
+    } 
+    instantiate [dp1] prime_square with a=a,b=2:nat,prem1=a2_even
+    unfold dp1 with dvds_alt
+    tactic skolemize
+    property squared(a) = 4 * squared(_Z) proof {unfold with squared}
+    instantiate [dp2] prime_square with a=b,b=2:nat
+    instantiate dvds_gcd with a=a,b=b,c=2:nat
+}
 

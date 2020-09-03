@@ -5,6 +5,7 @@ import ivy_utils as iu
 import logic_util as lu
 import ivy_logic_utils as ilu
 import ivy_theory as thy
+import ivy_proof as pr
 from collections import defaultdict
 from tarjan import tarjan
 from itertools import chain
@@ -485,6 +486,55 @@ def check_feu(assumes,asserts,macros):
     #                             break
 
 
+# Here, we extract macros from properties to be proved. That is, if a property
+# is of the form A1 & ... & Ak -> B, these we extract the Ai that are in definitional
+# form (but only if they define symbols not previously defined. 
+
+def macro_from_defn(fmla):
+    vs = set()
+    while isinstance(fmla,il.ForAll):
+        vs.update(fmla.variables)
+        fmla = fmla.body
+    if il.is_eq(fmla) or isinstance(fmla,il.Iff):
+        lhs,rhs = fmla.args
+        if il.is_app(lhs) & (all(x in vs for x in lhs.args) ):
+            if iu.distinct(lhs.args):
+                return il.Definition(*fmla.args)
+    return None
+
+def extract_prop_macros(lf,defined,macros):
+    fmla = lf.formula
+    if isinstance(fmla,il.Implies):
+        lhs,rhs = fmla.args
+        prems = lhs.args if isinstance(lhs,il.And) else [lhs]
+        new_prems = []
+        for p in prems:
+            m = macro_from_defn(p)
+            if m is not None:
+                sym = m.args[0].rep
+                if sym not in defined:
+                    macro = (m,pr.clone_goal(lf,[],m))
+                    if not macro_closes_cycle(macros,macro):
+                        macros.append(macro)
+                        defined.add(sym)
+                        continue
+            new_prems.append(p)
+        return pr.clone_goal(lf,[],il.Implies((new_prems[0] if len(new_prems)==1 else
+                                               il.And(*new_prems)),rhs))
+    return lf
+
+def macro_closes_cycle(macros,macro):
+    vertices = macros + [macro]
+    defns = dict((x[0].args[0].rep,x) for x in vertices)
+    def key(x):
+        return x[0].args[0].rep
+    def succ(k):
+        m = defns[k]
+        res = list(defns[s] for s in ilu.used_symbols_ast(m[0].args[1]) if s in defns)
+        return res
+    return iu.on_cycle(macro,succ,key)
+    
+
 # Here we try to extract all the assumes, asserts and macros that
 # might wind up in the prover context when checking the current
 # isolate. This is a bit conservative, since not all of these may wind
@@ -497,6 +547,8 @@ def get_assumes_and_asserts(preconds_only):
     assumes = []
     asserts = []
     macros = []
+    defined = set()
+    
 #    for name,action in im.module.actions.iteritems():
         # for sa in action.iter_subactions():
         #     if isinstance(sa,ia.AssumeAction):
@@ -505,6 +557,38 @@ def get_assumes_and_asserts(preconds_only):
         #         asserts.append((sa.args[0],sa))
         #     if isinstance(sa,ia.IfAction):
         #         asserts.append((sa.get_cond(),sa))
+        
+    for ldf in im.module.definitions:
+        if not isinstance(ldf.formula,il.DefinitionSchema):
+            if (ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs())
+                and not isinstance(ldf.formula.rhs(),il.Some)):
+                # print 'macro : {}'.format(ldf.formula)
+                macros.append((ldf.formula,ldf))
+                defined.add(ldf.formula.defines())
+            else: # can't treat recursive definition as macro
+                # print 'axiom : {}'.format(ldf.formula)
+                assumes.append((ldf.formula.to_constraint(),ldf))
+
+    for ldf in im.module.labeled_axioms:
+        if not ldf.temporal:
+            # print 'axiom : {}'.format(ldf.formula)
+            assumes.append((ldf.formula,ldf))
+
+    pfs = set(lf.id for lf,p in im.module.proofs)
+    sgs = set(x.id for x,y in im.module.subgoals)
+    for ldf in im.module.labeled_props:
+        if not ldf.temporal:
+            # print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
+            if ldf.id not in pfs:
+                mlen = len(macros)
+                ldf = extract_prop_macros(ldf,defined.copy(),macros)
+                asserts.append((ldf.formula,ldf))
+                check_feu(assumes,asserts,macros)
+                asserts.pop()
+                del macros[mlen:]
+            elif ldf.id in sgs and not ldf.explicit:
+                assumes.append((ldf.formula,ldf))
+
     if preconds_only:
         for name in im.module.before_export:
             action = im.module.before_export[name]
@@ -523,33 +607,6 @@ def get_assumes_and_asserts(preconds_only):
             foo = ilu.close_epr(ilu.clauses_to_formula(triple[2]))
             #        print 'ivy_theory.py: foo (2): {}'.format(foo)
             assumes.append((foo,action))
-        
-    for ldf in im.module.definitions:
-        if not isinstance(ldf.formula,il.DefinitionSchema):
-            if (ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs())
-                and not isinstance(ldf.formula.rhs(),il.Some)):
-                # print 'macro : {}'.format(ldf.formula)
-                macros.append((ldf.formula,ldf))
-            else: # can't treat recursive definition as macro
-                # print 'axiom : {}'.format(ldf.formula)
-                assumes.append((ldf.formula.to_constraint(),ldf))
-
-    for ldf in im.module.labeled_axioms:
-        if not ldf.temporal:
-            # print 'axiom : {}'.format(ldf.formula)
-            assumes.append((ldf.formula,ldf))
-
-    pfs = set(lf.id for lf,p in im.module.proofs)
-    sgs = set(x.id for x,y in im.module.subgoals)
-    for ldf in im.module.labeled_props:
-        if not ldf.temporal:
-            # print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
-            if ldf.id not in pfs:
-                asserts.append((ldf.formula,ldf))
-                check_feu(assumes,asserts,macros)
-                asserts.pop()
-            elif ldf.id in sgs and not ldf.explicit:
-                assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:
         asserts.append((ldf.formula,ldf))
