@@ -197,9 +197,9 @@ class ProofChecker(object):
         print
         print '{}Proof goals:'.format(proof.lineno)
         for decl in decls:
-            print
-            print 'theorem ' + str(decl)
-            print
+            print '>'
+            print '> theorem ' + str(decl).replace('\n','\n> ')
+            print '>'
         return decls
 
     def defer_goal_tactic(self,decls,proof):

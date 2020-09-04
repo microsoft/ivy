@@ -2659,7 +2659,7 @@ def p_error(token):
     if token is not None:
         report_error(ParseError(token.lineno,token.value,"syntax error"))
     else:
-        report_error(ParseError(None,None,'unexpected end of input'));
+        report_error(ParseError(lexer_stack[-1].lineno,None,'unexpected end of input'));
     # TEMORARY: parser goes into into infinite loop on recovery from parse errors
     # Stop here on any parse error to prevent this
     raise iu.ErrorList(error_list)
@@ -2704,13 +2704,18 @@ def expand_autoinstances(ivy):
 def parse(s,nested=False):
     global error_list
     global stack
+    global lexer_stack
     if not nested:
         error_list = []
         stack = []
+        lexer_stack = []
     vernum = iu.get_numeric_version()
     with LexerVersion(vernum):
         # shallow copy the parser and lexer to try for re-entrance (!!!)
-        res = copy.copy(parser).parse(s,lexer=copy.copy(lexer))
+        new_lexer = copy.copy(lexer)
+        lexer_stack.append(new_lexer)
+        res = copy.copy(parser).parse(s,lexer=new_lexer)
+        lexer_stack.pop()
     if not nested:
         expand_autoinstances(res)
     if error_list:
