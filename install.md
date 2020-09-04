@@ -34,9 +34,9 @@ also work on other Debian-based distributions.
 
 ### Install IVy
 
-Get the source like this:
+Get the latest source like this:
 
-    $ git clone --recurse-submodules https://github.com/Microsoft/ivy.git
+    $ git clone --recurse-submodules https://github.com/kenmcmil/ivy.git
     $ cd ivy
 
 Build the submodules like this (it takes a while):
@@ -173,7 +173,7 @@ in `c:/Git`, then put `c:\Git\cmd` in your `PATH`.
 ### Install Ivy
 
     > cd c:\
-    > git clone https://github.com/Microsoft/ivy.git
+    > git clone https://github.com/kenmcmil/ivy.git
     > cd ivy
     > git submodule init
     > git submodule update
@@ -231,7 +231,7 @@ These instructions have been tested for macOS 10.12 Sierra up to macOS
 
 5. Install Ivy:
 
-        $ git clone --recurse-submodules https://github.com/Microsoft/ivy.git
+        $ git clone --recurse-submodules https://github.com/kenmcmil/ivy.git
         $ cd ivy
 
     Build the submodules like this (it takes a while):
@@ -280,7 +280,7 @@ This does not install the documentation and example files. You can get
 these from github like this (see the directory `ivy\doc`):
 
     $ sudo apt-get install git
-    $ git clone https://github.com/Microsoft/ivy.git
+    $ git clone https://github.com/kenmcmil/ivy.git
 
 
 ### <a name="windowsbinary"> Install binary release on Windows
