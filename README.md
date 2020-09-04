@@ -1,5 +1,7 @@
 # ivy
 
+**Starting Sep. 5, 2020, Ivy development is moving to [https://github.com/kenmcmil/ivy](https://github.com/kenmcmil/ivy).**
+
 IVy is a research tool intended to allow interactive development of
 protocols and their proofs of correctness and to provide a platform
 for developing and experimenting with automated proof techniques. In
