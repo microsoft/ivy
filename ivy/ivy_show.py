@@ -2,6 +2,7 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 import ivy
+import ivy_init
 import ivy_interp as itp
 import ivy_actions as act
 import ivy_utils as utl
