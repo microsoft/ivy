@@ -3479,7 +3479,7 @@ def new_temp(header,sort=None):
 
 
 def find_definition(sym):
-    for ldf in im.module.definitions:
+    for ldf in im.module.definitions + im.module.native_definitions:
         if ldf.formula.defines() == sym:
             return ldf
     return None
