@@ -422,7 +422,7 @@ class AssignAction(Action):
         lhs_vars = used_variables_ast(lhs)
         if any(v not in lhs_vars for v in used_variables_ast(rhs)):
             print self
-            raise IvyError(self,"multiply assigned: {}".format(lhs.rep))
+            raise IvyError(self,"Left hand side of assignments must use all placeholders used on right hand side: {}".format(lhs.rep))
 
         type_check(domain,rhs)
         if is_individual_ast(lhs) != is_individual_ast(rhs):
