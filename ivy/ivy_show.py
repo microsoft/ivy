@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-import ivy
+import ivy_init
 import ivy_interp as itp
 import ivy_actions as act
 import ivy_utils as utl
@@ -21,7 +21,7 @@ import sys
 
 diagnose = iu.BooleanParameter("diagnose",False)
 
-    
+
 def usage():
     print "usage: \n  {} file.ivy".format(sys.argv[0])
     sys.exit(1)
