@@ -9,7 +9,7 @@ verification. Technically, this means that important verification
 problems like invariant checking and bounded model checking fall
 within a [decidable fragment][df] of first-order logic.
 
-[df]: decidiability.html
+[df]: decidability.html
 
 For this reason, the Ivy language has certain unusual features. Ivy
 divides the world into three categories of things:
